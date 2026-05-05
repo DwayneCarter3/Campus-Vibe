@@ -65,6 +65,7 @@ export interface Post {
   authorName: string;
   authorFaculty: string;
   authorLevel: string;
+  authorCampusLocation: string;
   /** @nullable */
   authorAvatarUrl: string | null;
   content: string;
@@ -72,6 +73,8 @@ export interface Post {
   imageUrl: string | null;
   likesCount: number;
   isLikedByMe: boolean;
+  noCapsCount: number;
+  isNoCapByMe: boolean;
   createdAt: string;
 }
 
@@ -89,6 +92,11 @@ export interface CreatePostBody {
 export interface LikeResponse {
   liked: boolean;
   likesCount: number;
+}
+
+export interface NoCapResponse {
+  noCaped: boolean;
+  noCapsCount: number;
 }
 
 export interface Service {

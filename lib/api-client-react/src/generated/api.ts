@@ -27,6 +27,7 @@ import type {
   ListServicesParams,
   ListServicesResponse,
   MarketplaceStats,
+  NoCapResponse,
   Post,
   PublicUserProfile,
   Service,
@@ -709,7 +710,7 @@ export const useDeletePost = <
 };
 
 /**
- * @summary Toggle like on a post
+ * @summary Toggle fire reaction on a post
  */
 export const getLikePostUrl = (postId: number) => {
   return `/api/posts/${postId}/like`;
@@ -770,7 +771,7 @@ export type LikePostMutationResult = NonNullable<
 export type LikePostMutationError = ErrorType<void>;
 
 /**
- * @summary Toggle like on a post
+ * @summary Toggle fire reaction on a post
  */
 export const useLikePost = <
   TError = ErrorType<void>,
@@ -790,6 +791,90 @@ export const useLikePost = <
   TContext
 > => {
   return useMutation(getLikePostMutationOptions(options));
+};
+
+/**
+ * @summary Toggle no-cap reaction on a post
+ */
+export const getNoCapPostUrl = (postId: number) => {
+  return `/api/posts/${postId}/nocap`;
+};
+
+export const noCapPost = async (
+  postId: number,
+  options?: RequestInit,
+): Promise<NoCapResponse> => {
+  return customFetch<NoCapResponse>(getNoCapPostUrl(postId), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getNoCapPostMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof noCapPost>>,
+    TError,
+    { postId: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof noCapPost>>,
+  TError,
+  { postId: number },
+  TContext
+> => {
+  const mutationKey = ["noCapPost"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof noCapPost>>,
+    { postId: number }
+  > = (props) => {
+    const { postId } = props ?? {};
+
+    return noCapPost(postId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type NoCapPostMutationResult = NonNullable<
+  Awaited<ReturnType<typeof noCapPost>>
+>;
+
+export type NoCapPostMutationError = ErrorType<void>;
+
+/**
+ * @summary Toggle no-cap reaction on a post
+ */
+export const useNoCapPost = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof noCapPost>>,
+    TError,
+    { postId: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof noCapPost>>,
+  TError,
+  { postId: number },
+  TContext
+> => {
+  return useMutation(getNoCapPostMutationOptions(options));
 };
 
 /**

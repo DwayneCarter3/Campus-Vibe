@@ -3,6 +3,7 @@ import { useListServices, getListServicesQueryKey, useCreateService } from "@wor
 import { useQueryClient } from "@tanstack/react-query";
 import { ServiceCard } from "@/components/service-card";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Plus } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";

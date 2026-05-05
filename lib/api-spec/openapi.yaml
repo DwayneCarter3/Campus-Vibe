@@ -180,7 +180,7 @@ paths:
     post:
       operationId: likePost
       tags: [posts]
-      summary: Toggle like on a post
+      summary: Toggle fire reaction on a post
       parameters:
         - name: postId
           in: path
@@ -189,11 +189,32 @@ paths:
             type: integer
       responses:
         "200":
-          description: Like toggled
+          description: Fire toggled
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/LikeResponse"
+        "401":
+          description: Unauthorized
+
+  /posts/{postId}/nocap:
+    post:
+      operationId: noCapPost
+      tags: [posts]
+      summary: Toggle no-cap reaction on a post
+      parameters:
+        - name: postId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: No Cap toggled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NoCapResponse"
         "401":
           description: Unauthorized
 
@@ -470,6 +491,8 @@ components:
           type: string
         authorLevel:
           type: string
+        authorCampusLocation:
+          type: string
         authorAvatarUrl:
           type: ["string", "null"]
         content:
@@ -480,6 +503,10 @@ components:
           type: integer
         isLikedByMe:
           type: boolean
+        noCapsCount:
+          type: integer
+        isNoCapByMe:
+          type: boolean
         createdAt:
           type: string
           format: date-time
@@ -489,11 +516,14 @@ components:
         - authorName
         - authorFaculty
         - authorLevel
+        - authorCampusLocation
         - authorAvatarUrl
         - content
         - imageUrl
         - likesCount
         - isLikedByMe
+        - noCapsCount
+        - isNoCapByMe
         - createdAt
 
     ListPostsResponse:
@@ -529,6 +559,17 @@ components:
       required:
         - liked
         - likesCount
+
+    NoCapResponse:
+      type: object
+      properties:
+        noCaped:
+          type: boolean
+        noCapsCount:
+          type: integer
+      required:
+        - noCaped
+        - noCapsCount
 
     Service:
       type: object

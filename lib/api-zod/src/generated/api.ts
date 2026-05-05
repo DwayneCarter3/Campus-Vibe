@@ -108,11 +108,14 @@ export const ListPostsResponse = zod.object({
       authorName: zod.string(),
       authorFaculty: zod.string(),
       authorLevel: zod.string(),
+      authorCampusLocation: zod.string(),
       authorAvatarUrl: zod.string().nullable(),
       content: zod.string(),
       imageUrl: zod.string().nullable(),
       likesCount: zod.number(),
       isLikedByMe: zod.boolean(),
+      noCapsCount: zod.number(),
+      isNoCapByMe: zod.boolean(),
       createdAt: zod.coerce.date(),
     }),
   ),
@@ -140,11 +143,14 @@ export const GetPostResponse = zod.object({
   authorName: zod.string(),
   authorFaculty: zod.string(),
   authorLevel: zod.string(),
+  authorCampusLocation: zod.string(),
   authorAvatarUrl: zod.string().nullable(),
   content: zod.string(),
   imageUrl: zod.string().nullable(),
   likesCount: zod.number(),
   isLikedByMe: zod.boolean(),
+  noCapsCount: zod.number(),
+  isNoCapByMe: zod.boolean(),
   createdAt: zod.coerce.date(),
 });
 
@@ -156,7 +162,7 @@ export const DeletePostParams = zod.object({
 });
 
 /**
- * @summary Toggle like on a post
+ * @summary Toggle fire reaction on a post
  */
 export const LikePostParams = zod.object({
   postId: zod.coerce.number(),
@@ -165,6 +171,18 @@ export const LikePostParams = zod.object({
 export const LikePostResponse = zod.object({
   liked: zod.boolean(),
   likesCount: zod.number(),
+});
+
+/**
+ * @summary Toggle no-cap reaction on a post
+ */
+export const NoCapPostParams = zod.object({
+  postId: zod.coerce.number(),
+});
+
+export const NoCapPostResponse = zod.object({
+  noCaped: zod.boolean(),
+  noCapsCount: zod.number(),
 });
 
 /**
