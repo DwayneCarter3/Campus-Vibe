@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, desc, sql } from "drizzle-orm";
+import { eq, desc, sql, and } from "drizzle-orm";
 import { db, servicesTable, usersTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/auth";
 import {
@@ -31,7 +31,9 @@ async function buildServiceWithMeta(serviceId: number) {
       providerName: usersTable.fullName,
       providerFaculty: usersTable.faculty,
       providerLevel: usersTable.level,
+      providerCampusLocation: usersTable.campusLocation,
       providerAvatarUrl: usersTable.avatarUrl,
+      providerMatricNumber: usersTable.matricNumber,
     })
     .from(servicesTable)
     .leftJoin(usersTable, eq(servicesTable.providerId, usersTable.clerkUserId))
@@ -39,12 +41,16 @@ async function buildServiceWithMeta(serviceId: number) {
 
   if (!service) return null;
 
+  const { providerMatricNumber, ...rest } = service;
+
   return {
-    ...service,
+    ...rest,
     providerName: service.providerName ?? "Unknown",
     providerFaculty: service.providerFaculty ?? "Unknown",
     providerLevel: service.providerLevel ?? "Unknown",
+    providerCampusLocation: service.providerCampusLocation ?? "Ojo",
     providerAvatarUrl: service.providerAvatarUrl ?? null,
+    providerIsVerified: !!(providerMatricNumber && providerMatricNumber.trim()),
   };
 }
 
@@ -55,7 +61,12 @@ router.get("/services", async (req, res): Promise<void> => {
     return;
   }
 
-  const { limit, offset } = params.data;
+  const { limit, offset, category } = params.data;
+
+  const conditions = [eq(servicesTable.isActive, true)];
+  if (category) {
+    conditions.push(eq(servicesTable.category, category));
+  }
 
   const services = await db
     .select({
@@ -71,11 +82,13 @@ router.get("/services", async (req, res): Promise<void> => {
       providerName: usersTable.fullName,
       providerFaculty: usersTable.faculty,
       providerLevel: usersTable.level,
+      providerCampusLocation: usersTable.campusLocation,
       providerAvatarUrl: usersTable.avatarUrl,
+      providerMatricNumber: usersTable.matricNumber,
     })
     .from(servicesTable)
     .leftJoin(usersTable, eq(servicesTable.providerId, usersTable.clerkUserId))
-    .where(eq(servicesTable.isActive, true))
+    .where(conditions.length === 1 ? conditions[0] : and(...conditions))
     .orderBy(desc(servicesTable.createdAt))
     .limit(limit ?? 20)
     .offset(offset ?? 0);
@@ -83,15 +96,20 @@ router.get("/services", async (req, res): Promise<void> => {
   const [{ count }] = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(servicesTable)
-    .where(eq(servicesTable.isActive, true));
+    .where(conditions.length === 1 ? conditions[0] : and(...conditions));
 
-  const enriched = services.map((s) => ({
-    ...s,
-    providerName: s.providerName ?? "Unknown",
-    providerFaculty: s.providerFaculty ?? "Unknown",
-    providerLevel: s.providerLevel ?? "Unknown",
-    providerAvatarUrl: s.providerAvatarUrl ?? null,
-  }));
+  const enriched = services.map((s) => {
+    const { providerMatricNumber, ...rest } = s;
+    return {
+      ...rest,
+      providerName: s.providerName ?? "Unknown",
+      providerFaculty: s.providerFaculty ?? "Unknown",
+      providerLevel: s.providerLevel ?? "Unknown",
+      providerCampusLocation: s.providerCampusLocation ?? "Ojo",
+      providerAvatarUrl: s.providerAvatarUrl ?? null,
+      providerIsVerified: !!(providerMatricNumber && providerMatricNumber.trim()),
+    };
+  });
 
   res.json(ListServicesResponse.parse({ services: enriched, total: count }));
 });

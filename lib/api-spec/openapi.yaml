@@ -584,6 +584,10 @@ components:
           type: string
         providerLevel:
           type: string
+        providerCampusLocation:
+          type: string
+        providerIsVerified:
+          type: boolean
         providerAvatarUrl:
           type: ["string", "null"]
         title:
@@ -607,6 +611,8 @@ components:
         - providerName
         - providerFaculty
         - providerLevel
+        - providerCampusLocation
+        - providerIsVerified
         - providerAvatarUrl
         - title
         - description

@@ -105,6 +105,8 @@ export interface Service {
   providerName: string;
   providerFaculty: string;
   providerLevel: string;
+  providerCampusLocation: string;
+  providerIsVerified: boolean;
   /** @nullable */
   providerAvatarUrl: string | null;
   title: string;
