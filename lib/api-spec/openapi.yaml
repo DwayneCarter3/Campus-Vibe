@@ -358,6 +358,10 @@ components:
           type: string
         email:
           type: string
+        school:
+          type: string
+        campusLocation:
+          type: string
         level:
           type: string
         faculty:
@@ -380,6 +384,8 @@ components:
         - clerkUserId
         - fullName
         - email
+        - school
+        - campusLocation
         - level
         - faculty
         - enrollmentStatus
@@ -398,6 +404,10 @@ components:
           type: string
         fullName:
           type: string
+        school:
+          type: string
+        campusLocation:
+          type: string
         level:
           type: string
         faculty:
@@ -414,6 +424,8 @@ components:
         - id
         - clerkUserId
         - fullName
+        - school
+        - campusLocation
         - level
         - faculty
         - enrollmentStatus
@@ -425,6 +437,10 @@ components:
       type: object
       properties:
         fullName:
+          type: string
+        school:
+          type: string
+        campusLocation:
           type: string
         level:
           type: string

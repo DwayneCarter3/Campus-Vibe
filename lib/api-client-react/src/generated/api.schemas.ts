@@ -14,6 +14,8 @@ export interface UserProfile {
   clerkUserId: string;
   fullName: string;
   email: string;
+  school: string;
+  campusLocation: string;
   level: string;
   faculty: string;
   enrollmentStatus: string;
@@ -30,6 +32,8 @@ export interface PublicUserProfile {
   id: number;
   clerkUserId: string;
   fullName: string;
+  school: string;
+  campusLocation: string;
   level: string;
   faculty: string;
   enrollmentStatus: string;
@@ -42,6 +46,8 @@ export interface PublicUserProfile {
 
 export interface UpdateProfileBody {
   fullName?: string;
+  school?: string;
+  campusLocation?: string;
   level?: string;
   faculty?: string;
   enrollmentStatus?: string;

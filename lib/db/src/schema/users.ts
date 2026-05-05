@@ -7,6 +7,8 @@ export const usersTable = pgTable("users", {
   clerkUserId: text("clerk_user_id").notNull().unique(),
   fullName: text("full_name").notNull(),
   email: text("email").notNull(),
+  school: text("school").notNull().default("Lagos State University (LASU)"),
+  campusLocation: text("campus_location").notNull().default("Ojo"),
   level: text("level").notNull(),
   faculty: text("faculty").notNull(),
   enrollmentStatus: text("enrollment_status").notNull(),
