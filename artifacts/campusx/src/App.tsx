@@ -6,8 +6,10 @@ import { publishableKeyFromHost } from "@clerk/react/internal";
 import { shadcn } from "@clerk/themes";
 
 import { Toaster } from "@/components/ui/toaster";
+
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Layout } from "@/components/layout";
+import { NotificationProvider } from "@/context/notifications";
 
 // Pages
 import Home from "@/pages/home";
@@ -150,7 +152,8 @@ function ClerkProviderWithRoutes() {
     >
       <QueryClientProvider client={queryClient}>
         <ClerkQueryClientCacheInvalidator />
-        <Layout>
+        <NotificationProvider>
+      <Layout>
           <Switch>
             <Route path="/" component={HomeRedirect} />
             <Route path="/sign-in/*?" component={SignInPage} />
@@ -163,6 +166,7 @@ function ClerkProviderWithRoutes() {
             <Route component={NotFound} />
           </Switch>
         </Layout>
+      </NotificationProvider>
       </QueryClientProvider>
     </ClerkProvider>
   );

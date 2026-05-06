@@ -1,7 +1,8 @@
 import { Router, type IRouter } from "express";
 import { eq, desc, sql, and } from "drizzle-orm";
-import { db, servicesTable, usersTable } from "@workspace/db";
+import { db, servicesTable, usersTable, notificationsTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/auth";
+import { broadcastNotification } from "../sse-manager";
 import {
   ListServicesQueryParams,
   ListServicesResponse,
@@ -201,6 +202,44 @@ router.delete("/services/:serviceId", requireAuth, async (req, res): Promise<voi
 
   await db.delete(servicesTable).where(eq(servicesTable.id, params.data.serviceId));
   res.sendStatus(204);
+});
+
+router.post("/services/:serviceId/whatsapp-click", async (req, res): Promise<void> => {
+  const raw = Array.isArray(req.params.serviceId) ? req.params.serviceId[0] : req.params.serviceId;
+  const serviceId = parseInt(raw, 10);
+  if (isNaN(serviceId) || serviceId <= 0) {
+    res.status(400).json({ error: "Invalid service ID" });
+    return;
+  }
+  const params = { data: { serviceId } };
+
+  const [service] = await db
+    .select({
+      id: servicesTable.id,
+      providerId: servicesTable.providerId,
+      title: servicesTable.title,
+    })
+    .from(servicesTable)
+    .where(eq(servicesTable.id, params.data.serviceId));
+
+  if (!service) {
+    res.status(404).json({ error: "Service not found" });
+    return;
+  }
+
+  const [notification] = await db
+    .insert(notificationsTable)
+    .values({
+      userId: service.providerId,
+      type: "whatsapp",
+      actorName: null,
+      message: `New interest in your hustle! 💰 (${service.title})`,
+    })
+    .returning();
+
+  broadcastNotification(service.providerId, notification);
+
+  res.json({ ok: true });
 });
 
 export default router;

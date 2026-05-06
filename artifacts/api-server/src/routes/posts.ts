@@ -1,7 +1,8 @@
 import { Router, type IRouter } from "express";
 import { eq, desc, and, sql } from "drizzle-orm";
-import { db, postsTable, postLikesTable, postNoCapsTable, usersTable } from "@workspace/db";
+import { db, postsTable, postLikesTable, postNoCapsTable, usersTable, notificationsTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/auth";
+import { broadcastNotification } from "../sse-manager";
 import {
   ListPostsQueryParams,
   ListPostsResponse,
@@ -16,6 +17,28 @@ import {
 } from "@workspace/api-zod";
 
 const router: IRouter = Router();
+
+async function getActorName(clerkUserId: string): Promise<string> {
+  const [user] = await db
+    .select({ fullName: usersTable.fullName })
+    .from(usersTable)
+    .where(eq(usersTable.clerkUserId, clerkUserId));
+  return user?.fullName ?? "A student";
+}
+
+async function notifyPostAuthor(postId: number, actorId: string, type: string, message: string) {
+  const [post] = await db
+    .select({ authorId: postsTable.authorId })
+    .from(postsTable)
+    .where(eq(postsTable.id, postId));
+  if (!post || post.authorId === actorId) return;
+  const actorName = await getActorName(actorId);
+  const [notification] = await db
+    .insert(notificationsTable)
+    .values({ userId: post.authorId, type, actorName, message })
+    .returning();
+  broadcastNotification(post.authorId, notification);
+}
 
 async function buildPostWithMeta(postId: number, clerkUserId?: string) {
   const [post] = await db
@@ -208,6 +231,7 @@ router.post("/posts/:postId/like", requireAuth, async (req, res): Promise<void> 
     await db.insert(postLikesTable).values({ postId, userId });
     await db.update(postsTable).set({ likesCount: sql`${postsTable.likesCount} + 1` }).where(eq(postsTable.id, postId));
     liked = true;
+    notifyPostAuthor(postId, userId, "fire", "Someone gassed up your post! 🔥").catch(() => {});
   }
 
   const [updated] = await db.select({ likesCount: postsTable.likesCount }).from(postsTable).where(eq(postsTable.id, postId));
@@ -239,6 +263,7 @@ router.post("/posts/:postId/nocap", requireAuth, async (req, res): Promise<void>
     await db.insert(postNoCapsTable).values({ postId, userId });
     await db.update(postsTable).set({ noCapsCount: sql`${postsTable.noCapsCount} + 1` }).where(eq(postsTable.id, postId));
     noCaped = true;
+    notifyPostAuthor(postId, userId, "nocap", "Someone said No Cap to your post! 🧢").catch(() => {});
   }
 
   const [updated] = await db.select({ noCapsCount: postsTable.noCapsCount }).from(postsTable).where(eq(postsTable.id, postId));

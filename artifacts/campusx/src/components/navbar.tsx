@@ -2,6 +2,7 @@ import { Link, useLocation } from "wouter";
 import { Show, useUser } from "@clerk/react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import { NotificationBell } from "@/components/notification-bell";
 
 export function Navbar() {
   const [location] = useLocation();
@@ -30,6 +31,7 @@ export function Navbar() {
             >
               Earn Legally
             </Link>
+            <NotificationBell />
             <Link href="/profile">
               <Avatar className="h-8 w-8 border border-primary/20 hover:border-primary/50 transition-colors cursor-pointer">
                 <AvatarImage src={user?.imageUrl} />

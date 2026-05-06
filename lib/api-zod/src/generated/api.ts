@@ -374,6 +374,40 @@ export const DeleteServiceParams = zod.object({
 });
 
 /**
+ * @summary List recent notifications for the current user
+ */
+export const listNotificationsQueryLimitDefault = 30;
+
+export const ListNotificationsQueryParams = zod.object({
+  limit: zod.coerce.number().default(listNotificationsQueryLimitDefault),
+});
+
+export const ListNotificationsResponse = zod.object({
+  notifications: zod.array(
+    zod.object({
+      id: zod.number(),
+      type: zod.string(),
+      actorName: zod.string().nullable(),
+      message: zod.string(),
+      isRead: zod.boolean(),
+      createdAt: zod.string(),
+    }),
+  ),
+  unreadCount: zod.number(),
+});
+
+/**
+ * @summary Track a WhatsApp interest click and notify the provider
+ */
+export const TrackWhatsappClickParams = zod.object({
+  serviceId: zod.coerce.number(),
+});
+
+export const TrackWhatsappClickResponse = zod.object({
+  ok: zod.boolean(),
+});
+
+/**
  * @summary Get feed statistics (post counts by faculty, trending topics)
  */
 export const GetFeedStatsResponse = zod.object({

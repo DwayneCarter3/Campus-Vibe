@@ -394,6 +394,65 @@ paths:
         "404":
           description: Not found
 
+  /notifications:
+    get:
+      operationId: listNotifications
+      tags: [notifications]
+      summary: List recent notifications for the current user
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 30
+      responses:
+        "200":
+          description: Notifications list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListNotificationsResponse"
+        "401":
+          description: Unauthorized
+
+  /notifications/read:
+    patch:
+      operationId: markNotificationsRead
+      tags: [notifications]
+      summary: Mark all notifications as read
+      security:
+        - bearerAuth: []
+      responses:
+        "204":
+          description: All notifications marked as read
+        "401":
+          description: Unauthorized
+
+  /services/{serviceId}/whatsapp-click:
+    post:
+      operationId: trackWhatsappClick
+      tags: [services]
+      summary: Track a WhatsApp interest click and notify the provider
+      parameters:
+        - name: serviceId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Notification sent
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                required: [ok]
+
   /stats/feed:
     get:
       operationId: getFeedStats
@@ -422,6 +481,42 @@ paths:
 
 components:
   schemas:
+    AppNotification:
+      type: object
+      properties:
+        id:
+          type: integer
+        type:
+          type: string
+        actorName:
+          type: ["string", "null"]
+        message:
+          type: string
+        isRead:
+          type: boolean
+        createdAt:
+          type: string
+      required:
+        - id
+        - type
+        - actorName
+        - message
+        - isRead
+        - createdAt
+
+    ListNotificationsResponse:
+      type: object
+      properties:
+        notifications:
+          type: array
+          items:
+            $ref: "#/components/schemas/AppNotification"
+        unreadCount:
+          type: integer
+      required:
+        - notifications
+        - unreadCount
+
     HealthStatus:
       type: object
       properties:

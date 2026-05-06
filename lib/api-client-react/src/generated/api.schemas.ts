@@ -5,6 +5,21 @@
  * CampusX API specification
  * OpenAPI spec version: 0.1.0
  */
+export interface AppNotification {
+  id: number;
+  type: string;
+  /** @nullable */
+  actorName: string | null;
+  message: string;
+  isRead: boolean;
+  createdAt: string;
+}
+
+export interface ListNotificationsResponse {
+  notifications: AppNotification[];
+  unreadCount: number;
+}
+
 export interface HealthStatus {
   status: string;
 }
@@ -191,4 +206,12 @@ export type ListServicesParams = {
    * @nullable
    */
   category?: string | null;
+};
+
+export type ListNotificationsParams = {
+  limit?: number;
+};
+
+export type TrackWhatsappClick200 = {
+  ok: boolean;
 };

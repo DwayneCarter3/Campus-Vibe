@@ -4,6 +4,7 @@ import usersRouter from "./users";
 import postsRouter from "./posts";
 import servicesRouter from "./services";
 import statsRouter from "./stats";
+import notificationsRouter from "./notifications";
 
 const router: IRouter = Router();
 
@@ -12,5 +13,6 @@ router.use(usersRouter);
 router.use(postsRouter);
 router.use(servicesRouter);
 router.use(statsRouter);
+router.use(notificationsRouter);
 
 export default router;

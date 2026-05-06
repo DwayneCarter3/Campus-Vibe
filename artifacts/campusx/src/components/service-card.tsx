@@ -6,6 +6,15 @@ import { motion } from "framer-motion";
 import { ShieldCheck, MapPin } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+async function notifyWhatsappClick(serviceId: number) {
+  try {
+    const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
+    await fetch(`${basePath}/api/services/${serviceId}/whatsapp-click`, { method: "POST" });
+  } catch {
+    // best-effort; never block the WhatsApp link
+  }
+}
+
 interface ServiceCardProps {
   service: Service;
   index?: number;
@@ -109,6 +118,7 @@ export function ServiceCard({ service, index = 0 }: ServiceCardProps) {
         href={whatsappUrl}
         target="_blank"
         rel="noopener noreferrer"
+        onClick={() => notifyWhatsappClick(service.id)}
         className="flex items-center justify-center gap-2 px-4 py-3 bg-[#25D366]/10 hover:bg-[#25D366]/20 border-t border-[#25D366]/20 text-[#25D366] text-sm font-semibold transition-colors"
       >
         <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="currentColor">
