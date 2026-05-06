@@ -20,6 +20,8 @@ import type {
   CreatePostBody,
   CreateServiceBody,
   FeedStats,
+  GetUserPostsParams,
+  GetUserServicesParams,
   HealthStatus,
   LikeResponse,
   ListPostsParams,
@@ -360,6 +362,230 @@ export function useGetUserProfile<
   },
 ): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetUserProfileQueryOptions(userId, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Get all posts by a user
+ */
+export const getGetUserPostsUrl = (
+  userId: string,
+  params?: GetUserPostsParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/users/${userId}/posts?${stringifiedParams}`
+    : `/api/users/${userId}/posts`;
+};
+
+export const getUserPosts = async (
+  userId: string,
+  params?: GetUserPostsParams,
+  options?: RequestInit,
+): Promise<ListPostsResponse> => {
+  return customFetch<ListPostsResponse>(getGetUserPostsUrl(userId, params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetUserPostsQueryKey = (
+  userId: string,
+  params?: GetUserPostsParams,
+) => {
+  return [`/api/users/${userId}/posts`, ...(params ? [params] : [])] as const;
+};
+
+export const getGetUserPostsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getUserPosts>>,
+  TError = ErrorType<void>,
+>(
+  userId: string,
+  params?: GetUserPostsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getUserPosts>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetUserPostsQueryKey(userId, params);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getUserPosts>>> = ({
+    signal,
+  }) => getUserPosts(userId, params, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!userId,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getUserPosts>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetUserPostsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getUserPosts>>
+>;
+export type GetUserPostsQueryError = ErrorType<void>;
+
+/**
+ * @summary Get all posts by a user
+ */
+
+export function useGetUserPosts<
+  TData = Awaited<ReturnType<typeof getUserPosts>>,
+  TError = ErrorType<void>,
+>(
+  userId: string,
+  params?: GetUserPostsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getUserPosts>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetUserPostsQueryOptions(userId, params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Get all active services by a user
+ */
+export const getGetUserServicesUrl = (
+  userId: string,
+  params?: GetUserServicesParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/users/${userId}/services?${stringifiedParams}`
+    : `/api/users/${userId}/services`;
+};
+
+export const getUserServices = async (
+  userId: string,
+  params?: GetUserServicesParams,
+  options?: RequestInit,
+): Promise<ListServicesResponse> => {
+  return customFetch<ListServicesResponse>(
+    getGetUserServicesUrl(userId, params),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getGetUserServicesQueryKey = (
+  userId: string,
+  params?: GetUserServicesParams,
+) => {
+  return [
+    `/api/users/${userId}/services`,
+    ...(params ? [params] : []),
+  ] as const;
+};
+
+export const getGetUserServicesQueryOptions = <
+  TData = Awaited<ReturnType<typeof getUserServices>>,
+  TError = ErrorType<void>,
+>(
+  userId: string,
+  params?: GetUserServicesParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getUserServices>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetUserServicesQueryKey(userId, params);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getUserServices>>> = ({
+    signal,
+  }) => getUserServices(userId, params, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!userId,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getUserServices>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetUserServicesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getUserServices>>
+>;
+export type GetUserServicesQueryError = ErrorType<void>;
+
+/**
+ * @summary Get all active services by a user
+ */
+
+export function useGetUserServices<
+  TData = Awaited<ReturnType<typeof getUserServices>>,
+  TError = ErrorType<void>,
+>(
+  userId: string,
+  params?: GetUserServicesParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getUserServices>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetUserServicesQueryOptions(userId, params, options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

@@ -86,6 +86,82 @@ export const GetUserProfileResponse = zod.object({
   campus: zod.string(),
   bio: zod.string().nullable(),
   avatarUrl: zod.string().nullable(),
+  isVerified: zod.boolean(),
+});
+
+/**
+ * @summary Get all posts by a user
+ */
+export const GetUserPostsParams = zod.object({
+  userId: zod.coerce.string(),
+});
+
+export const getUserPostsQueryLimitDefault = 50;
+export const getUserPostsQueryOffsetDefault = 0;
+
+export const GetUserPostsQueryParams = zod.object({
+  limit: zod.coerce.number().default(getUserPostsQueryLimitDefault),
+  offset: zod.coerce.number().default(getUserPostsQueryOffsetDefault),
+});
+
+export const GetUserPostsResponse = zod.object({
+  posts: zod.array(
+    zod.object({
+      id: zod.number(),
+      authorId: zod.string(),
+      authorName: zod.string(),
+      authorFaculty: zod.string(),
+      authorLevel: zod.string(),
+      authorCampusLocation: zod.string(),
+      authorAvatarUrl: zod.string().nullable(),
+      content: zod.string(),
+      imageUrl: zod.string().nullable(),
+      likesCount: zod.number(),
+      isLikedByMe: zod.boolean(),
+      noCapsCount: zod.number(),
+      isNoCapByMe: zod.boolean(),
+      createdAt: zod.coerce.date(),
+    }),
+  ),
+  total: zod.number(),
+});
+
+/**
+ * @summary Get all active services by a user
+ */
+export const GetUserServicesParams = zod.object({
+  userId: zod.coerce.string(),
+});
+
+export const getUserServicesQueryLimitDefault = 50;
+export const getUserServicesQueryOffsetDefault = 0;
+
+export const GetUserServicesQueryParams = zod.object({
+  limit: zod.coerce.number().default(getUserServicesQueryLimitDefault),
+  offset: zod.coerce.number().default(getUserServicesQueryOffsetDefault),
+});
+
+export const GetUserServicesResponse = zod.object({
+  services: zod.array(
+    zod.object({
+      id: zod.number(),
+      providerId: zod.string(),
+      providerName: zod.string(),
+      providerFaculty: zod.string(),
+      providerLevel: zod.string(),
+      providerCampusLocation: zod.string(),
+      providerIsVerified: zod.boolean(),
+      providerAvatarUrl: zod.string().nullable(),
+      title: zod.string(),
+      description: zod.string(),
+      category: zod.string(),
+      price: zod.string().nullable(),
+      contactInfo: zod.string(),
+      isActive: zod.boolean(),
+      createdAt: zod.coerce.date(),
+    }),
+  ),
+  total: zod.number(),
 });
 
 /**

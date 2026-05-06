@@ -89,6 +89,68 @@ paths:
         "404":
           description: User not found
 
+  /users/{userId}/posts:
+    get:
+      operationId: getUserPosts
+      tags: [users]
+      summary: Get all posts by a user
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        "200":
+          description: User posts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListPostsResponse"
+        "404":
+          description: User not found
+
+  /users/{userId}/services:
+    get:
+      operationId: getUserServices
+      tags: [users]
+      summary: Get all active services by a user
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        "200":
+          description: User services
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListServicesResponse"
+        "404":
+          description: User not found
+
   /posts:
     get:
       operationId: listPosts
@@ -441,6 +503,8 @@ components:
           type: ["string", "null"]
         avatarUrl:
           type: ["string", "null"]
+        isVerified:
+          type: boolean
       required:
         - id
         - clerkUserId
@@ -453,6 +517,7 @@ components:
         - campus
         - bio
         - avatarUrl
+        - isVerified
 
     UpdateProfileBody:
       type: object

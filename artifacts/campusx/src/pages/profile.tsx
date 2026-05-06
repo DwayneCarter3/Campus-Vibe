@@ -1,19 +1,65 @@
-import { useGetMyProfile, getGetMyProfileQueryKey } from "@workspace/api-client-react";
-import { useClerk } from "@clerk/react";
+import { useState } from "react";
+import {
+  useGetMyProfile,
+  getGetMyProfileQueryKey,
+  useUpdateMyProfile,
+  useGetUserPosts,
+  getGetUserPostsQueryKey,
+  useGetUserServices,
+  getGetUserServicesQueryKey,
+} from "@workspace/api-client-react";
+import { useUser, useClerk } from "@clerk/react";
 import { useLocation } from "wouter";
+import { useQueryClient } from "@tanstack/react-query";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Lock, LogOut, GraduationCap, MapPin, Building2 } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Lock,
+  LogOut,
+  GraduationCap,
+  MapPin,
+  Pencil,
+  ShieldCheck,
+  FileText,
+  Briefcase,
+} from "lucide-react";
 import { motion } from "framer-motion";
+import { PostCard } from "@/components/post-card";
+import { ServiceCard } from "@/components/service-card";
+import { cn } from "@/lib/utils";
+
+type Tab = "posts" | "hustles";
 
 export default function MyProfilePage() {
   const clerk = useClerk();
+  const { user: clerkUser } = useUser();
   const [, setLocation] = useLocation();
+  const queryClient = useQueryClient();
+  const [activeTab, setActiveTab] = useState<Tab>("posts");
+  const [editOpen, setEditOpen] = useState(false);
+  const [editBio, setEditBio] = useState("");
+  const [editAvatarUrl, setEditAvatarUrl] = useState("");
+
   const { data: profile, isLoading } = useGetMyProfile({
-    query: { queryKey: getGetMyProfileQueryKey() }
+    query: { queryKey: getGetMyProfileQueryKey() },
+  });
+
+  const updateProfile = useUpdateMyProfile();
+
+  const userId = clerkUser?.id ?? "";
+
+  const { data: postsData, isLoading: postsLoading } = useGetUserPosts(userId, undefined, {
+    query: { queryKey: getGetUserPostsQueryKey(userId), enabled: !!userId && activeTab === "posts" },
+  });
+
+  const { data: servicesData, isLoading: servicesLoading } = useGetUserServices(userId, undefined, {
+    query: { queryKey: getGetUserServicesQueryKey(userId), enabled: !!userId && activeTab === "hustles" },
   });
 
   const handleLogout = async () => {
@@ -21,128 +67,273 @@ export default function MyProfilePage() {
     setLocation("/");
   };
 
+  const openEdit = () => {
+    setEditBio(profile?.bio ?? "");
+    setEditAvatarUrl(profile?.avatarUrl ?? "");
+    setEditOpen(true);
+  };
+
+  const handleSaveEdit = () => {
+    if (!profile) return;
+    updateProfile.mutate(
+      { data: { bio: editBio || null, avatarUrl: editAvatarUrl || null } },
+      {
+        onSuccess: () => {
+          queryClient.invalidateQueries({ queryKey: getGetMyProfileQueryKey() });
+          setEditOpen(false);
+        },
+      }
+    );
+  };
+
   if (isLoading) {
     return (
-      <div className="p-8 max-w-3xl mx-auto space-y-8">
-        <Skeleton className="h-32 w-32 rounded-full" />
-        <Skeleton className="h-10 w-64" />
-        <Skeleton className="h-64 w-full" />
+      <div className="p-8 max-w-3xl mx-auto space-y-6">
+        <div className="flex gap-6 items-center">
+          <Skeleton className="h-24 w-24 rounded-full" />
+          <div className="space-y-3 flex-1">
+            <Skeleton className="h-7 w-48" />
+            <Skeleton className="h-4 w-64" />
+          </div>
+        </div>
+        <Skeleton className="h-48 w-full rounded-2xl" />
       </div>
     );
   }
 
   if (!profile) return null;
 
+  const hasMatric = !!(profile.matricNumber && profile.matricNumber.trim());
+
   return (
-    <div className="container mx-auto px-4 py-12 max-w-3xl">
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+    <div className="container mx-auto px-4 py-6 max-w-3xl pb-24">
+      <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="space-y-5">
 
-        {/* Hero card */}
-        <div className="flex flex-col md:flex-row items-start md:items-center gap-6 glass p-8 rounded-3xl border-primary/20">
-          <Avatar className="h-28 w-28 border-4 border-background shadow-xl shrink-0">
-            <AvatarImage src={profile.avatarUrl || undefined} />
-            <AvatarFallback className="text-4xl gradient-text">{profile.fullName.charAt(0)}</AvatarFallback>
-          </Avatar>
+        {/* ── Identity Header ─────────────────────────────── */}
+        <div className="glass rounded-3xl p-6 border border-white/5">
+          <div className="flex flex-col sm:flex-row gap-5 items-start sm:items-center">
 
-          <div className="flex-1 space-y-3 min-w-0">
-            <div>
-              <h1 className="text-3xl font-bold">{profile.fullName}</h1>
-              <p className="text-muted-foreground text-sm flex items-center gap-1 mt-1">
-                <Building2 className="h-3.5 w-3.5" />
-                {profile.school}
-              </p>
-            </div>
-
-            <div className="flex flex-wrap gap-2">
-              <Badge variant="secondary" className="text-xs">{profile.faculty}</Badge>
-              <Badge variant="secondary" className="text-xs">{profile.level}</Badge>
-              <Badge className="text-xs bg-primary/20 text-primary border-none">{profile.enrollmentStatus}</Badge>
-            </div>
-
-            <div className="flex flex-wrap gap-3 text-sm text-muted-foreground">
-              <span className="flex items-center gap-1">
-                <MapPin className="h-3.5 w-3.5" />
-                {profile.campusLocation} Campus
-              </span>
-              <span className="flex items-center gap-1">
-                <GraduationCap className="h-3.5 w-3.5" />
-                {profile.campus}
-              </span>
-            </div>
-          </div>
-
-          <Button
-            data-testid="button-logout"
-            variant="outline"
-            className="border-red-500/20 text-red-400 hover:bg-red-500/10 shrink-0"
-            onClick={handleLogout}
-          >
-            <LogOut className="h-4 w-4 mr-2" /> Sign Out
-          </Button>
-        </div>
-
-        {/* Info grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-
-          {/* Academic Info */}
-          <Card className="glass border-white/5">
-            <CardHeader>
-              <CardTitle className="text-base">Academic Details</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4 text-sm">
-              <div>
-                <span className="text-muted-foreground block mb-0.5 text-xs uppercase tracking-wider">University</span>
-                <span className="font-medium">{profile.school}</span>
-              </div>
-              <div>
-                <span className="text-muted-foreground block mb-0.5 text-xs uppercase tracking-wider">Campus</span>
-                <span className="font-medium">{profile.campusLocation} — {profile.campus}</span>
-              </div>
-              <div>
-                <span className="text-muted-foreground block mb-0.5 text-xs uppercase tracking-wider">Enrollment Type</span>
-                <span className="font-medium">{profile.enrollmentStatus}</span>
-              </div>
-              <div>
-                <span className="text-muted-foreground block mb-0.5 text-xs uppercase tracking-wider">Email</span>
-                <span className="font-medium">{profile.email}</span>
-              </div>
-              {profile.bio && (
-                <div>
-                  <span className="text-muted-foreground block mb-0.5 text-xs uppercase tracking-wider">Bio</span>
-                  <span>{profile.bio}</span>
+            <div className="relative shrink-0">
+              <Avatar className="h-20 w-20 border-2 border-primary/30 shadow-lg">
+                <AvatarImage src={profile.avatarUrl || undefined} />
+                <AvatarFallback className="text-2xl gradient-text font-bold">
+                  {profile.fullName.charAt(0)}
+                </AvatarFallback>
+              </Avatar>
+              {hasMatric && (
+                <div className="absolute -bottom-1 -right-1 h-6 w-6 rounded-full bg-emerald-500 border-2 border-background flex items-center justify-center">
+                  <ShieldCheck className="h-3 w-3 text-white" />
                 </div>
               )}
-              <div>
-                <span className="text-muted-foreground block mb-0.5 text-xs uppercase tracking-wider">Member Since</span>
-                <span className="font-medium">{new Date(profile.createdAt).toLocaleDateString("en-NG", { year: "numeric", month: "long", day: "numeric" })}</span>
-              </div>
-            </CardContent>
-          </Card>
+            </div>
 
-          {/* Private Info */}
-          <Card className="glass border-orange-500/20 bg-orange-500/5">
-            <CardHeader className="flex flex-row items-center gap-2 space-y-0 pb-4">
-              <Lock className="h-4 w-4 text-orange-400" />
-              <CardTitle className="text-base text-orange-400">Private Information</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="p-4 bg-background/50 rounded-xl border border-white/5">
-                <span className="text-muted-foreground text-xs uppercase tracking-wider block mb-2">Matriculation Number</span>
-                <span
-                  data-testid="text-matric-number"
-                  className="font-mono text-xl tracking-widest font-bold"
-                >
-                  {profile.matricNumber}
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap mb-1">
+                <h1 className="text-xl font-bold">{profile.fullName}</h1>
+                {hasMatric && (
+                  <Badge className="text-[10px] px-1.5 py-0 h-4 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-medium flex items-center gap-0.5">
+                    <ShieldCheck className="h-2.5 w-2.5" /> Verified
+                  </Badge>
+                )}
+              </div>
+
+              <div className="flex flex-wrap gap-2 mb-2">
+                <Badge variant="outline" className="text-xs border-primary/30 text-primary">{profile.level}</Badge>
+                <Badge variant="secondary" className="text-xs">{profile.faculty}</Badge>
+                <Badge variant="secondary" className="text-xs">{profile.enrollmentStatus}</Badge>
+              </div>
+
+              <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
+                <span className="flex items-center gap-1">
+                  <MapPin className="h-3 w-3" /> {profile.campusLocation} Campus
+                </span>
+                <span className="flex items-center gap-1">
+                  <GraduationCap className="h-3 w-3" /> {profile.school}
                 </span>
               </div>
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                This information is encrypted and only visible to you and system administrators. It is never shared publicly.
-              </p>
-            </CardContent>
-          </Card>
+
+              {profile.bio && (
+                <p className="text-sm text-muted-foreground mt-2 leading-relaxed">{profile.bio}</p>
+              )}
+            </div>
+
+            {/* Action buttons */}
+            <div className="flex flex-col gap-2 shrink-0">
+              <Button
+                variant="outline"
+                size="sm"
+                className="border-white/15 hover:border-primary/40 text-sm"
+                onClick={openEdit}
+              >
+                <Pencil className="h-3.5 w-3.5 mr-1.5" /> Edit Profile
+              </Button>
+              <Button
+                data-testid="button-logout"
+                variant="outline"
+                size="sm"
+                className="border-red-500/20 text-red-400 hover:bg-red-500/10 text-sm"
+                onClick={handleLogout}
+              >
+                <LogOut className="h-3.5 w-3.5 mr-1.5" /> Sign Out
+              </Button>
+            </div>
+          </div>
         </div>
 
+        {/* ── Private Data Section (owner-only) ───────────── */}
+        <div className="rounded-2xl border border-orange-500/25 bg-orange-500/5 p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <div className="h-7 w-7 rounded-full bg-orange-500/15 border border-orange-500/25 flex items-center justify-center">
+              <Lock className="h-3.5 w-3.5 text-orange-400" />
+            </div>
+            <span className="text-sm font-semibold text-orange-300">Private Information — Only visible to you</span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="bg-background/40 rounded-xl p-4 border border-white/5">
+              <span className="text-[10px] uppercase tracking-widest text-muted-foreground block mb-1">Matriculation Number</span>
+              <span
+                data-testid="text-matric-number"
+                className="font-mono text-lg font-bold tracking-widest"
+              >
+                {profile.matricNumber || <span className="text-muted-foreground text-sm font-normal">Not set</span>}
+              </span>
+            </div>
+            <div className="bg-background/40 rounded-xl p-4 border border-white/5">
+              <span className="text-[10px] uppercase tracking-widest text-muted-foreground block mb-1">Enrollment Status</span>
+              <span className="font-semibold text-sm">{profile.enrollmentStatus}</span>
+            </div>
+          </div>
+          <p className="text-[11px] text-muted-foreground mt-3 leading-relaxed">
+            Your matric number is encrypted and never shared publicly. It is used only to grant your Verified Student badge.
+          </p>
+        </div>
+
+        {/* ── Tabs ───────────────────────────────────────── */}
+        <div className="flex gap-1 p-1 glass rounded-xl border border-white/5">
+          {([
+            { id: "posts",   label: "Gist History",   icon: FileText,  count: postsData?.total },
+            { id: "hustles", label: "Active Hustles",  icon: Briefcase, count: servicesData?.total },
+          ] as const).map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={cn(
+                "flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium transition-all",
+                activeTab === tab.id
+                  ? "bg-primary text-primary-foreground shadow-md"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              <tab.icon className="h-4 w-4" />
+              <span>{tab.label}</span>
+              {tab.count !== undefined && (
+                <span className={cn(
+                  "text-[10px] px-1.5 py-0.5 rounded-full font-mono",
+                  activeTab === tab.id ? "bg-white/20" : "bg-white/10"
+                )}>
+                  {tab.count}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+
+        {/* ── Tab Content ─────────────────────────────────── */}
+        {activeTab === "posts" && (
+          <div>
+            {postsLoading ? (
+              <div className="space-y-4">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <Skeleton key={i} className="h-32 w-full rounded-2xl" />
+                ))}
+              </div>
+            ) : postsData?.posts.length === 0 ? (
+              <EmptyTabState icon="🎙️" message="No gist posted yet." sub="Your campus posts will appear here." />
+            ) : (
+              <div className="space-y-1">
+                {postsData?.posts.map((post) => (
+                  <PostCard key={post.id} post={post} />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === "hustles" && (
+          <div>
+            {servicesLoading ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <Skeleton key={i} className="h-64 w-full rounded-2xl" />
+                ))}
+              </div>
+            ) : servicesData?.services.length === 0 ? (
+              <EmptyTabState icon="💼" message="No active hustles yet." sub="Post a service in the Earn Legally marketplace." />
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {servicesData?.services.map((s, i) => (
+                  <ServiceCard key={s.id} service={s} index={i} />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </motion.div>
+
+      {/* ── Edit Profile Dialog ─────────────────────────── */}
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent className="sm:max-w-[480px] glass border-primary/20 p-0 overflow-hidden">
+          <div className="bg-gradient-to-br from-primary/10 to-transparent p-6 border-b border-white/5">
+            <DialogHeader>
+              <DialogTitle className="gradient-text font-bold">Edit Profile</DialogTitle>
+              <p className="text-sm text-muted-foreground mt-1">Update your bio and profile photo URL.</p>
+            </DialogHeader>
+          </div>
+          <div className="p-6 space-y-4">
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Bio</Label>
+              <Textarea
+                placeholder="Tell your fellow LASU students a bit about yourself..."
+                className="bg-background/40 border-white/10 focus:border-primary/40 resize-none min-h-[90px]"
+                value={editBio}
+                onChange={(e) => setEditBio(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Avatar URL <span className="text-muted-foreground text-xs">(optional)</span></Label>
+              <Input
+                placeholder="https://..."
+                className="bg-background/40 border-white/10 focus:border-primary/40"
+                value={editAvatarUrl}
+                onChange={(e) => setEditAvatarUrl(e.target.value)}
+              />
+            </div>
+            <div className="flex gap-3 pt-2">
+              <Button
+                onClick={handleSaveEdit}
+                className="flex-1 gradient-btn h-10 font-semibold"
+                disabled={updateProfile.isPending}
+              >
+                {updateProfile.isPending ? "Saving..." : "Save Changes"}
+              </Button>
+              <Button variant="outline" className="border-white/10" onClick={() => setEditOpen(false)}>
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+function EmptyTabState({ icon, message, sub }: { icon: string; message: string; sub: string }) {
+  return (
+    <div className="flex flex-col items-center py-16 text-center border border-dashed border-white/10 rounded-2xl">
+      <span className="text-4xl mb-3">{icon}</span>
+      <p className="font-semibold text-foreground/80">{message}</p>
+      <p className="text-sm text-muted-foreground mt-1">{sub}</p>
     </div>
   );
 }

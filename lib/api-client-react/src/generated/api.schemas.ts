@@ -42,6 +42,7 @@ export interface PublicUserProfile {
   bio: string | null;
   /** @nullable */
   avatarUrl: string | null;
+  isVerified: boolean;
 }
 
 export interface UpdateProfileBody {
@@ -163,6 +164,16 @@ export interface MarketplaceStats {
   totalServices: number;
   servicesByCategory: CategoryCount[];
 }
+
+export type GetUserPostsParams = {
+  limit?: number;
+  offset?: number;
+};
+
+export type GetUserServicesParams = {
+  limit?: number;
+  offset?: number;
+};
 
 export type ListPostsParams = {
   limit?: number;
