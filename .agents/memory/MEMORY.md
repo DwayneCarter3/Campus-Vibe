@@ -1,0 +1,2 @@
+- [Object Storage setup](object-storage.md) — bucket provisioned; presigned URL flow; objectStorage.ts cast fix needed
+- [Codegen barrel fix](codegen-barrel.md) — api-zod barrel must be `export * from "./generated/api"` only after every codegen run

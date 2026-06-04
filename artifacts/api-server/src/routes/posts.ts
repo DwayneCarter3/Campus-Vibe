@@ -51,6 +51,7 @@ async function buildPostWithMeta(postId: number, clerkUserId?: string) {
       authorId: postsTable.authorId,
       content: postsTable.content,
       imageUrl: postsTable.imageUrl,
+      videoUrl: postsTable.videoUrl,
       likesCount: postsTable.likesCount,
       noCapsCount: postsTable.noCapsCount,
       createdAt: postsTable.createdAt,
@@ -111,6 +112,7 @@ router.get("/posts", async (req, res): Promise<void> => {
       authorId: postsTable.authorId,
       content: postsTable.content,
       imageUrl: postsTable.imageUrl,
+      videoUrl: postsTable.videoUrl,
       likesCount: postsTable.likesCount,
       noCapsCount: postsTable.noCapsCount,
       createdAt: postsTable.createdAt,
@@ -173,7 +175,7 @@ router.post("/posts", requireAuth, async (req, res): Promise<void> => {
 
   const [post] = await db
     .insert(postsTable)
-    .values({ authorId: userId, content: parsed.data.content, imageUrl: parsed.data.imageUrl ?? null })
+    .values({ authorId: userId, content: parsed.data.content, imageUrl: parsed.data.imageUrl ?? null, videoUrl: parsed.data.videoUrl ?? null })
     .returning();
 
   const result = await buildPostWithMeta(post.id, userId);

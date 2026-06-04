@@ -175,6 +175,18 @@ export function PostCard({ post }: PostCardProps) {
               </div>
             )}
 
+            {post.videoUrl && (
+              <div className="mt-3 rounded-xl overflow-hidden border border-white/10 bg-black/40">
+                <video
+                  src={post.videoUrl}
+                  controls
+                  preload="metadata"
+                  className="w-full max-h-[400px] object-contain"
+                  style={{ display: "block" }}
+                />
+              </div>
+            )}
+
             {/* Reactions + Comment toggle */}
             <div className="flex items-center gap-1 mt-4">
               {/* 🔥 Fire */}

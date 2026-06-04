@@ -116,6 +116,7 @@ export const GetUserPostsResponse = zod.object({
       authorAvatarUrl: zod.string().nullable(),
       content: zod.string(),
       imageUrl: zod.string().nullable(),
+      videoUrl: zod.string().nullable(),
       likesCount: zod.number(),
       isLikedByMe: zod.boolean(),
       noCapsCount: zod.number(),
@@ -189,6 +190,7 @@ export const ListPostsResponse = zod.object({
       authorAvatarUrl: zod.string().nullable(),
       content: zod.string(),
       imageUrl: zod.string().nullable(),
+      videoUrl: zod.string().nullable(),
       likesCount: zod.number(),
       isLikedByMe: zod.boolean(),
       noCapsCount: zod.number(),
@@ -206,6 +208,7 @@ export const ListPostsResponse = zod.object({
 export const CreatePostBody = zod.object({
   content: zod.string(),
   imageUrl: zod.string().nullish(),
+  videoUrl: zod.string().nullish(),
 });
 
 /**
@@ -225,6 +228,7 @@ export const GetPostResponse = zod.object({
   authorAvatarUrl: zod.string().nullable(),
   content: zod.string(),
   imageUrl: zod.string().nullable(),
+  videoUrl: zod.string().nullable(),
   likesCount: zod.number(),
   isLikedByMe: zod.boolean(),
   noCapsCount: zod.number(),
@@ -457,6 +461,35 @@ export const GetFeedStatsResponse = zod.object({
     }),
   ),
   recentActivity: zod.number(),
+});
+
+/**
+ * @summary Request a presigned URL for file upload
+ */
+
+export const RequestUploadUrlBody = zod.object({
+  name: zod.string().min(1),
+  size: zod.number().min(1),
+  contentType: zod.string().min(1),
+});
+
+export const RequestUploadUrlResponse = zod.object({
+  uploadURL: zod.string().url(),
+  objectPath: zod.string(),
+  metadata: zod
+    .object({
+      name: zod.string().min(1),
+      size: zod.number().min(1),
+      contentType: zod.string().min(1),
+    })
+    .optional(),
+});
+
+/**
+ * @summary Serve an uploaded object
+ */
+export const GetStorageObjectParams = zod.object({
+  objectPath: zod.coerce.string(),
 });
 
 /**

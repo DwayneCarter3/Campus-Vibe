@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useCallback } from "react";
 import { useListPosts, useCreatePost, getListPostsQueryKey, useGetMyProfile, getGetMyProfileQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
@@ -7,10 +7,10 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { Sparkles, Radio } from "lucide-react";
+import { Sparkles, Radio, Camera, Video, X, Loader2 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useEffect } from "react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 
 const TRENDING_BUBBLES = [
@@ -20,11 +20,38 @@ const TRENDING_BUBBLES = [
   { id: "amebo", label: "Amebo Hot", emoji: "🌶️", color: "from-pink-500/20 to-pink-500/5 border-pink-500/30 hover:border-pink-500/60" },
 ];
 
+type MediaUpload = {
+  type: "image" | "video";
+  url: string;
+  previewUrl: string;
+};
+
+async function requestUploadUrl(file: File): Promise<{ uploadURL: string; objectPath: string }> {
+  const res = await fetch("/api/storage/uploads/request-url", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name: file.name, size: file.size, contentType: file.type || "application/octet-stream" }),
+  });
+  if (!res.ok) throw new Error("Failed to get upload URL");
+  return res.json();
+}
+
+async function uploadToPresignedUrl(file: File, uploadURL: string): Promise<void> {
+  const res = await fetch(uploadURL, {
+    method: "PUT",
+    body: file,
+    headers: { "Content-Type": file.type || "application/octet-stream" },
+  });
+  if (!res.ok) throw new Error("Upload failed");
+}
+
 export default function FeedPage() {
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
   const [activeBubble, setActiveBubble] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
+  const videoInputRef = useRef<HTMLInputElement>(null);
 
   const { data: profile, isLoading: isProfileLoading, error: profileError } = useGetMyProfile({
     query: { retry: false, queryKey: getGetMyProfileQueryKey() }
@@ -36,6 +63,9 @@ export default function FeedPage() {
 
   const createPost = useCreatePost();
   const [content, setContent] = useState("");
+  const [media, setMedia] = useState<MediaUpload | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isProfileLoading && (profileError || (profile && !profile.fullName))) {
@@ -43,11 +73,43 @@ export default function FeedPage() {
     }
   }, [profile, isProfileLoading, profileError, setLocation]);
 
+  const handleFileSelect = useCallback(async (file: File, type: "image" | "video") => {
+    setUploadError(null);
+    setIsUploading(true);
+    const previewUrl = URL.createObjectURL(file);
+    try {
+      const { uploadURL, objectPath } = await requestUploadUrl(file);
+      await uploadToPresignedUrl(file, uploadURL);
+      const servingUrl = `/api/storage${objectPath}`;
+      setMedia({ type, url: servingUrl, previewUrl });
+    } catch {
+      setUploadError("Upload failed. Please try again.");
+      URL.revokeObjectURL(previewUrl);
+    } finally {
+      setIsUploading(false);
+    }
+  }, []);
+
+  const clearMedia = useCallback(() => {
+    if (media?.previewUrl) URL.revokeObjectURL(media.previewUrl);
+    setMedia(null);
+    setUploadError(null);
+    if (imageInputRef.current) imageInputRef.current.value = "";
+    if (videoInputRef.current) videoInputRef.current.value = "";
+  }, [media]);
+
   const handlePost = () => {
-    if (!content.trim()) return;
-    createPost.mutate({ data: { content } }, {
+    if (!content.trim() && !media) return;
+    createPost.mutate({
+      data: {
+        content,
+        imageUrl: media?.type === "image" ? media.url : null,
+        videoUrl: media?.type === "video" ? media.url : null,
+      }
+    }, {
       onSuccess: () => {
         setContent("");
+        clearMedia();
         queryClient.invalidateQueries({ queryKey: getListPostsQueryKey() });
       }
     });
@@ -65,6 +127,28 @@ export default function FeedPage() {
 
   return (
     <div className="container mx-auto px-4 max-w-2xl py-6">
+
+      {/* Hidden file inputs */}
+      <input
+        ref={imageInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) handleFileSelect(file, "image");
+        }}
+      />
+      <input
+        ref={videoInputRef}
+        type="file"
+        accept="video/*"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) handleFileSelect(file, "video");
+        }}
+      />
 
       {/* Trending Gist Header + LIVE badge */}
       <div className="flex items-center gap-3 mb-4">
@@ -139,13 +223,108 @@ export default function FeedPage() {
               onChange={(e) => setContent(e.target.value)}
               onKeyDown={handleKeyDown}
             />
+
+            {/* Media preview */}
+            <AnimatePresence>
+              {isUploading && (
+                <motion.div
+                  key="uploading"
+                  initial={{ opacity: 0, scale: 0.97 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.97 }}
+                  className="flex items-center gap-2 text-xs text-muted-foreground py-2 px-3 bg-white/5 rounded-xl border border-white/10"
+                >
+                  <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+                  <span>Uploading media…</span>
+                </motion.div>
+              )}
+              {!isUploading && media && (
+                <motion.div
+                  key="preview"
+                  initial={{ opacity: 0, scale: 0.97 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.97 }}
+                  className="relative rounded-xl overflow-hidden border border-white/10 bg-black/30"
+                >
+                  {media.type === "image" ? (
+                    <img
+                      src={media.previewUrl}
+                      alt="Preview"
+                      className="w-full max-h-[260px] object-cover"
+                    />
+                  ) : (
+                    <video
+                      src={media.previewUrl}
+                      controls
+                      preload="metadata"
+                      className="w-full max-h-[260px] object-contain"
+                      style={{ display: "block" }}
+                    />
+                  )}
+                  <button
+                    onClick={clearMedia}
+                    className="absolute top-2 right-2 h-6 w-6 rounded-full bg-black/60 flex items-center justify-center hover:bg-black/80 transition-colors"
+                  >
+                    <X className="h-3.5 w-3.5 text-white" />
+                  </button>
+                  <div className="absolute bottom-2 left-2 text-[10px] bg-black/60 text-white px-2 py-0.5 rounded-full">
+                    {media.type === "image" ? "📷 Photo" : "🎥 Video"}
+                  </div>
+                </motion.div>
+              )}
+              {!isUploading && uploadError && (
+                <motion.div
+                  key="error"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="text-xs text-destructive px-1"
+                >
+                  {uploadError}
+                </motion.div>
+              )}
+            </AnimatePresence>
+
             <div className="flex items-center justify-between pt-1 border-t border-white/5">
-              <span className="text-xs text-muted-foreground">Ctrl+Enter to post</span>
+              {/* Media icon buttons */}
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  title="Add photo"
+                  disabled={isUploading || !!media}
+                  onClick={() => imageInputRef.current?.click()}
+                  className={cn(
+                    "flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all",
+                    media
+                      ? "text-muted-foreground/40 cursor-not-allowed"
+                      : "text-muted-foreground hover:text-primary hover:bg-primary/10"
+                  )}
+                >
+                  <Camera className="h-4 w-4" />
+                  <span className="hidden sm:inline">Photo</span>
+                </button>
+                <button
+                  type="button"
+                  title="Add video"
+                  disabled={isUploading || !!media}
+                  onClick={() => videoInputRef.current?.click()}
+                  className={cn(
+                    "flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all",
+                    media
+                      ? "text-muted-foreground/40 cursor-not-allowed"
+                      : "text-muted-foreground hover:text-pink-400 hover:bg-pink-500/10"
+                  )}
+                >
+                  <Video className="h-4 w-4" />
+                  <span className="hidden sm:inline">Video</span>
+                </button>
+                <span className="text-xs text-muted-foreground/50 ml-1 hidden sm:inline">Ctrl+Enter to post</span>
+              </div>
               <Button
                 data-testid="btn-create-post"
                 className="gradient-btn rounded-full px-5 h-8 text-sm"
                 onClick={handlePost}
-                disabled={!content.trim() || createPost.isPending}
+                disabled={(!content.trim() && !media) || createPost.isPending || isUploading}
               >
                 {createPost.isPending ? "Posting..." : "Post Gist"}
                 <Sparkles className="h-3 w-3 ml-1.5" />
