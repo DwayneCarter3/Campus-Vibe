@@ -31,6 +31,7 @@ export const GetMyProfileResponse = zod.object({
   campus: zod.string(),
   bio: zod.string().nullable(),
   avatarUrl: zod.string().nullable(),
+  isAdmin: zod.boolean(),
   createdAt: zod.coerce.date(),
 });
 
@@ -64,6 +65,7 @@ export const UpdateMyProfileResponse = zod.object({
   campus: zod.string(),
   bio: zod.string().nullable(),
   avatarUrl: zod.string().nullable(),
+  isAdmin: zod.boolean(),
   createdAt: zod.coerce.date(),
 });
 
@@ -122,6 +124,8 @@ export const GetUserPostsResponse = zod.object({
       noCapsCount: zod.number(),
       isNoCapByMe: zod.boolean(),
       commentsCount: zod.number(),
+      isPinnedToProfile: zod.boolean(),
+      isPinnedToFeed: zod.boolean(),
       createdAt: zod.coerce.date(),
     }),
   ),
@@ -196,6 +200,8 @@ export const ListPostsResponse = zod.object({
       noCapsCount: zod.number(),
       isNoCapByMe: zod.boolean(),
       commentsCount: zod.number(),
+      isPinnedToProfile: zod.boolean(),
+      isPinnedToFeed: zod.boolean(),
       createdAt: zod.coerce.date(),
     }),
   ),
@@ -234,6 +240,8 @@ export const GetPostResponse = zod.object({
   noCapsCount: zod.number(),
   isNoCapByMe: zod.boolean(),
   commentsCount: zod.number(),
+  isPinnedToProfile: zod.boolean(),
+  isPinnedToFeed: zod.boolean(),
   createdAt: zod.coerce.date(),
 });
 
@@ -461,6 +469,36 @@ export const GetFeedStatsResponse = zod.object({
     }),
   ),
   recentActivity: zod.number(),
+});
+
+/**
+ * @summary Toggle pin post to user's profile
+ */
+export const PinPostToProfileParams = zod.object({
+  postId: zod.coerce.number(),
+});
+
+export const PinPostToProfileResponse = zod.object({
+  pinned: zod.boolean(),
+});
+
+/**
+ * @summary Toggle pin post to main feed (admin only)
+ */
+export const PinPostToFeedParams = zod.object({
+  postId: zod.coerce.number(),
+});
+
+export const PinPostToFeedResponse = zod.object({
+  pinned: zod.boolean(),
+});
+
+/**
+ * @summary Bootstrap – claim admin role (only works if no admin exists)
+ */
+export const ClaimAdminResponse = zod.object({
+  success: zod.boolean(),
+  message: zod.string(),
 });
 
 /**

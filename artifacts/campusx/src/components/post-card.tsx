@@ -1,19 +1,29 @@
 import { useState, useRef, useEffect } from "react";
 import { formatDistanceToNow } from "date-fns";
 import { Link } from "wouter";
-import { Trash2, MapPin, MessageCircle, Send } from "lucide-react";
+import { Trash2, MapPin, MessageCircle, Send, MoreHorizontal, Pin } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   useDeletePost,
   useLikePost,
   useNoCapPost,
   useListPostComments,
   useCreatePostComment,
+  usePinPostToProfile,
+  usePinPostToFeed,
   getListPostsQueryKey,
   getListPostCommentsQueryKey,
+  getGetUserPostsQueryKey,
 } from "@workspace/api-client-react";
 import type { Post, Comment } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -23,15 +33,18 @@ import { cn } from "@/lib/utils";
 
 interface PostCardProps {
   post: Post;
+  isAdmin?: boolean;
 }
 
-export function PostCard({ post }: PostCardProps) {
+export function PostCard({ post, isAdmin }: PostCardProps) {
   const { user } = useUser();
   const queryClient = useQueryClient();
   const likePost = useLikePost();
   const noCapPost = useNoCapPost();
   const deletePost = useDeletePost();
   const createComment = useCreatePostComment();
+  const pinToProfile = usePinPostToProfile();
+  const pinToFeed = usePinPostToFeed();
 
   const [optimisticFire, setOptimisticFire] = useState<{ active: boolean; count: number } | null>(null);
   const [optimisticNoCap, setOptimisticNoCap] = useState<{ active: boolean; count: number } | null>(null);
@@ -89,9 +102,27 @@ export function PostCard({ post }: PostCardProps) {
       deletePost.mutate({ postId: post.id }, {
         onSuccess: () => {
           queryClient.invalidateQueries({ queryKey: getListPostsQueryKey() });
+          queryClient.invalidateQueries({ queryKey: getGetUserPostsQueryKey(post.authorId) });
         }
       });
     }
+  };
+
+  const handlePinToProfile = () => {
+    pinToProfile.mutate({ postId: post.id }, {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getGetUserPostsQueryKey(post.authorId) });
+        queryClient.invalidateQueries({ queryKey: getListPostsQueryKey() });
+      },
+    });
+  };
+
+  const handlePinToFeed = () => {
+    pinToFeed.mutate({ postId: post.id }, {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getListPostsQueryKey() });
+      },
+    });
   };
 
   const handleSubmitComment = () => {
@@ -151,18 +182,71 @@ export function PostCard({ post }: PostCardProps) {
                 </div>
               </div>
 
-              {isOwner && (
-                <Button
-                  data-testid={`btn-delete-post-${post.id}`}
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
-                  onClick={handleDelete}
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </Button>
+              {(isOwner || isAdmin) && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+                    >
+                      <MoreHorizontal className="h-3.5 w-3.5" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="glass border-white/10 min-w-[160px]">
+                    {isOwner && (
+                      <DropdownMenuItem
+                        onClick={handlePinToProfile}
+                        disabled={pinToProfile.isPending}
+                        className="gap-2 text-xs cursor-pointer"
+                      >
+                        <Pin className="h-3.5 w-3.5" />
+                        {post.isPinnedToProfile ? "Unpin from Profile" : "Pin to Profile"}
+                      </DropdownMenuItem>
+                    )}
+                    {isAdmin && (
+                      <DropdownMenuItem
+                        onClick={handlePinToFeed}
+                        disabled={pinToFeed.isPending}
+                        className="gap-2 text-xs cursor-pointer"
+                      >
+                        <Pin className="h-3.5 w-3.5 text-primary" />
+                        {post.isPinnedToFeed ? "Unpin from Feed" : "Pin to Feed"}
+                      </DropdownMenuItem>
+                    )}
+                    {isOwner && (
+                      <>
+                        <DropdownMenuSeparator className="bg-white/5" />
+                        <DropdownMenuItem
+                          data-testid={`btn-delete-post-${post.id}`}
+                          onClick={handleDelete}
+                          className="gap-2 text-xs text-destructive focus:text-destructive cursor-pointer"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                          Delete Post
+                        </DropdownMenuItem>
+                      </>
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
               )}
             </div>
+
+            {/* Pin badges */}
+            {(post.isPinnedToFeed || post.isPinnedToProfile) && (
+              <div className="flex gap-1.5 mt-2 flex-wrap">
+                {post.isPinnedToFeed && (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-primary/20 text-primary border border-primary/30">
+                    <Pin className="h-2.5 w-2.5" /> Pinned to Feed
+                  </span>
+                )}
+                {post.isPinnedToProfile && (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/25">
+                    <Pin className="h-2.5 w-2.5" /> Pinned to Profile
+                  </span>
+                )}
+              </div>
+            )}
 
             {/* Content */}
             <div className="mt-3 text-sm md:text-base leading-relaxed break-words whitespace-pre-wrap">

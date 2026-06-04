@@ -103,6 +103,8 @@ router.get("/users/:userId/posts", async (req, res): Promise<void> => {
       videoUrl: postsTable.videoUrl,
       likesCount: postsTable.likesCount,
       noCapsCount: postsTable.noCapsCount,
+      isPinnedToProfile: postsTable.isPinnedToProfile,
+      isPinnedToFeed: postsTable.isPinnedToFeed,
       createdAt: postsTable.createdAt,
       authorName: usersTable.fullName,
       authorFaculty: usersTable.faculty,
@@ -113,7 +115,7 @@ router.get("/users/:userId/posts", async (req, res): Promise<void> => {
     .from(postsTable)
     .leftJoin(usersTable, eq(postsTable.authorId, usersTable.clerkUserId))
     .where(eq(postsTable.authorId, userId))
-    .orderBy(desc(postsTable.createdAt))
+    .orderBy(desc(postsTable.isPinnedToProfile), desc(postsTable.createdAt))
     .limit(limit)
     .offset(offset);
 
@@ -147,6 +149,8 @@ router.get("/users/:userId/posts", async (req, res): Promise<void> => {
         authorCampusLocation: post.authorCampusLocation ?? "Ojo",
         authorAvatarUrl: post.authorAvatarUrl ?? null,
         commentsCount: commentsCount ?? 0,
+        isPinnedToProfile: post.isPinnedToProfile ?? false,
+        isPinnedToFeed: post.isPinnedToFeed ?? false,
         isLikedByMe,
         isNoCapByMe,
       };

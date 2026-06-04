@@ -40,6 +40,7 @@ export interface UserProfile {
   bio: string | null;
   /** @nullable */
   avatarUrl: string | null;
+  isAdmin: boolean;
   createdAt: string;
 }
 
@@ -94,6 +95,8 @@ export interface Post {
   noCapsCount: number;
   isNoCapByMe: boolean;
   commentsCount: number;
+  isPinnedToProfile: boolean;
+  isPinnedToFeed: boolean;
   createdAt: string;
 }
 
@@ -206,6 +209,15 @@ export interface CategoryCount {
 export interface MarketplaceStats {
   totalServices: number;
   servicesByCategory: CategoryCount[];
+}
+
+export interface PinResponse {
+  pinned: boolean;
+}
+
+export interface AdminClaimResponse {
+  success: boolean;
+  message: string;
 }
 
 export interface UploadUrlRequest {

@@ -1,2 +1,3 @@
-- [Object Storage setup](object-storage.md) — bucket provisioned; presigned URL flow; objectStorage.ts cast fix needed
-- [Codegen barrel fix](codegen-barrel.md) — api-zod barrel must be `export * from "./generated/api"` only after every codegen run
+- [Codegen barrel fix](codegen-barrel-fix.md) — after every `codegen` run, must manually fix both barrels; run `typecheck:libs` after.
+- [UploadUrlResponse field name](upload-url-fields.md) — generated type uses `uploadURL` (not `signedUrl`) and `objectPath`.
+- [Admin bootstrap pattern](admin-bootstrap.md) — first-claim endpoint; isAdmin in usersTable; pin-feed requires isAdmin check.

@@ -379,7 +379,7 @@ export default function FeedPage() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.04 }}
             >
-              <PostCard post={post} />
+              <PostCard post={post} isAdmin={profile?.isAdmin} />
             </motion.div>
           ))
         )}

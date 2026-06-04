@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import {
   useGetMyProfile,
   getGetMyProfileQueryKey,
@@ -7,6 +7,8 @@ import {
   getGetUserPostsQueryKey,
   useGetUserServices,
   getGetUserServicesQueryKey,
+  useRequestUploadUrl,
+  useClaimAdmin,
 } from "@workspace/api-client-react";
 import { useUser, useClerk } from "@clerk/react";
 import { useLocation } from "wouter";
@@ -28,6 +30,9 @@ import {
   ShieldCheck,
   FileText,
   Briefcase,
+  Camera,
+  Loader2,
+  Crown,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { PostCard } from "@/components/post-card";
@@ -45,6 +50,11 @@ export default function MyProfilePage() {
   const [editOpen, setEditOpen] = useState(false);
   const [editBio, setEditBio] = useState("");
   const [editAvatarUrl, setEditAvatarUrl] = useState("");
+  const [isAvatarUploading, setIsAvatarUploading] = useState(false);
+  const avatarFileRef = useRef<HTMLInputElement>(null);
+
+  const requestUploadUrl = useRequestUploadUrl();
+  const claimAdmin = useClaimAdmin();
 
   const { data: profile, isLoading } = useGetMyProfile({
     query: { queryKey: getGetMyProfileQueryKey() },
@@ -71,6 +81,39 @@ export default function MyProfilePage() {
     setEditBio(profile?.bio ?? "");
     setEditAvatarUrl(profile?.avatarUrl ?? "");
     setEditOpen(true);
+  };
+
+  const handleAvatarFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsAvatarUploading(true);
+    try {
+      const uploadData = await requestUploadUrl.mutateAsync({
+        data: { name: file.name, size: file.size, contentType: file.type },
+      });
+      await fetch(uploadData.uploadURL, {
+        method: "PUT",
+        body: file,
+        headers: { "Content-Type": file.type },
+      });
+      setEditAvatarUrl(`/api/storage${uploadData.objectPath}`);
+    } catch {
+      // ignore
+    } finally {
+      setIsAvatarUploading(false);
+    }
+  };
+
+  const handleClaimAdmin = () => {
+    claimAdmin.mutate(undefined, {
+      onSuccess: (res) => {
+        alert(res.message);
+        queryClient.invalidateQueries({ queryKey: getGetMyProfileQueryKey() });
+      },
+      onError: () => {
+        alert("An admin already exists. You cannot claim this role.");
+      },
+    });
   };
 
   const handleSaveEdit = () => {
@@ -209,6 +252,40 @@ export default function MyProfilePage() {
           </p>
         </div>
 
+        {/* ── Admin Section ──────────────────────────────── */}
+        {profile.isAdmin ? (
+          <div className="rounded-2xl border border-primary/25 bg-primary/5 p-4 flex items-center gap-3">
+            <div className="h-8 w-8 rounded-full bg-primary/20 border border-primary/30 flex items-center justify-center shrink-0">
+              <Crown className="h-4 w-4 text-primary" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-primary">Campus Admin</p>
+              <p className="text-[11px] text-muted-foreground">You can pin posts to the main feed.</p>
+            </div>
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-white/5 bg-background/40 p-4 flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="h-8 w-8 rounded-full bg-white/5 border border-white/10 flex items-center justify-center shrink-0">
+                <Crown className="h-4 w-4 text-muted-foreground" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-medium">Claim Admin Role</p>
+                <p className="text-[11px] text-muted-foreground">First-come, first-served. Only one admin per campus.</p>
+              </div>
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              className="border-white/10 text-xs shrink-0"
+              onClick={handleClaimAdmin}
+              disabled={claimAdmin.isPending}
+            >
+              {claimAdmin.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Become Admin"}
+            </Button>
+          </div>
+        )}
+
         {/* ── Tabs ───────────────────────────────────────── */}
         <div className="flex gap-1 p-1 glass rounded-xl border border-white/5">
           {([
@@ -253,7 +330,7 @@ export default function MyProfilePage() {
             ) : (
               <div className="space-y-1">
                 {postsData?.posts.map((post) => (
-                  <PostCard key={post.id} post={post} />
+                  <PostCard key={post.id} post={post} isAdmin={profile?.isAdmin} />
                 ))}
               </div>
             )}
@@ -292,6 +369,49 @@ export default function MyProfilePage() {
           </div>
           <div className="p-6 space-y-4">
             <div className="space-y-2">
+              <Label className="text-sm font-medium">Profile Photo</Label>
+              <div className="flex items-center gap-3">
+                <Avatar className="h-14 w-14 border-2 border-primary/30 shrink-0">
+                  <AvatarImage src={editAvatarUrl || undefined} />
+                  <AvatarFallback className="gradient-text font-bold">
+                    {profile.fullName.charAt(0)}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="flex-1">
+                  <input
+                    ref={avatarFileRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={handleAvatarFileChange}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="border-white/10 text-xs w-full"
+                    onClick={() => avatarFileRef.current?.click()}
+                    disabled={isAvatarUploading}
+                  >
+                    {isAvatarUploading ? (
+                      <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> Uploading…</>
+                    ) : (
+                      <><Camera className="h-3.5 w-3.5 mr-1.5" /> {editAvatarUrl ? "Change Photo" : "Upload Photo"}</>
+                    )}
+                  </Button>
+                  {editAvatarUrl && (
+                    <button
+                      type="button"
+                      className="text-[10px] text-muted-foreground hover:text-destructive mt-1 w-full text-center"
+                      onClick={() => setEditAvatarUrl("")}
+                    >
+                      Remove photo
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+            <div className="space-y-2">
               <Label className="text-sm font-medium">Bio</Label>
               <Textarea
                 placeholder="Tell your fellow LASU students a bit about yourself..."
@@ -300,20 +420,11 @@ export default function MyProfilePage() {
                 onChange={(e) => setEditBio(e.target.value)}
               />
             </div>
-            <div className="space-y-2">
-              <Label className="text-sm font-medium">Avatar URL <span className="text-muted-foreground text-xs">(optional)</span></Label>
-              <Input
-                placeholder="https://..."
-                className="bg-background/40 border-white/10 focus:border-primary/40"
-                value={editAvatarUrl}
-                onChange={(e) => setEditAvatarUrl(e.target.value)}
-              />
-            </div>
             <div className="flex gap-3 pt-2">
               <Button
                 onClick={handleSaveEdit}
                 className="flex-1 gradient-btn h-10 font-semibold"
-                disabled={updateProfile.isPending}
+                disabled={updateProfile.isPending || isAvatarUploading}
               >
                 {updateProfile.isPending ? "Saving..." : "Save Changes"}
               </Button>

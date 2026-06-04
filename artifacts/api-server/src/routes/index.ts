@@ -7,6 +7,7 @@ import statsRouter from "./stats";
 import notificationsRouter from "./notifications";
 import schoolVotesRouter from "./school-votes";
 import storageRouter from "./storage";
+import adminRouter from "./admin";
 
 const router: IRouter = Router();
 
@@ -18,5 +19,6 @@ router.use(statsRouter);
 router.use(notificationsRouter);
 router.use(schoolVotesRouter);
 router.use(storageRouter);
+router.use(adminRouter);
 
 export default router;

@@ -18,6 +18,10 @@ import {
   ListPostCommentsResponse,
   CreatePostCommentBody,
   CreatePostCommentParams,
+  PinPostToProfileParams,
+  PinPostToProfileResponse,
+  PinPostToFeedParams,
+  PinPostToFeedResponse,
 } from "@workspace/api-zod";
 
 const router: IRouter = Router();
@@ -54,6 +58,8 @@ async function buildPostWithMeta(postId: number, clerkUserId?: string) {
       videoUrl: postsTable.videoUrl,
       likesCount: postsTable.likesCount,
       noCapsCount: postsTable.noCapsCount,
+      isPinnedToProfile: postsTable.isPinnedToProfile,
+      isPinnedToFeed: postsTable.isPinnedToFeed,
       createdAt: postsTable.createdAt,
       authorName: usersTable.fullName,
       authorFaculty: usersTable.faculty,
@@ -91,6 +97,8 @@ async function buildPostWithMeta(postId: number, clerkUserId?: string) {
     authorCampusLocation: post.authorCampusLocation ?? "Ojo",
     authorAvatarUrl: post.authorAvatarUrl ?? null,
     commentsCount: commentsCount ?? 0,
+    isPinnedToProfile: post.isPinnedToProfile ?? false,
+    isPinnedToFeed: post.isPinnedToFeed ?? false,
     isLikedByMe,
     isNoCapByMe,
   };
@@ -115,6 +123,8 @@ router.get("/posts", async (req, res): Promise<void> => {
       videoUrl: postsTable.videoUrl,
       likesCount: postsTable.likesCount,
       noCapsCount: postsTable.noCapsCount,
+      isPinnedToProfile: postsTable.isPinnedToProfile,
+      isPinnedToFeed: postsTable.isPinnedToFeed,
       createdAt: postsTable.createdAt,
       authorName: usersTable.fullName,
       authorFaculty: usersTable.faculty,
@@ -124,7 +134,7 @@ router.get("/posts", async (req, res): Promise<void> => {
     })
     .from(postsTable)
     .leftJoin(usersTable, eq(postsTable.authorId, usersTable.clerkUserId))
-    .orderBy(desc(postsTable.createdAt))
+    .orderBy(desc(postsTable.isPinnedToFeed), desc(postsTable.createdAt))
     .limit(limit ?? 20)
     .offset(offset ?? 0);
 
@@ -156,6 +166,8 @@ router.get("/posts", async (req, res): Promise<void> => {
         authorCampusLocation: post.authorCampusLocation ?? "Ojo",
         authorAvatarUrl: post.authorAvatarUrl ?? null,
         commentsCount: commentsCount ?? 0,
+        isPinnedToProfile: post.isPinnedToProfile ?? false,
+        isPinnedToFeed: post.isPinnedToFeed ?? false,
         isLikedByMe,
         isNoCapByMe,
       };
@@ -221,6 +233,54 @@ router.delete("/posts/:postId", requireAuth, async (req, res): Promise<void> => 
 
   await db.delete(postsTable).where(eq(postsTable.id, params.data.postId));
   res.sendStatus(204);
+});
+
+// 📌 Pin to profile (author only)
+router.patch("/posts/:postId/pin-profile", requireAuth, async (req, res): Promise<void> => {
+  const userId = (req as any).userId as string;
+  const raw = Array.isArray(req.params.postId) ? req.params.postId[0] : req.params.postId;
+  const params = PinPostToProfileParams.safeParse({ postId: raw });
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+
+  const postId = params.data.postId;
+  const [post] = await db.select().from(postsTable).where(eq(postsTable.id, postId));
+  if (!post) { res.status(404).json({ error: "Post not found" }); return; }
+  if (post.authorId !== userId) { res.status(403).json({ error: "Not the author" }); return; }
+
+  const willPin = !post.isPinnedToProfile;
+  if (willPin) {
+    await db.update(postsTable).set({ isPinnedToProfile: false }).where(eq(postsTable.authorId, userId));
+  }
+  await db.update(postsTable).set({ isPinnedToProfile: willPin }).where(eq(postsTable.id, postId));
+  res.json(PinPostToProfileResponse.parse({ pinned: willPin }));
+});
+
+// 📌 Pin to feed (admin only)
+router.patch("/posts/:postId/pin-feed", requireAuth, async (req, res): Promise<void> => {
+  const userId = (req as any).userId as string;
+  const raw = Array.isArray(req.params.postId) ? req.params.postId[0] : req.params.postId;
+  const params = PinPostToFeedParams.safeParse({ postId: raw });
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+
+  const [caller] = await db.select({ isAdmin: usersTable.isAdmin }).from(usersTable).where(eq(usersTable.clerkUserId, userId));
+  if (!caller?.isAdmin) { res.status(403).json({ error: "Admin only" }); return; }
+
+  const postId = params.data.postId;
+  const [post] = await db.select().from(postsTable).where(eq(postsTable.id, postId));
+  if (!post) { res.status(404).json({ error: "Post not found" }); return; }
+
+  const willPin = !post.isPinnedToFeed;
+  if (willPin) {
+    await db.update(postsTable).set({ isPinnedToFeed: false });
+  }
+  await db.update(postsTable).set({ isPinnedToFeed: willPin }).where(eq(postsTable.id, postId));
+  res.json(PinPostToFeedResponse.parse({ pinned: willPin }));
 });
 
 // 🔥 Fire reaction (existing like)

@@ -17,6 +17,7 @@ import type {
 } from "@tanstack/react-query";
 
 import type {
+  AdminClaimResponse,
   Comment,
   CreateCommentBody,
   CreatePostBody,
@@ -35,6 +36,7 @@ import type {
   ListServicesResponse,
   MarketplaceStats,
   NoCapResponse,
+  PinResponse,
   Post,
   PublicUserProfile,
   Service,
@@ -2066,6 +2068,255 @@ export function useGetFeedStats<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * @summary Toggle pin post to user's profile
+ */
+export const getPinPostToProfileUrl = (postId: number) => {
+  return `/api/posts/${postId}/pin-profile`;
+};
+
+export const pinPostToProfile = async (
+  postId: number,
+  options?: RequestInit,
+): Promise<PinResponse> => {
+  return customFetch<PinResponse>(getPinPostToProfileUrl(postId), {
+    ...options,
+    method: "PATCH",
+  });
+};
+
+export const getPinPostToProfileMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof pinPostToProfile>>,
+    TError,
+    { postId: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof pinPostToProfile>>,
+  TError,
+  { postId: number },
+  TContext
+> => {
+  const mutationKey = ["pinPostToProfile"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof pinPostToProfile>>,
+    { postId: number }
+  > = (props) => {
+    const { postId } = props ?? {};
+
+    return pinPostToProfile(postId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type PinPostToProfileMutationResult = NonNullable<
+  Awaited<ReturnType<typeof pinPostToProfile>>
+>;
+
+export type PinPostToProfileMutationError = ErrorType<void>;
+
+/**
+ * @summary Toggle pin post to user's profile
+ */
+export const usePinPostToProfile = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof pinPostToProfile>>,
+    TError,
+    { postId: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof pinPostToProfile>>,
+  TError,
+  { postId: number },
+  TContext
+> => {
+  return useMutation(getPinPostToProfileMutationOptions(options));
+};
+
+/**
+ * @summary Toggle pin post to main feed (admin only)
+ */
+export const getPinPostToFeedUrl = (postId: number) => {
+  return `/api/posts/${postId}/pin-feed`;
+};
+
+export const pinPostToFeed = async (
+  postId: number,
+  options?: RequestInit,
+): Promise<PinResponse> => {
+  return customFetch<PinResponse>(getPinPostToFeedUrl(postId), {
+    ...options,
+    method: "PATCH",
+  });
+};
+
+export const getPinPostToFeedMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof pinPostToFeed>>,
+    TError,
+    { postId: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof pinPostToFeed>>,
+  TError,
+  { postId: number },
+  TContext
+> => {
+  const mutationKey = ["pinPostToFeed"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof pinPostToFeed>>,
+    { postId: number }
+  > = (props) => {
+    const { postId } = props ?? {};
+
+    return pinPostToFeed(postId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type PinPostToFeedMutationResult = NonNullable<
+  Awaited<ReturnType<typeof pinPostToFeed>>
+>;
+
+export type PinPostToFeedMutationError = ErrorType<void>;
+
+/**
+ * @summary Toggle pin post to main feed (admin only)
+ */
+export const usePinPostToFeed = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof pinPostToFeed>>,
+    TError,
+    { postId: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof pinPostToFeed>>,
+  TError,
+  { postId: number },
+  TContext
+> => {
+  return useMutation(getPinPostToFeedMutationOptions(options));
+};
+
+/**
+ * @summary Bootstrap – claim admin role (only works if no admin exists)
+ */
+export const getClaimAdminUrl = () => {
+  return `/api/admin/claim`;
+};
+
+export const claimAdmin = async (
+  options?: RequestInit,
+): Promise<AdminClaimResponse> => {
+  return customFetch<AdminClaimResponse>(getClaimAdminUrl(), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getClaimAdminMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof claimAdmin>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof claimAdmin>>,
+  TError,
+  void,
+  TContext
+> => {
+  const mutationKey = ["claimAdmin"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof claimAdmin>>,
+    void
+  > = () => {
+    return claimAdmin(requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ClaimAdminMutationResult = NonNullable<
+  Awaited<ReturnType<typeof claimAdmin>>
+>;
+
+export type ClaimAdminMutationError = ErrorType<void>;
+
+/**
+ * @summary Bootstrap – claim admin role (only works if no admin exists)
+ */
+export const useClaimAdmin = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof claimAdmin>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof claimAdmin>>,
+  TError,
+  void,
+  TContext
+> => {
+  return useMutation(getClaimAdminMutationOptions(options));
+};
 
 /**
  * @summary Request a presigned URL for file upload
