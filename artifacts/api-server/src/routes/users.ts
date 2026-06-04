@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, desc, and, sql } from "drizzle-orm";
-import { db, usersTable, postsTable, postLikesTable, postNoCapsTable, servicesTable } from "@workspace/db";
+import { db, usersTable, postsTable, postLikesTable, postNoCapsTable, postCommentsTable, servicesTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/auth";
 import {
   GetMyProfileResponse,
@@ -100,6 +100,7 @@ router.get("/users/:userId/posts", async (req, res): Promise<void> => {
       authorId: postsTable.authorId,
       content: postsTable.content,
       imageUrl: postsTable.imageUrl,
+      videoUrl: postsTable.videoUrl,
       likesCount: postsTable.likesCount,
       noCapsCount: postsTable.noCapsCount,
       createdAt: postsTable.createdAt,
@@ -133,6 +134,11 @@ router.get("/users/:userId/posts", async (req, res): Promise<void> => {
         isLikedByMe = likes.length > 0;
         isNoCapByMe = nocaps.length > 0;
       }
+      const [{ commentsCount }] = await db
+        .select({ commentsCount: sql<number>`count(*)::int` })
+        .from(postCommentsTable)
+        .where(eq(postCommentsTable.postId, post.id));
+
       return {
         ...post,
         authorName: post.authorName ?? "Unknown",
@@ -140,6 +146,7 @@ router.get("/users/:userId/posts", async (req, res): Promise<void> => {
         authorLevel: post.authorLevel ?? "Unknown",
         authorCampusLocation: post.authorCampusLocation ?? "Ojo",
         authorAvatarUrl: post.authorAvatarUrl ?? null,
+        commentsCount: commentsCount ?? 0,
         isLikedByMe,
         isNoCapByMe,
       };
