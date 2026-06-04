@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, desc, and, sql } from "drizzle-orm";
-import { db, postsTable, postLikesTable, postNoCapsTable, usersTable, notificationsTable } from "@workspace/db";
+import { db, postsTable, postLikesTable, postNoCapsTable, postCommentsTable, usersTable, notificationsTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/auth";
 import { broadcastNotification } from "../sse-manager";
 import {
@@ -14,6 +14,10 @@ import {
   LikePostResponse,
   NoCapPostParams,
   NoCapPostResponse,
+  ListPostCommentsParams,
+  ListPostCommentsResponse,
+  CreatePostCommentBody,
+  CreatePostCommentParams,
 } from "@workspace/api-zod";
 
 const router: IRouter = Router();
@@ -62,6 +66,11 @@ async function buildPostWithMeta(postId: number, clerkUserId?: string) {
 
   if (!post) return null;
 
+  const [{ commentsCount }] = await db
+    .select({ commentsCount: sql<number>`count(*)::int` })
+    .from(postCommentsTable)
+    .where(eq(postCommentsTable.postId, postId));
+
   let isLikedByMe = false;
   let isNoCapByMe = false;
   if (clerkUserId) {
@@ -80,6 +89,7 @@ async function buildPostWithMeta(postId: number, clerkUserId?: string) {
     authorLevel: post.authorLevel ?? "Unknown",
     authorCampusLocation: post.authorCampusLocation ?? "Ojo",
     authorAvatarUrl: post.authorAvatarUrl ?? null,
+    commentsCount: commentsCount ?? 0,
     isLikedByMe,
     isNoCapByMe,
   };
@@ -124,6 +134,10 @@ router.get("/posts", async (req, res): Promise<void> => {
     posts.map(async (post) => {
       let isLikedByMe = false;
       let isNoCapByMe = false;
+      const [{ commentsCount }] = await db
+        .select({ commentsCount: sql<number>`count(*)::int` })
+        .from(postCommentsTable)
+        .where(eq(postCommentsTable.postId, post.id));
       if (clerkUserId) {
         const [likes, nocaps] = await Promise.all([
           db.select().from(postLikesTable).where(and(eq(postLikesTable.postId, post.id), eq(postLikesTable.userId, clerkUserId))),
@@ -139,6 +153,7 @@ router.get("/posts", async (req, res): Promise<void> => {
         authorLevel: post.authorLevel ?? "Unknown",
         authorCampusLocation: post.authorCampusLocation ?? "Ojo",
         authorAvatarUrl: post.authorAvatarUrl ?? null,
+        commentsCount: commentsCount ?? 0,
         isLikedByMe,
         isNoCapByMe,
       };
@@ -268,6 +283,88 @@ router.post("/posts/:postId/nocap", requireAuth, async (req, res): Promise<void>
 
   const [updated] = await db.select({ noCapsCount: postsTable.noCapsCount }).from(postsTable).where(eq(postsTable.id, postId));
   res.json(NoCapPostResponse.parse({ noCaped, noCapsCount: updated?.noCapsCount ?? 0 }));
+});
+
+// 💬 List comments
+router.get("/posts/:postId/comments", async (req, res): Promise<void> => {
+  const raw = Array.isArray(req.params.postId) ? req.params.postId[0] : req.params.postId;
+  const params = ListPostCommentsParams.safeParse({ postId: raw });
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+
+  const [post] = await db.select({ id: postsTable.id }).from(postsTable).where(eq(postsTable.id, params.data.postId));
+  if (!post) {
+    res.status(404).json({ error: "Post not found" });
+    return;
+  }
+
+  const comments = await db
+    .select({
+      id: postCommentsTable.id,
+      postId: postCommentsTable.postId,
+      authorId: postCommentsTable.authorId,
+      content: postCommentsTable.content,
+      createdAt: postCommentsTable.createdAt,
+      authorName: usersTable.fullName,
+      authorLevel: usersTable.level,
+    })
+    .from(postCommentsTable)
+    .leftJoin(usersTable, eq(postCommentsTable.authorId, usersTable.clerkUserId))
+    .where(eq(postCommentsTable.postId, params.data.postId))
+    .orderBy(postCommentsTable.createdAt);
+
+  const mapped = comments.map((c) => ({
+    ...c,
+    authorName: c.authorName ?? "Unknown",
+    authorLevel: c.authorLevel ?? "Unknown",
+  }));
+
+  res.json(ListPostCommentsResponse.parse({ comments: mapped, total: mapped.length }));
+});
+
+// 💬 Create comment
+router.post("/posts/:postId/comments", requireAuth, async (req, res): Promise<void> => {
+  const userId = (req as any).userId as string;
+  const raw = Array.isArray(req.params.postId) ? req.params.postId[0] : req.params.postId;
+  const params = CreatePostCommentParams.safeParse({ postId: raw });
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+
+  const body = CreatePostCommentBody.safeParse(req.body);
+  if (!body.success) {
+    res.status(400).json({ error: body.error.message });
+    return;
+  }
+
+  const [post] = await db.select({ id: postsTable.id }).from(postsTable).where(eq(postsTable.id, params.data.postId));
+  if (!post) {
+    res.status(404).json({ error: "Post not found" });
+    return;
+  }
+
+  const [inserted] = await db
+    .insert(postCommentsTable)
+    .values({ postId: params.data.postId, authorId: userId, content: body.data.content })
+    .returning();
+
+  const [author] = await db
+    .select({ fullName: usersTable.fullName, level: usersTable.level })
+    .from(usersTable)
+    .where(eq(usersTable.clerkUserId, userId));
+
+  res.status(201).json({
+    id: inserted.id,
+    postId: inserted.postId,
+    authorId: inserted.authorId,
+    content: inserted.content,
+    createdAt: inserted.createdAt,
+    authorName: author?.fullName ?? "Unknown",
+    authorLevel: author?.level ?? "Unknown",
+  });
 });
 
 export default router;

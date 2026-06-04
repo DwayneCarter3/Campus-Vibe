@@ -280,6 +280,54 @@ paths:
         "401":
           description: Unauthorized
 
+  /posts/{postId}/comments:
+    get:
+      operationId: listPostComments
+      tags: [posts]
+      summary: List comments on a post
+      parameters:
+        - name: postId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Comments list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListCommentsResponse"
+        "404":
+          description: Post not found
+    post:
+      operationId: createPostComment
+      tags: [posts]
+      summary: Add a comment to a post
+      parameters:
+        - name: postId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCommentBody"
+      responses:
+        "201":
+          description: Comment created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Comment"
+        "400":
+          description: Bad request
+        "401":
+          description: Unauthorized
+
   /services:
     get:
       operationId: listServices
@@ -667,6 +715,8 @@ components:
           type: integer
         isNoCapByMe:
           type: boolean
+        commentsCount:
+          type: integer
         createdAt:
           type: string
           format: date-time
@@ -684,6 +734,7 @@ components:
         - isLikedByMe
         - noCapsCount
         - isNoCapByMe
+        - commentsCount
         - createdAt
 
     ListPostsResponse:
@@ -730,6 +781,56 @@ components:
       required:
         - noCaped
         - noCapsCount
+
+    Comment:
+      type: object
+      properties:
+        id:
+          type: integer
+        postId:
+          type: integer
+        authorId:
+          type: string
+        authorName:
+          type: string
+        authorLevel:
+          type: string
+        content:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - postId
+        - authorId
+        - authorName
+        - authorLevel
+        - content
+        - createdAt
+
+    ListCommentsResponse:
+      type: object
+      properties:
+        comments:
+          type: array
+          items:
+            $ref: "#/components/schemas/Comment"
+        total:
+          type: integer
+      required:
+        - comments
+        - total
+
+    CreateCommentBody:
+      type: object
+      properties:
+        content:
+          type: string
+          minLength: 1
+          maxLength: 500
+      required:
+        - content
 
     Service:
       type: object

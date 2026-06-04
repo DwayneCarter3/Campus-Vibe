@@ -120,6 +120,7 @@ export const GetUserPostsResponse = zod.object({
       isLikedByMe: zod.boolean(),
       noCapsCount: zod.number(),
       isNoCapByMe: zod.boolean(),
+      commentsCount: zod.number(),
       createdAt: zod.coerce.date(),
     }),
   ),
@@ -192,6 +193,7 @@ export const ListPostsResponse = zod.object({
       isLikedByMe: zod.boolean(),
       noCapsCount: zod.number(),
       isNoCapByMe: zod.boolean(),
+      commentsCount: zod.number(),
       createdAt: zod.coerce.date(),
     }),
   ),
@@ -227,6 +229,7 @@ export const GetPostResponse = zod.object({
   isLikedByMe: zod.boolean(),
   noCapsCount: zod.number(),
   isNoCapByMe: zod.boolean(),
+  commentsCount: zod.number(),
   createdAt: zod.coerce.date(),
 });
 
@@ -259,6 +262,41 @@ export const NoCapPostParams = zod.object({
 export const NoCapPostResponse = zod.object({
   noCaped: zod.boolean(),
   noCapsCount: zod.number(),
+});
+
+/**
+ * @summary List comments on a post
+ */
+export const ListPostCommentsParams = zod.object({
+  postId: zod.coerce.number(),
+});
+
+export const ListPostCommentsResponse = zod.object({
+  comments: zod.array(
+    zod.object({
+      id: zod.number(),
+      postId: zod.number(),
+      authorId: zod.string(),
+      authorName: zod.string(),
+      authorLevel: zod.string(),
+      content: zod.string(),
+      createdAt: zod.coerce.date(),
+    }),
+  ),
+  total: zod.number(),
+});
+
+/**
+ * @summary Add a comment to a post
+ */
+export const CreatePostCommentParams = zod.object({
+  postId: zod.coerce.number(),
+});
+
+export const createPostCommentBodyContentMax = 500;
+
+export const CreatePostCommentBody = zod.object({
+  content: zod.string().min(1).max(createPostCommentBodyContentMax),
 });
 
 /**

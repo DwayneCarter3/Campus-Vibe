@@ -91,6 +91,7 @@ export interface Post {
   isLikedByMe: boolean;
   noCapsCount: number;
   isNoCapByMe: boolean;
+  commentsCount: number;
   createdAt: string;
 }
 
@@ -113,6 +114,29 @@ export interface LikeResponse {
 export interface NoCapResponse {
   noCaped: boolean;
   noCapsCount: number;
+}
+
+export interface Comment {
+  id: number;
+  postId: number;
+  authorId: string;
+  authorName: string;
+  authorLevel: string;
+  content: string;
+  createdAt: string;
+}
+
+export interface ListCommentsResponse {
+  comments: Comment[];
+  total: number;
+}
+
+export interface CreateCommentBody {
+  /**
+   * @minLength 1
+   * @maxLength 500
+   */
+  content: string;
 }
 
 export interface Service {
