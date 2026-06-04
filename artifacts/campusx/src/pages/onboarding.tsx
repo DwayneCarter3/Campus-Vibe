@@ -5,59 +5,69 @@ import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useGetMyProfile, useUpdateMyProfile, getGetMyProfileQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useUser } from "@clerk/react";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
-import { Check, ChevronsUpDown, GraduationCap } from "lucide-react";
-import { motion } from "framer-motion";
-import { cn } from "@/lib/utils";
+import { GraduationCap, Vote } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { toast } from "@/hooks/use-toast";
 
-const UNIVERSITIES = [
-  { value: "Lagos State University (LASU)", label: "Lagos State University (LASU)" },
-  { value: "University of Lagos (UNILAG)", label: "University of Lagos (UNILAG)" },
-  { value: "University of Benin (UNIBEN)", label: "University of Benin (UNIBEN)" },
-  { value: "University of Nigeria, Nsukka (UNN)", label: "University of Nigeria, Nsukka (UNN)" },
-  { value: "Obafemi Awolowo University (OAU)", label: "Obafemi Awolowo University (OAU)" },
-  { value: "University of Ibadan (UI)", label: "University of Ibadan (UI)" },
-  { value: "Ahmadu Bello University (ABU)", label: "Ahmadu Bello University (ABU)" },
-  { value: "Covenant University", label: "Covenant University" },
-  { value: "Babcock University", label: "Babcock University" },
-  { value: "Pan-Atlantic University (PAU)", label: "Pan-Atlantic University (PAU)" },
-];
+const SCHOOLS = [
+  "Lagos State University (LASU)",
+  "University of Lagos (UNILAG)",
+  "Lagos State University of Education (LASUED)",
+  "My School is Not Listed",
+] as const;
+
+const NOT_LISTED = "My School is Not Listed";
 
 const CAMPUS_LOCATIONS = [
-  { value: "Ojo", label: "Ojo (Headquarters)" },
-  { value: "Epe", label: "Epe" },
-  { value: "Ikeja", label: "Ikeja" },
+  { value: "Ojo", label: "Ojo (Main Campus)" },
+  { value: "Epe", label: "Epe Campus" },
+  { value: "Ikeja", label: "Ikeja Campus" },
 ];
 
-const formSchema = z.object({
-  fullName: z.string().min(2, "Full name is required"),
-  school: z.string().min(1, "University is required"),
-  campusLocation: z.string().min(1, "Campus location is required"),
-  level: z.string().min(1, "Level is required"),
-  faculty: z.string().min(1, "Faculty is required"),
-  enrollmentStatus: z.string().min(1, "Enrollment status is required"),
-  matricNumber: z.string().min(5, "Matriculation number is required"),
-  campus: z.string().default("LASU Ojo"),
-});
+const formSchema = z
+  .object({
+    fullName: z.string().min(2, "Full name is required"),
+    school: z.string().min(1, "School is required"),
+    campusLocation: z.string().min(1, "Campus location is required"),
+    level: z.string().min(1, "Level is required"),
+    faculty: z.string().min(1, "Faculty is required"),
+    enrollmentStatus: z.string().min(1, "Enrollment status is required"),
+    matricNumber: z.string().default(""),
+    campus: z.string().default("LASU Ojo"),
+  })
+  .superRefine((data, ctx) => {
+    if (data.school !== NOT_LISTED && !data.matricNumber?.trim()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Matriculation number is required",
+        path: ["matricNumber"],
+      });
+    }
+  });
 
 export default function Onboarding() {
   const [, setLocation] = useLocation();
-  const [schoolOpen, setSchoolOpen] = useState(false);
   const queryClient = useQueryClient();
+  const { user: clerkUser } = useUser();
   const { data: profile, isLoading } = useGetMyProfile({ query: { retry: false, queryKey: getGetMyProfileQueryKey() } });
   const updateProfile = useUpdateMyProfile();
+
+  const [voteSchool, setVoteSchool] = useState("");
+  const [voteSubmitting, setVoteSubmitting] = useState(false);
+  const [voted, setVoted] = useState(false);
+  const [voteCount, setVoteCount] = useState<number | null>(null);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       fullName: "",
-      school: "Lagos State University (LASU)",
+      school: "",
       campusLocation: "",
       level: "",
       faculty: "",
@@ -73,6 +83,9 @@ export default function Onboarding() {
     }
   }, [profile, setLocation]);
 
+  const selectedSchool = form.watch("school");
+  const isNotListed = selectedSchool === NOT_LISTED;
+
   const onSubmit = (values: z.infer<typeof formSchema>) => {
     updateProfile.mutate({ data: values }, {
       onSuccess: () => {
@@ -82,11 +95,30 @@ export default function Onboarding() {
     });
   };
 
+  const handleVote = async () => {
+    if (!voteSchool.trim() || !clerkUser) return;
+    setVoteSubmitting(true);
+    try {
+      const res = await fetch("/api/school-votes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ schoolName: voteSchool.trim() }),
+      });
+      if (res.ok) {
+        const data = (await res.json()) as { votes: number };
+        setVoteCount(data.votes);
+        setVoted(true);
+        toast({ title: "🗳️ Vote recorded!", description: `"${voteSchool.trim()}" now has ${data.votes} vote${data.votes !== 1 ? "s" : ""}.` });
+      }
+    } finally {
+      setVoteSubmitting(false);
+    }
+  };
+
   if (isLoading) {
     return <div className="flex-1 flex items-center justify-center">Loading...</div>;
   }
-
-  const selectedSchool = form.watch("school");
 
   return (
     <div className="flex-1 flex items-center justify-center p-4 py-12">
@@ -130,71 +162,85 @@ export default function Onboarding() {
                   )}
                 />
 
-                {/* University (Searchable Combobox) */}
+                {/* School */}
                 <FormField
                   control={form.control}
                   name="school"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>University</FormLabel>
-                      <Popover open={schoolOpen} onOpenChange={setSchoolOpen}>
-                        <PopoverTrigger asChild>
-                          <FormControl>
-                            <Button
-                              data-testid="btn-university-select"
-                              variant="outline"
-                              role="combobox"
-                              aria-expanded={schoolOpen}
-                              className={cn(
-                                "w-full justify-between bg-background/50 border-white/10 hover:bg-background/70 font-normal",
-                                !field.value && "text-muted-foreground"
-                              )}
-                            >
-                              {field.value
-                                ? UNIVERSITIES.find(u => u.value === field.value)?.label ?? field.value
-                                : "Select University"}
-                              <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                            </Button>
-                          </FormControl>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-full p-0 bg-card border-white/10" align="start">
-                          <Command className="bg-transparent">
-                            <CommandInput
-                              data-testid="input-university-search"
-                              placeholder="Search university..."
-                              className="border-b border-white/10"
-                            />
-                            <CommandList>
-                              <CommandEmpty>No university found.</CommandEmpty>
-                              <CommandGroup>
-                                {UNIVERSITIES.map((uni) => (
-                                  <CommandItem
-                                    key={uni.value}
-                                    value={uni.value}
-                                    onSelect={(val) => {
-                                      field.onChange(val);
-                                      setSchoolOpen(false);
-                                    }}
-                                    className="cursor-pointer hover:bg-primary/10"
-                                  >
-                                    <Check
-                                      className={cn(
-                                        "mr-2 h-4 w-4",
-                                        field.value === uni.value ? "opacity-100 text-primary" : "opacity-0"
-                                      )}
-                                    />
-                                    {uni.label}
-                                  </CommandItem>
-                                ))}
-                              </CommandGroup>
-                            </CommandList>
-                          </Command>
-                        </PopoverContent>
-                      </Popover>
+                      <FormLabel>School</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger
+                            data-testid="select-school"
+                            className="bg-background/50 border-white/10"
+                          >
+                            <SelectValue placeholder="Select your school" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {SCHOOLS.map((s) => (
+                            <SelectItem key={s} value={s}>{s}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
+
+                {/* "Not Listed" vote box */}
+                <AnimatePresence>
+                  {isNotListed && (
+                    <motion.div
+                      key="vote-box"
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: "auto" }}
+                      exit={{ opacity: 0, height: 0 }}
+                      transition={{ duration: 0.25 }}
+                      className="overflow-hidden"
+                    >
+                      <div className="rounded-2xl border border-primary/25 bg-primary/5 p-4 space-y-3">
+                        <div className="flex items-start gap-2">
+                          <Vote className="h-4 w-4 text-primary mt-0.5 shrink-0" />
+                          <p className="text-sm text-muted-foreground leading-relaxed">
+                            CampusX expands campus-by-campus! Enter your school name below to vote for your campus.{" "}
+                            <span className="text-primary font-medium">The next campus with 500 votes gets unlocked next!</span>
+                          </p>
+                        </div>
+                        {voted ? (
+                          <div className="text-center py-2">
+                            <p className="text-sm font-semibold text-primary">🎉 Your vote is in!</p>
+                            {voteCount !== null && (
+                              <p className="text-xs text-muted-foreground mt-1">
+                                "{voteSchool}" — <span className="font-mono font-bold">{voteCount}</span> / 500 votes
+                              </p>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="flex gap-2">
+                            <Input
+                              placeholder="e.g. Yaba College of Technology (YABATECH)"
+                              className="bg-background/50 border-white/10 focus:border-primary/50 text-sm flex-1"
+                              value={voteSchool}
+                              onChange={(e) => setVoteSchool(e.target.value)}
+                              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void handleVote(); } }}
+                            />
+                            <Button
+                              type="button"
+                              size="sm"
+                              className="gradient-btn shrink-0 px-4"
+                              disabled={!voteSchool.trim() || voteSubmitting}
+                              onClick={() => void handleVote()}
+                            >
+                              {voteSubmitting ? "..." : "Vote"}
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
 
                 {/* Campus Location */}
                 <FormField
@@ -203,13 +249,13 @@ export default function Onboarding() {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Campus Location</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <Select onValueChange={field.onChange} value={field.value}>
                         <FormControl>
                           <SelectTrigger
                             data-testid="select-campus-location"
                             className="bg-background/50 border-white/10"
                           >
-                            <SelectValue placeholder="Select Campus" />
+                            <SelectValue placeholder="Select campus" />
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
@@ -223,7 +269,7 @@ export default function Onboarding() {
                   )}
                 />
 
-                {/* Level + Enrollment Status */}
+                {/* Level + Enrollment */}
                 <div className="grid grid-cols-2 gap-4">
                   <FormField
                     control={form.control}
@@ -231,7 +277,7 @@ export default function Onboarding() {
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Level</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <Select onValueChange={field.onChange} value={field.value}>
                           <FormControl>
                             <SelectTrigger data-testid="select-level" className="bg-background/50 border-white/10">
                               <SelectValue placeholder="Select Level" />
@@ -254,7 +300,7 @@ export default function Onboarding() {
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Enrollment Type</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <Select onValueChange={field.onChange} value={field.value}>
                           <FormControl>
                             <SelectTrigger data-testid="select-enrollment" className="bg-background/50 border-white/10">
                               <SelectValue placeholder="Type" />
@@ -277,8 +323,8 @@ export default function Onboarding() {
                   name="faculty"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Faculty</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <FormLabel>Faculty / Department</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
                         <FormControl>
                           <SelectTrigger data-testid="select-faculty" className="bg-background/50 border-white/10">
                             <SelectValue placeholder="Select Faculty" />
@@ -298,25 +344,41 @@ export default function Onboarding() {
                   )}
                 />
 
-                {/* Matric Number */}
-                <FormField
-                  control={form.control}
-                  name="matricNumber"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Matriculation Number <span className="text-muted-foreground text-xs">(Private)</span></FormLabel>
-                      <FormControl>
-                        <Input
-                          data-testid="input-matric"
-                          placeholder="e.g. 200212345"
-                          className="bg-background/50 border-white/10 font-mono"
-                          {...field}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
+                {/* Matric Number — hidden when "Not Listed" */}
+                <AnimatePresence>
+                  {!isNotListed && (
+                    <motion.div
+                      key="matric-field"
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: "auto" }}
+                      exit={{ opacity: 0, height: 0 }}
+                      transition={{ duration: 0.2 }}
+                      className="overflow-hidden"
+                    >
+                      <FormField
+                        control={form.control}
+                        name="matricNumber"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>
+                              Matriculation Number{" "}
+                              <span className="text-muted-foreground text-xs">(Private)</span>
+                            </FormLabel>
+                            <FormControl>
+                              <Input
+                                data-testid="input-matric"
+                                placeholder="e.g. 200212345"
+                                className="bg-background/50 border-white/10 font-mono"
+                                {...field}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </motion.div>
                   )}
-                />
+                </AnimatePresence>
 
                 <Button
                   data-testid="button-submit-onboarding"
@@ -324,7 +386,7 @@ export default function Onboarding() {
                   className="w-full gradient-btn h-12 mt-2"
                   disabled={updateProfile.isPending}
                 >
-                  {updateProfile.isPending ? "Saving..." : "Enter CampusX"}
+                  {updateProfile.isPending ? "Saving..." : "Enter CampusX →"}
                 </Button>
               </form>
             </Form>
