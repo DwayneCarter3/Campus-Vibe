@@ -39,6 +39,8 @@ import type {
   PinResponse,
   Post,
   PublicUserProfile,
+  ResharePostBody,
+  ResharePostResponse,
   Service,
   TrackWhatsappClick200,
   UpdateProfileBody,
@@ -2068,6 +2070,93 @@ export function useGetFeedStats<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * @summary Reshare or quote-reshare a post
+ */
+export const getResharePostUrl = (postId: number) => {
+  return `/api/posts/${postId}/reshare`;
+};
+
+export const resharePost = async (
+  postId: number,
+  resharePostBody: ResharePostBody,
+  options?: RequestInit,
+): Promise<ResharePostResponse> => {
+  return customFetch<ResharePostResponse>(getResharePostUrl(postId), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(resharePostBody),
+  });
+};
+
+export const getResharePostMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof resharePost>>,
+    TError,
+    { postId: number; data: BodyType<ResharePostBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof resharePost>>,
+  TError,
+  { postId: number; data: BodyType<ResharePostBody> },
+  TContext
+> => {
+  const mutationKey = ["resharePost"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof resharePost>>,
+    { postId: number; data: BodyType<ResharePostBody> }
+  > = (props) => {
+    const { postId, data } = props ?? {};
+
+    return resharePost(postId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ResharePostMutationResult = NonNullable<
+  Awaited<ReturnType<typeof resharePost>>
+>;
+export type ResharePostMutationBody = BodyType<ResharePostBody>;
+export type ResharePostMutationError = ErrorType<void>;
+
+/**
+ * @summary Reshare or quote-reshare a post
+ */
+export const useResharePost = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof resharePost>>,
+    TError,
+    { postId: number; data: BodyType<ResharePostBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof resharePost>>,
+  TError,
+  { postId: number; data: BodyType<ResharePostBody> },
+  TContext
+> => {
+  return useMutation(getResharePostMutationOptions(options));
+};
 
 /**
  * @summary Toggle pin post to user's profile

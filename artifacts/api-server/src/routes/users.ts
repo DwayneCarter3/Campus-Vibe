@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, desc, and, sql } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { db, usersTable, postsTable, postLikesTable, postNoCapsTable, postCommentsTable, servicesTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/auth";
 import {
@@ -13,6 +14,9 @@ import {
   GetUserServicesParams,
   GetUserServicesResponse,
 } from "@workspace/api-zod";
+
+const opAlias = alias(postsTable, "op");
+const ouAlias = alias(usersTable, "ou");
 
 const router: IRouter = Router();
 
@@ -103,6 +107,8 @@ router.get("/users/:userId/posts", async (req, res): Promise<void> => {
       videoUrl: postsTable.videoUrl,
       likesCount: postsTable.likesCount,
       noCapsCount: postsTable.noCapsCount,
+      reshareCount: postsTable.reshareCount,
+      originalPostId: postsTable.originalPostId,
       isPinnedToProfile: postsTable.isPinnedToProfile,
       isPinnedToFeed: postsTable.isPinnedToFeed,
       createdAt: postsTable.createdAt,
@@ -111,9 +117,18 @@ router.get("/users/:userId/posts", async (req, res): Promise<void> => {
       authorLevel: usersTable.level,
       authorCampusLocation: usersTable.campusLocation,
       authorAvatarUrl: usersTable.avatarUrl,
+      opId: opAlias.id,
+      opAuthorId: opAlias.authorId,
+      opContent: opAlias.content,
+      opImageUrl: opAlias.imageUrl,
+      opCreatedAt: opAlias.createdAt,
+      opAuthorName: ouAlias.fullName,
+      opAuthorAvatarUrl: ouAlias.avatarUrl,
     })
     .from(postsTable)
     .leftJoin(usersTable, eq(postsTable.authorId, usersTable.clerkUserId))
+    .leftJoin(opAlias, eq(postsTable.originalPostId, opAlias.id))
+    .leftJoin(ouAlias, eq(opAlias.authorId, ouAlias.clerkUserId))
     .where(eq(postsTable.authorId, userId))
     .orderBy(desc(postsTable.isPinnedToProfile), desc(postsTable.createdAt))
     .limit(limit)
@@ -149,6 +164,17 @@ router.get("/users/:userId/posts", async (req, res): Promise<void> => {
         authorCampusLocation: post.authorCampusLocation ?? "Ojo",
         authorAvatarUrl: post.authorAvatarUrl ?? null,
         commentsCount: commentsCount ?? 0,
+        reshareCount: post.reshareCount ?? 0,
+        originalPostId: post.originalPostId ?? null,
+        originalPost: post.opId != null ? {
+          id: post.opId,
+          authorId: post.opAuthorId ?? "",
+          authorName: post.opAuthorName ?? "Unknown",
+          authorAvatarUrl: post.opAuthorAvatarUrl ?? null,
+          content: post.opContent ?? "",
+          imageUrl: post.opImageUrl ?? null,
+          createdAt: (post.opCreatedAt ?? new Date()).toISOString(),
+        } : null,
         isPinnedToProfile: post.isPinnedToProfile ?? false,
         isPinnedToFeed: post.isPinnedToFeed ?? false,
         isLikedByMe,

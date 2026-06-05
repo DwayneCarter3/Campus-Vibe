@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
-import { eq, desc, and, sql } from "drizzle-orm";
+import { eq, desc, and, sql, ne } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { db, postsTable, postLikesTable, postNoCapsTable, postCommentsTable, usersTable, notificationsTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/auth";
 import { broadcastNotification } from "../sse-manager";
@@ -22,9 +23,15 @@ import {
   PinPostToProfileResponse,
   PinPostToFeedParams,
   PinPostToFeedResponse,
+  ResharePostParams,
+  ResharePostBody,
+  ResharePostResponse,
 } from "@workspace/api-zod";
 
 const router: IRouter = Router();
+
+const originalPostAlias = alias(postsTable, "op");
+const originalUserAlias = alias(usersTable, "ou");
 
 async function getActorName(clerkUserId: string): Promise<string> {
   const [user] = await db
@@ -58,6 +65,8 @@ async function buildPostWithMeta(postId: number, clerkUserId?: string) {
       videoUrl: postsTable.videoUrl,
       likesCount: postsTable.likesCount,
       noCapsCount: postsTable.noCapsCount,
+      reshareCount: postsTable.reshareCount,
+      originalPostId: postsTable.originalPostId,
       isPinnedToProfile: postsTable.isPinnedToProfile,
       isPinnedToFeed: postsTable.isPinnedToFeed,
       createdAt: postsTable.createdAt,
@@ -66,9 +75,18 @@ async function buildPostWithMeta(postId: number, clerkUserId?: string) {
       authorLevel: usersTable.level,
       authorCampusLocation: usersTable.campusLocation,
       authorAvatarUrl: usersTable.avatarUrl,
+      opId: originalPostAlias.id,
+      opAuthorId: originalPostAlias.authorId,
+      opContent: originalPostAlias.content,
+      opImageUrl: originalPostAlias.imageUrl,
+      opCreatedAt: originalPostAlias.createdAt,
+      opAuthorName: originalUserAlias.fullName,
+      opAuthorAvatarUrl: originalUserAlias.avatarUrl,
     })
     .from(postsTable)
     .leftJoin(usersTable, eq(postsTable.authorId, usersTable.clerkUserId))
+    .leftJoin(originalPostAlias, eq(postsTable.originalPostId, originalPostAlias.id))
+    .leftJoin(originalUserAlias, eq(originalPostAlias.authorId, originalUserAlias.clerkUserId))
     .where(eq(postsTable.id, postId));
 
   if (!post) return null;
@@ -97,6 +115,17 @@ async function buildPostWithMeta(postId: number, clerkUserId?: string) {
     authorCampusLocation: post.authorCampusLocation ?? "Ojo",
     authorAvatarUrl: post.authorAvatarUrl ?? null,
     commentsCount: commentsCount ?? 0,
+    reshareCount: post.reshareCount ?? 0,
+    originalPostId: post.originalPostId ?? null,
+    originalPost: post.opId != null ? {
+      id: post.opId,
+      authorId: post.opAuthorId ?? "",
+      authorName: post.opAuthorName ?? "Unknown",
+      authorAvatarUrl: post.opAuthorAvatarUrl ?? null,
+      content: post.opContent ?? "",
+      imageUrl: post.opImageUrl ?? null,
+      createdAt: (post.opCreatedAt ?? new Date()).toISOString(),
+    } : null,
     isPinnedToProfile: post.isPinnedToProfile ?? false,
     isPinnedToFeed: post.isPinnedToFeed ?? false,
     isLikedByMe,
@@ -123,6 +152,8 @@ router.get("/posts", async (req, res): Promise<void> => {
       videoUrl: postsTable.videoUrl,
       likesCount: postsTable.likesCount,
       noCapsCount: postsTable.noCapsCount,
+      reshareCount: postsTable.reshareCount,
+      originalPostId: postsTable.originalPostId,
       isPinnedToProfile: postsTable.isPinnedToProfile,
       isPinnedToFeed: postsTable.isPinnedToFeed,
       createdAt: postsTable.createdAt,
@@ -131,9 +162,18 @@ router.get("/posts", async (req, res): Promise<void> => {
       authorLevel: usersTable.level,
       authorCampusLocation: usersTable.campusLocation,
       authorAvatarUrl: usersTable.avatarUrl,
+      opId: originalPostAlias.id,
+      opAuthorId: originalPostAlias.authorId,
+      opContent: originalPostAlias.content,
+      opImageUrl: originalPostAlias.imageUrl,
+      opCreatedAt: originalPostAlias.createdAt,
+      opAuthorName: originalUserAlias.fullName,
+      opAuthorAvatarUrl: originalUserAlias.avatarUrl,
     })
     .from(postsTable)
     .leftJoin(usersTable, eq(postsTable.authorId, usersTable.clerkUserId))
+    .leftJoin(originalPostAlias, eq(postsTable.originalPostId, originalPostAlias.id))
+    .leftJoin(originalUserAlias, eq(originalPostAlias.authorId, originalUserAlias.clerkUserId))
     .orderBy(desc(postsTable.isPinnedToFeed), desc(postsTable.createdAt))
     .limit(limit ?? 20)
     .offset(offset ?? 0);
@@ -166,6 +206,17 @@ router.get("/posts", async (req, res): Promise<void> => {
         authorCampusLocation: post.authorCampusLocation ?? "Ojo",
         authorAvatarUrl: post.authorAvatarUrl ?? null,
         commentsCount: commentsCount ?? 0,
+        reshareCount: post.reshareCount ?? 0,
+        originalPostId: post.originalPostId ?? null,
+        originalPost: post.opId != null ? {
+          id: post.opId,
+          authorId: post.opAuthorId ?? "",
+          authorName: post.opAuthorName ?? "Unknown",
+          authorAvatarUrl: post.opAuthorAvatarUrl ?? null,
+          content: post.opContent ?? "",
+          imageUrl: post.opImageUrl ?? null,
+          createdAt: (post.opCreatedAt ?? new Date()).toISOString(),
+        } : null,
         isPinnedToProfile: post.isPinnedToProfile ?? false,
         isPinnedToFeed: post.isPinnedToFeed ?? false,
         isLikedByMe,
@@ -233,6 +284,44 @@ router.delete("/posts/:postId", requireAuth, async (req, res): Promise<void> => 
 
   await db.delete(postsTable).where(eq(postsTable.id, params.data.postId));
   res.sendStatus(204);
+});
+
+// 🔁 Reshare / Quote Gist
+router.post("/posts/:postId/reshare", requireAuth, async (req, res): Promise<void> => {
+  const userId = (req as any).userId as string;
+  const raw = Array.isArray(req.params.postId) ? req.params.postId[0] : req.params.postId;
+  const params = ResharePostParams.safeParse({ postId: raw });
+  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
+
+  const body = ResharePostBody.safeParse(req.body ?? {});
+  if (!body.success) { res.status(400).json({ error: body.error.message }); return; }
+
+  const { postId } = params.data;
+  const quoteText = body.data.quoteText?.trim() ?? "";
+
+  const [original] = await db.select().from(postsTable).where(eq(postsTable.id, postId));
+  if (!original) { res.status(404).json({ error: "Post not found" }); return; }
+
+  // Always point to the root original (never chain reshares)
+  const rootPostId = original.originalPostId ?? original.id;
+
+  // Create the reshare post
+  await db.insert(postsTable).values({
+    authorId: userId,
+    content: quoteText,
+    imageUrl: null,
+    videoUrl: null,
+    originalPostId: rootPostId,
+  });
+
+  // Increment reshare count on root original
+  const [updated] = await db
+    .update(postsTable)
+    .set({ reshareCount: sql`${postsTable.reshareCount} + 1` })
+    .where(eq(postsTable.id, rootPostId))
+    .returning({ reshareCount: postsTable.reshareCount });
+
+  res.json(ResharePostResponse.parse({ reshared: true, reshareCount: updated?.reshareCount ?? 0 }));
 });
 
 // 📌 Pin to profile (author only)

@@ -124,6 +124,20 @@ export const GetUserPostsResponse = zod.object({
       noCapsCount: zod.number(),
       isNoCapByMe: zod.boolean(),
       commentsCount: zod.number(),
+      reshareCount: zod.number(),
+      originalPostId: zod.number().nullable(),
+      originalPost: zod.union([
+        zod.object({
+          id: zod.number(),
+          authorId: zod.string(),
+          authorName: zod.string(),
+          authorAvatarUrl: zod.string().nullable(),
+          content: zod.string(),
+          imageUrl: zod.string().nullable(),
+          createdAt: zod.coerce.date(),
+        }),
+        zod.null(),
+      ]),
       isPinnedToProfile: zod.boolean(),
       isPinnedToFeed: zod.boolean(),
       createdAt: zod.coerce.date(),
@@ -200,6 +214,20 @@ export const ListPostsResponse = zod.object({
       noCapsCount: zod.number(),
       isNoCapByMe: zod.boolean(),
       commentsCount: zod.number(),
+      reshareCount: zod.number(),
+      originalPostId: zod.number().nullable(),
+      originalPost: zod.union([
+        zod.object({
+          id: zod.number(),
+          authorId: zod.string(),
+          authorName: zod.string(),
+          authorAvatarUrl: zod.string().nullable(),
+          content: zod.string(),
+          imageUrl: zod.string().nullable(),
+          createdAt: zod.coerce.date(),
+        }),
+        zod.null(),
+      ]),
       isPinnedToProfile: zod.boolean(),
       isPinnedToFeed: zod.boolean(),
       createdAt: zod.coerce.date(),
@@ -240,6 +268,20 @@ export const GetPostResponse = zod.object({
   noCapsCount: zod.number(),
   isNoCapByMe: zod.boolean(),
   commentsCount: zod.number(),
+  reshareCount: zod.number(),
+  originalPostId: zod.number().nullable(),
+  originalPost: zod.union([
+    zod.object({
+      id: zod.number(),
+      authorId: zod.string(),
+      authorName: zod.string(),
+      authorAvatarUrl: zod.string().nullable(),
+      content: zod.string(),
+      imageUrl: zod.string().nullable(),
+      createdAt: zod.coerce.date(),
+    }),
+    zod.null(),
+  ]),
   isPinnedToProfile: zod.boolean(),
   isPinnedToFeed: zod.boolean(),
   createdAt: zod.coerce.date(),
@@ -469,6 +511,22 @@ export const GetFeedStatsResponse = zod.object({
     }),
   ),
   recentActivity: zod.number(),
+});
+
+/**
+ * @summary Reshare or quote-reshare a post
+ */
+export const ResharePostParams = zod.object({
+  postId: zod.coerce.number(),
+});
+
+export const ResharePostBody = zod.object({
+  quoteText: zod.string().optional(),
+});
+
+export const ResharePostResponse = zod.object({
+  reshared: zod.boolean(),
+  reshareCount: zod.number().optional(),
 });
 
 /**

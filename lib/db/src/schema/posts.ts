@@ -12,6 +12,8 @@ export const postsTable = pgTable("posts", {
   isPinnedToFeed: boolean("is_pinned_to_feed").notNull().default(false),
   likesCount: integer("likes_count").notNull().default(0),
   noCapsCount: integer("no_caps_count").notNull().default(0),
+  reshareCount: integer("reshare_count").notNull().default(0),
+  originalPostId: integer("original_post_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

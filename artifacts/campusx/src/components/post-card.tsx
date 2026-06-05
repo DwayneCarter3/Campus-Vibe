@@ -1,11 +1,12 @@
 import { useState, useRef, useEffect } from "react";
 import { formatDistanceToNow } from "date-fns";
 import { Link } from "wouter";
-import { Trash2, MapPin, MessageCircle, Send, MoreHorizontal, Pin } from "lucide-react";
+import { Trash2, MapPin, MessageCircle, Send, MoreHorizontal, Pin, Repeat2 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -21,6 +22,7 @@ import {
   useCreatePostComment,
   usePinPostToProfile,
   usePinPostToFeed,
+  useResharePost,
   getListPostsQueryKey,
   getListPostCommentsQueryKey,
   getGetUserPostsQueryKey,
@@ -45,10 +47,13 @@ export function PostCard({ post, isAdmin }: PostCardProps) {
   const createComment = useCreatePostComment();
   const pinToProfile = usePinPostToProfile();
   const pinToFeed = usePinPostToFeed();
+  const resharePostMutation = useResharePost();
 
   const [optimisticFire, setOptimisticFire] = useState<{ active: boolean; count: number } | null>(null);
   const [optimisticNoCap, setOptimisticNoCap] = useState<{ active: boolean; count: number } | null>(null);
   const [commentsOpen, setCommentsOpen] = useState(false);
+  const [reshareOpen, setReshareOpen] = useState(false);
+  const [reshareQuoteText, setReshareQuoteText] = useState("");
   const [commentText, setCommentText] = useState("");
   const commentsEndRef = useRef<HTMLDivElement>(null);
 
@@ -123,6 +128,19 @@ export function PostCard({ post, isAdmin }: PostCardProps) {
         queryClient.invalidateQueries({ queryKey: getListPostsQueryKey() });
       },
     });
+  };
+
+  const handleReshare = () => {
+    resharePostMutation.mutate(
+      { postId: post.id, data: { quoteText: reshareQuoteText.trim() } },
+      {
+        onSuccess: () => {
+          setReshareOpen(false);
+          setReshareQuoteText("");
+          queryClient.invalidateQueries({ queryKey: getListPostsQueryKey() });
+        },
+      }
+    );
   };
 
   const handleSubmitComment = () => {
@@ -248,10 +266,42 @@ export function PostCard({ post, isAdmin }: PostCardProps) {
               </div>
             )}
 
-            {/* Content */}
-            <div className="mt-3 text-sm md:text-base leading-relaxed break-words whitespace-pre-wrap">
-              {post.content}
-            </div>
+            {/* Original post card-in-card (reshare) */}
+            {post.originalPost && (
+              <div className="mt-3 rounded-xl border border-primary/20 bg-white/[0.03] overflow-hidden">
+                <div className="px-3 pt-2.5 pb-2">
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <Avatar className="h-5 w-5 border border-white/10 shrink-0">
+                      <AvatarImage src={post.originalPost.authorAvatarUrl || undefined} />
+                      <AvatarFallback className="text-[9px] font-bold gradient-text">
+                        {post.originalPost.authorName.charAt(0)}
+                      </AvatarFallback>
+                    </Avatar>
+                    <Link href={`/profile/${post.originalPost.authorId}`} className="text-xs font-semibold hover:text-primary transition-colors truncate">
+                      {post.originalPost.authorName}
+                    </Link>
+                    <span className="text-[10px] text-muted-foreground ml-auto shrink-0">
+                      {formatDistanceToNow(new Date(post.originalPost.createdAt), { addSuffix: true })}
+                    </span>
+                  </div>
+                  <p className="text-xs text-foreground/80 leading-relaxed break-words line-clamp-4 whitespace-pre-wrap">
+                    {post.originalPost.content || <span className="text-muted-foreground italic">No text</span>}
+                  </p>
+                  {post.originalPost.imageUrl && (
+                    <div className="mt-2 rounded-lg overflow-hidden border border-white/10">
+                      <img src={post.originalPost.imageUrl} alt="Original post" className="w-full h-auto object-cover max-h-[200px]" />
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Content (quote text or regular post content) */}
+            {post.content && (
+              <div className={cn("text-sm md:text-base leading-relaxed break-words whitespace-pre-wrap", post.originalPost ? "mt-2 font-medium" : "mt-3")}>
+                {post.content}
+              </div>
+            )}
 
             {post.imageUrl && (
               <div className="mt-3 rounded-xl overflow-hidden border border-white/10">
@@ -305,6 +355,16 @@ export function PostCard({ post, isAdmin }: PostCardProps) {
                 <span>{noCapCount > 0 ? noCapCount : "No Cap"}</span>
               </button>
 
+              {/* 🔁 Reshare */}
+              <button
+                data-testid={`btn-reshare-${post.id}`}
+                onClick={() => { setReshareQuoteText(""); setReshareOpen(true); }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all bg-white/5 text-muted-foreground hover:bg-emerald-500/10 hover:text-emerald-400 border border-transparent"
+              >
+                <Repeat2 className="h-3.5 w-3.5" />
+                <span>{post.reshareCount > 0 ? post.reshareCount : "Reshare"}</span>
+              </button>
+
               {/* 💬 Comments */}
               <button
                 data-testid={`btn-comments-${post.id}`}
@@ -323,6 +383,59 @@ export function PostCard({ post, isAdmin }: PostCardProps) {
           </div>
         </div>
       </div>
+
+      {/* Reshare Dialog */}
+      <Dialog open={reshareOpen} onOpenChange={setReshareOpen}>
+        <DialogContent className="sm:max-w-[480px] glass border-primary/20 p-0 overflow-hidden">
+          <div className="bg-gradient-to-br from-primary/10 to-transparent p-5 border-b border-white/5">
+            <DialogHeader>
+              <DialogTitle className="gradient-text font-bold flex items-center gap-2">
+                <Repeat2 className="h-4 w-4" /> Reshare Gist
+              </DialogTitle>
+              <p className="text-xs text-muted-foreground mt-1">Add your thoughts (optional) or reshare directly.</p>
+            </DialogHeader>
+          </div>
+
+          {/* Preview of original post */}
+          <div className="px-5 pt-4">
+            <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
+              <div className="flex items-center gap-2 mb-1.5">
+                <Avatar className="h-5 w-5 border border-white/10 shrink-0">
+                  <AvatarImage src={post.originalPost?.authorAvatarUrl || post.authorAvatarUrl || undefined} />
+                  <AvatarFallback className="text-[9px] font-bold gradient-text">
+                    {(post.originalPost?.authorName ?? post.authorName).charAt(0)}
+                  </AvatarFallback>
+                </Avatar>
+                <span className="text-xs font-semibold truncate">{post.originalPost?.authorName ?? post.authorName}</span>
+              </div>
+              <p className="text-xs text-foreground/70 line-clamp-3 leading-relaxed">
+                {post.originalPost?.content || post.content || <span className="italic text-muted-foreground">No text</span>}
+              </p>
+            </div>
+          </div>
+
+          <div className="p-5 pt-3 space-y-3">
+            <Textarea
+              placeholder="Add your thought… (leave blank to reshare directly)"
+              className="bg-background/40 border-white/10 focus:border-primary/40 resize-none min-h-[80px]"
+              value={reshareQuoteText}
+              onChange={(e) => setReshareQuoteText(e.target.value)}
+            />
+            <div className="flex gap-3">
+              <Button
+                className="flex-1 gradient-btn h-10 font-semibold"
+                onClick={handleReshare}
+                disabled={resharePostMutation.isPending}
+              >
+                {resharePostMutation.isPending ? "Resharing…" : reshareQuoteText.trim() ? "Quote Gist" : "Reshare"}
+              </Button>
+              <Button variant="outline" className="border-white/10" onClick={() => setReshareOpen(false)}>
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Comment Section */}
       <AnimatePresence>

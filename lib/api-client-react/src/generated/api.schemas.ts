@@ -76,6 +76,18 @@ export interface UpdateProfileBody {
   avatarUrl?: string | null;
 }
 
+export interface EmbeddedPost {
+  id: number;
+  authorId: string;
+  authorName: string;
+  /** @nullable */
+  authorAvatarUrl: string | null;
+  content: string;
+  /** @nullable */
+  imageUrl: string | null;
+  createdAt: string;
+}
+
 export interface Post {
   id: number;
   authorId: string;
@@ -95,6 +107,10 @@ export interface Post {
   noCapsCount: number;
   isNoCapByMe: boolean;
   commentsCount: number;
+  reshareCount: number;
+  /** @nullable */
+  originalPostId: number | null;
+  originalPost: EmbeddedPost | null;
   isPinnedToProfile: boolean;
   isPinnedToFeed: boolean;
   createdAt: string;
@@ -209,6 +225,15 @@ export interface CategoryCount {
 export interface MarketplaceStats {
   totalServices: number;
   servicesByCategory: CategoryCount[];
+}
+
+export interface ResharePostBody {
+  quoteText?: string;
+}
+
+export interface ResharePostResponse {
+  reshared: boolean;
+  reshareCount?: number;
 }
 
 export interface PinResponse {
