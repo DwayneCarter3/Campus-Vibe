@@ -346,7 +346,7 @@ export default function MyProfilePage() {
                 ))}
               </div>
             ) : servicesData?.services.length === 0 ? (
-              <EmptyTabState icon="💼" message="No active hustles yet." sub="Post a service in the Earn Legally marketplace." />
+              <EmptyTabState icon="💼" message="No active hustles yet." sub="Post a service in the Marketplace." />
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {servicesData?.services.map((s, i) => (

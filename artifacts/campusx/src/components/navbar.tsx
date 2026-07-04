@@ -29,7 +29,7 @@ export function Navbar() {
               href="/earn" 
               className={`text-sm font-medium transition-colors ${isActive('/earn') ? 'text-primary' : 'text-muted-foreground hover:text-foreground'}`}
             >
-              Earn Legally
+              Marketplace
             </Link>
             <NotificationBell />
             <Link href="/profile">

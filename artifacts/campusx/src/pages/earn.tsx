@@ -139,7 +139,7 @@ export default function EarnPage() {
 
       {/* Header */}
       <div className="mb-5">
-        <h1 className="text-2xl font-bold tracking-tight gradient-text mb-0.5">Earn Legally 💼</h1>
+        <h1 className="text-2xl font-bold tracking-tight gradient-text mb-0.5">Marketplace 💼</h1>
         <p className="text-muted-foreground text-sm">Student-run hustles on LASU campus.</p>
       </div>
 
