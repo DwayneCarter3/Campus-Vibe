@@ -1,11 +1,12 @@
+import { useAuth } from "@clerk/expo";
 import { BlurView } from "expo-blur";
 import { isLiquidGlassAvailable } from "expo-glass-effect";
-import { Tabs } from "expo-router";
+import { Tabs, useRouter } from "expo-router";
 import { Icon, Label, NativeTabs } from "expo-router/unstable-native-tabs";
 import { SymbolView } from "expo-symbols";
 import { Feather } from "@expo/vector-icons";
-import React from "react";
-import { Platform, StyleSheet, View, useColorScheme } from "react-native";
+import React, { useEffect } from "react";
+import { ActivityIndicator, Platform, StyleSheet, View } from "react-native";
 import { useColors } from "@/hooks/useColors";
 
 function NativeTabLayout() {
@@ -29,8 +30,6 @@ function NativeTabLayout() {
 
 function ClassicTabLayout() {
   const colors = useColors();
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === "dark" || true;
   const isIOS = Platform.OS === "ios";
   const isWeb = Platform.OS === "web";
 
@@ -50,15 +49,9 @@ function ClassicTabLayout() {
         },
         tabBarBackground: () =>
           isIOS ? (
-            <BlurView
-              intensity={80}
-              tint="dark"
-              style={StyleSheet.absoluteFill}
-            />
+            <BlurView intensity={80} tint="dark" style={StyleSheet.absoluteFill} />
           ) : (
-            <View
-              style={[StyleSheet.absoluteFill, { backgroundColor: colors.tabBar }]}
-            />
+            <View style={[StyleSheet.absoluteFill, { backgroundColor: colors.tabBar }]} />
           ),
         tabBarLabelStyle: {
           fontSize: 11,
@@ -108,8 +101,26 @@ function ClassicTabLayout() {
 }
 
 export default function TabLayout() {
-  if (isLiquidGlassAvailable()) {
-    return <NativeTabLayout />;
+  const { isSignedIn, isLoaded } = useAuth();
+  const router = useRouter();
+  const colors = useColors();
+
+  useEffect(() => {
+    if (isLoaded && !isSignedIn) {
+      router.replace("/sign-in");
+    }
+  }, [isLoaded, isSignedIn]);
+
+  if (!isLoaded) {
+    return (
+      <View style={{ flex: 1, backgroundColor: colors.background, alignItems: "center", justifyContent: "center" }}>
+        <ActivityIndicator color={colors.primary} size="large" />
+      </View>
+    );
   }
+
+  if (!isSignedIn) return null;
+
+  if (isLiquidGlassAvailable()) return <NativeTabLayout />;
   return <ClassicTabLayout />;
 }
