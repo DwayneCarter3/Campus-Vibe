@@ -19,6 +19,10 @@ tags:
     description: Dashboard statistics
   - name: Storage
     description: Object storage upload and serving endpoints.
+  - name: messages
+    description: Direct messaging between users
+  - name: admin
+    description: Admin dashboard operations
 
 paths:
   /healthz:
@@ -67,6 +71,27 @@ paths:
                 $ref: "#/components/schemas/UserProfile"
         "400":
           description: Bad request
+        "401":
+          description: Unauthorized
+
+  /users/me/request-badge:
+    post:
+      operationId: requestPremiumBadge
+      tags: [users]
+      summary: Request premium badge verification
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RequestBadgeBody"
+      responses:
+        "200":
+          description: Badge request submitted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RequestBadgeResponse"
         "401":
           description: Unauthorized
 
@@ -225,7 +250,7 @@ paths:
     delete:
       operationId: deletePost
       tags: [posts]
-      summary: Delete a post (owner only)
+      summary: Delete a post (owner or moderator+)
       parameters:
         - name: postId
           in: path
@@ -598,7 +623,7 @@ paths:
 
   /admin/claim:
     post:
-      tags: [posts]
+      tags: [admin]
       operationId: claimAdmin
       summary: Bootstrap – claim admin role (only works if no admin exists)
       responses:
@@ -612,6 +637,201 @@ paths:
           description: An admin already exists.
         '401':
           description: Unauthorized.
+
+  /admin/users:
+    get:
+      tags: [admin]
+      operationId: listAdminUsers
+      summary: List all users (CEO only)
+      parameters:
+        - name: search
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        '200':
+          description: User list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListAdminUsersResponse'
+        '403':
+          description: CEO only.
+        '401':
+          description: Unauthorized.
+
+  /admin/users/{userId}/role:
+    patch:
+      tags: [admin]
+      operationId: updateUserRole
+      summary: Update a user's role (CEO only)
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateUserRoleBody'
+      responses:
+        '200':
+          description: Role updated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpdateUserRoleResponse'
+        '403':
+          description: CEO only.
+        '401':
+          description: Unauthorized.
+
+  /admin/pending-verifications:
+    get:
+      tags: [admin]
+      operationId: listPendingVerifications
+      summary: List users with pending badge verification (admin/CEO)
+      responses:
+        '200':
+          description: Pending verifications list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListPendingVerificationsResponse'
+        '403':
+          description: Admin/CEO only.
+        '401':
+          description: Unauthorized.
+
+  /admin/users/{userId}/approve-badge:
+    post:
+      tags: [admin]
+      operationId: approveBadge
+      summary: Approve a user's premium badge (admin/CEO)
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Badge approved.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApproveBadgeResponse'
+        '403':
+          description: Admin/CEO only.
+        '401':
+          description: Unauthorized.
+
+  /messages/conversations:
+    get:
+      tags: [messages]
+      operationId: listConversations
+      summary: List my conversations
+      responses:
+        '200':
+          description: Conversations list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListConversationsResponse'
+        '401':
+          description: Unauthorized.
+    post:
+      tags: [messages]
+      operationId: startConversation
+      summary: Start or get a conversation with a user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StartConversationBody'
+      responses:
+        '200':
+          description: Conversation (existing or new)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConversationDetail'
+        '401':
+          description: Unauthorized.
+
+  /messages/conversations/{conversationId}/messages:
+    get:
+      tags: [messages]
+      operationId: listMessages
+      summary: List messages in a conversation
+      parameters:
+        - name: conversationId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        '200':
+          description: Messages list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListMessagesResponse'
+        '401':
+          description: Unauthorized.
+        '403':
+          description: Not a participant.
+    post:
+      tags: [messages]
+      operationId: sendMessage
+      summary: Send a message in a conversation
+      parameters:
+        - name: conversationId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SendMessageBody'
+      responses:
+        '201':
+          description: Message sent
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DirectMessage'
+        '401':
+          description: Unauthorized.
+        '403':
+          description: Not a participant.
 
   /storage/uploads/request-url:
     post:
@@ -747,6 +967,12 @@ components:
           type: ["string", "null"]
         isAdmin:
           type: boolean
+        role:
+          type: string
+        campusTitle:
+          type: string
+        verificationStatus:
+          type: string
         createdAt:
           type: string
           format: date-time
@@ -765,6 +991,9 @@ components:
         - bio
         - avatarUrl
         - isAdmin
+        - role
+        - campusTitle
+        - verificationStatus
         - createdAt
 
     PublicUserProfile:
@@ -794,6 +1023,12 @@ components:
           type: ["string", "null"]
         isVerified:
           type: boolean
+        role:
+          type: string
+        campusTitle:
+          type: string
+        verificationStatus:
+          type: string
       required:
         - id
         - clerkUserId
@@ -807,6 +1042,9 @@ components:
         - bio
         - avatarUrl
         - isVerified
+        - role
+        - campusTitle
+        - verificationStatus
 
     UpdateProfileBody:
       type: object
@@ -832,6 +1070,23 @@ components:
         avatarUrl:
           type: ["string", "null"]
 
+    RequestBadgeBody:
+      type: object
+      required: [badgeType]
+      properties:
+        badgeType:
+          type: string
+          enum: [promo, paid]
+
+    RequestBadgeResponse:
+      type: object
+      required: [success, verificationStatus]
+      properties:
+        success:
+          type: boolean
+        verificationStatus:
+          type: string
+
     Post:
       type: object
       properties:
@@ -849,6 +1104,12 @@ components:
           type: string
         authorAvatarUrl:
           type: ["string", "null"]
+        authorCampusTitle:
+          type: string
+        authorRole:
+          type: string
+        isAnonymous:
+          type: boolean
         content:
           type: string
         imageUrl:
@@ -888,6 +1149,9 @@ components:
         - authorLevel
         - authorCampusLocation
         - authorAvatarUrl
+        - authorCampusTitle
+        - authorRole
+        - isAnonymous
         - content
         - imageUrl
         - videoUrl
@@ -925,6 +1189,8 @@ components:
           type: ["string", "null"]
         videoUrl:
           type: ["string", "null"]
+        isAnonymous:
+          type: boolean
       required:
         - content
 
@@ -1019,6 +1285,10 @@ components:
           type: boolean
         providerAvatarUrl:
           type: ["string", "null"]
+        providerCampusTitle:
+          type: string
+        providerRole:
+          type: string
         title:
           type: string
         description:
@@ -1043,6 +1313,8 @@ components:
         - providerCampusLocation
         - providerIsVerified
         - providerAvatarUrl
+        - providerCampusTitle
+        - providerRole
         - title
         - description
         - category
@@ -1231,3 +1503,185 @@ components:
       properties:
         error:
           type: string
+
+    AdminUserItem:
+      type: object
+      required: [clerkUserId, fullName, email, faculty, level, role, verificationStatus, matricNumber, avatarUrl, campusTitle, postCount]
+      properties:
+        clerkUserId:
+          type: string
+        fullName:
+          type: string
+        email:
+          type: string
+        faculty:
+          type: string
+        level:
+          type: string
+        role:
+          type: string
+        verificationStatus:
+          type: string
+        matricNumber:
+          type: string
+        avatarUrl:
+          type: ["string", "null"]
+        campusTitle:
+          type: string
+        postCount:
+          type: integer
+
+    ListAdminUsersResponse:
+      type: object
+      required: [users, total]
+      properties:
+        users:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminUserItem'
+        total:
+          type: integer
+
+    UpdateUserRoleBody:
+      type: object
+      required: [role]
+      properties:
+        role:
+          type: string
+          enum: [student, moderator, admin, ceo]
+
+    UpdateUserRoleResponse:
+      type: object
+      required: [success, role]
+      properties:
+        success:
+          type: boolean
+        role:
+          type: string
+
+    PendingVerificationItem:
+      type: object
+      required: [clerkUserId, fullName, matricNumber, faculty, level, avatarUrl, verificationStatus, badgeType]
+      properties:
+        clerkUserId:
+          type: string
+        fullName:
+          type: string
+        matricNumber:
+          type: string
+        faculty:
+          type: string
+        level:
+          type: string
+        avatarUrl:
+          type: ["string", "null"]
+        verificationStatus:
+          type: string
+        badgeType:
+          type: string
+
+    ListPendingVerificationsResponse:
+      type: object
+      required: [users]
+      properties:
+        users:
+          type: array
+          items:
+            $ref: '#/components/schemas/PendingVerificationItem'
+
+    ApproveBadgeResponse:
+      type: object
+      required: [success]
+      properties:
+        success:
+          type: boolean
+
+    ConversationSummary:
+      type: object
+      required: [id, otherUserId, otherUserName, otherUserAvatarUrl, lastMessageAt, unreadCount]
+      properties:
+        id:
+          type: integer
+        otherUserId:
+          type: string
+        otherUserName:
+          type: string
+        otherUserAvatarUrl:
+          type: ["string", "null"]
+        lastMessage:
+          type: ["string", "null"]
+        lastMessageAt:
+          type: string
+          format: date-time
+        unreadCount:
+          type: integer
+
+    ListConversationsResponse:
+      type: object
+      required: [conversations]
+      properties:
+        conversations:
+          type: array
+          items:
+            $ref: '#/components/schemas/ConversationSummary'
+
+    ConversationDetail:
+      type: object
+      required: [id, otherUserId, otherUserName, otherUserAvatarUrl, createdAt]
+      properties:
+        id:
+          type: integer
+        otherUserId:
+          type: string
+        otherUserName:
+          type: string
+        otherUserAvatarUrl:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+
+    StartConversationBody:
+      type: object
+      required: [targetUserId]
+      properties:
+        targetUserId:
+          type: string
+
+    DirectMessage:
+      type: object
+      required: [id, conversationId, senderId, content, isRead, createdAt]
+      properties:
+        id:
+          type: integer
+        conversationId:
+          type: integer
+        senderId:
+          type: string
+        content:
+          type: string
+        isRead:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+
+    SendMessageBody:
+      type: object
+      required: [content]
+      properties:
+        content:
+          type: string
+          minLength: 1
+          maxLength: 2000
+
+    ListMessagesResponse:
+      type: object
+      required: [messages, total]
+      properties:
+        messages:
+          type: array
+          items:
+            $ref: '#/components/schemas/DirectMessage'
+        total:
+          type: integer

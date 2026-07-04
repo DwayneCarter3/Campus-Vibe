@@ -8,6 +8,7 @@ export const postsTable = pgTable("posts", {
   content: text("content").notNull(),
   imageUrl: text("image_url"),
   videoUrl: text("video_url"),
+  isAnonymous: boolean("is_anonymous").notNull().default(false),
   isPinnedToProfile: boolean("is_pinned_to_profile").notNull().default(false),
   isPinnedToFeed: boolean("is_pinned_to_feed").notNull().default(false),
   likesCount: integer("likes_count").notNull().default(0),

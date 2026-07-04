@@ -14,16 +14,25 @@ import {
   GetUserServicesParams,
   GetUserServicesResponse,
 } from "@workspace/api-zod";
+import { CEO_EMAIL, computeCampusTitle } from "./admin";
 
 const opAlias = alias(postsTable, "op");
 const ouAlias = alias(usersTable, "ou");
 
 const router: IRouter = Router();
 
+async function getPostCount(clerkUserId: string): Promise<number> {
+  const [{ count }] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(postsTable)
+    .where(eq(postsTable.authorId, clerkUserId));
+  return count ?? 0;
+}
+
 router.get("/users/me", requireAuth, async (req, res): Promise<void> => {
   const userId = (req as any).userId as string;
 
-  const [user] = await db
+  let [user] = await db
     .select()
     .from(usersTable)
     .where(eq(usersTable.clerkUserId, userId));
@@ -33,7 +42,15 @@ router.get("/users/me", requireAuth, async (req, res): Promise<void> => {
     return;
   }
 
-  res.json(GetMyProfileResponse.parse(user));
+  if (user.email === CEO_EMAIL && user.role !== "ceo") {
+    await db.update(usersTable).set({ role: "ceo", isAdmin: true }).where(eq(usersTable.clerkUserId, userId));
+    user = { ...user, role: "ceo", isAdmin: true };
+  }
+
+  const postCount = await getPostCount(userId);
+  const campusTitle = computeCampusTitle(user.role, postCount);
+
+  res.json(GetMyProfileResponse.parse({ ...user, campusTitle }));
 });
 
 router.put("/users/me", requireAuth, async (req, res): Promise<void> => {
@@ -57,12 +74,15 @@ router.put("/users/me", requireAuth, async (req, res): Promise<void> => {
       res.status(400).json({ error: "Missing required profile fields" });
       return;
     }
+    const emailVal = data.email || "";
+    const roleVal = emailVal === CEO_EMAIL ? "ceo" : "student";
+    const isAdminVal = roleVal === "ceo";
     [user] = await db
       .insert(usersTable)
       .values({
         clerkUserId: userId,
         fullName: data.fullName,
-        email: data.email || "",
+        email: emailVal,
         school: data.school || "Lagos State University (LASU)",
         campusLocation: data.campusLocation || "Ojo",
         level: data.level,
@@ -72,6 +92,8 @@ router.put("/users/me", requireAuth, async (req, res): Promise<void> => {
         campus: data.campus || "LASU Ojo",
         bio: data.bio ?? null,
         avatarUrl: data.avatarUrl ?? null,
+        role: roleVal,
+        isAdmin: isAdminVal,
       })
       .returning();
   } else {
@@ -80,9 +102,39 @@ router.put("/users/me", requireAuth, async (req, res): Promise<void> => {
       .set(parsed.data)
       .where(eq(usersTable.clerkUserId, userId))
       .returning();
+
+    if (user.email === CEO_EMAIL && user.role !== "ceo") {
+      [user] = await db
+        .update(usersTable)
+        .set({ role: "ceo", isAdmin: true })
+        .where(eq(usersTable.clerkUserId, userId))
+        .returning();
+    }
   }
 
-  res.json(UpdateMyProfileResponse.parse(user));
+  const postCount = await getPostCount(userId);
+  const campusTitle = computeCampusTitle(user.role, postCount);
+
+  res.json(UpdateMyProfileResponse.parse({ ...user, campusTitle }));
+});
+
+router.post("/users/me/request-badge", requireAuth, async (req, res): Promise<void> => {
+  const userId = (req as any).userId as string;
+  const { badgeType } = req.body;
+
+  if (!badgeType || !["promo", "paid"].includes(badgeType)) {
+    res.status(400).json({ error: "Invalid badgeType. Must be 'promo' or 'paid'" });
+    return;
+  }
+
+  const verificationStatus = badgeType === "paid" ? "pending_paid" : "pending_promo";
+
+  await db
+    .update(usersTable)
+    .set({ verificationStatus })
+    .where(eq(usersTable.clerkUserId, userId));
+
+  res.json({ success: true, verificationStatus });
 });
 
 router.get("/users/:userId/posts", async (req, res): Promise<void> => {
@@ -102,6 +154,7 @@ router.get("/users/:userId/posts", async (req, res): Promise<void> => {
     .select({
       id: postsTable.id,
       authorId: postsTable.authorId,
+      isAnonymous: postsTable.isAnonymous,
       content: postsTable.content,
       imageUrl: postsTable.imageUrl,
       videoUrl: postsTable.videoUrl,
@@ -117,6 +170,7 @@ router.get("/users/:userId/posts", async (req, res): Promise<void> => {
       authorLevel: usersTable.level,
       authorCampusLocation: usersTable.campusLocation,
       authorAvatarUrl: usersTable.avatarUrl,
+      authorRole: usersTable.role,
       opId: opAlias.id,
       opAuthorId: opAlias.authorId,
       opContent: opAlias.content,
@@ -129,7 +183,7 @@ router.get("/users/:userId/posts", async (req, res): Promise<void> => {
     .leftJoin(usersTable, eq(postsTable.authorId, usersTable.clerkUserId))
     .leftJoin(opAlias, eq(postsTable.originalPostId, opAlias.id))
     .leftJoin(ouAlias, eq(opAlias.authorId, ouAlias.clerkUserId))
-    .where(eq(postsTable.authorId, userId))
+    .where(and(eq(postsTable.authorId, userId), eq(postsTable.isAnonymous, false)))
     .orderBy(desc(postsTable.isPinnedToProfile), desc(postsTable.createdAt))
     .limit(limit)
     .offset(offset);
@@ -137,7 +191,7 @@ router.get("/users/:userId/posts", async (req, res): Promise<void> => {
   const [{ count }] = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(postsTable)
-    .where(eq(postsTable.authorId, userId));
+    .where(and(eq(postsTable.authorId, userId), eq(postsTable.isAnonymous, false)));
 
   const postsWithReactions = await Promise.all(
     posts.map(async (post) => {
@@ -156,6 +210,10 @@ router.get("/users/:userId/posts", async (req, res): Promise<void> => {
         .from(postCommentsTable)
         .where(eq(postCommentsTable.postId, post.id));
 
+      const role = post.authorRole ?? "student";
+      const postCount = await getPostCount(post.authorId);
+      const campusTitle = computeCampusTitle(role, postCount);
+
       return {
         ...post,
         authorName: post.authorName ?? "Unknown",
@@ -163,6 +221,9 @@ router.get("/users/:userId/posts", async (req, res): Promise<void> => {
         authorLevel: post.authorLevel ?? "Unknown",
         authorCampusLocation: post.authorCampusLocation ?? "Ojo",
         authorAvatarUrl: post.authorAvatarUrl ?? null,
+        authorCampusTitle: campusTitle,
+        authorRole: role,
+        isAnonymous: post.isAnonymous ?? false,
         commentsCount: commentsCount ?? 0,
         reshareCount: post.reshareCount ?? 0,
         originalPostId: post.originalPostId ?? null,
@@ -215,6 +276,7 @@ router.get("/users/:userId/services", async (req, res): Promise<void> => {
       providerCampusLocation: usersTable.campusLocation,
       providerAvatarUrl: usersTable.avatarUrl,
       providerMatricNumber: usersTable.matricNumber,
+      providerRole: usersTable.role,
     })
     .from(servicesTable)
     .leftJoin(usersTable, eq(servicesTable.providerId, usersTable.clerkUserId))
@@ -228,8 +290,10 @@ router.get("/users/:userId/services", async (req, res): Promise<void> => {
     .from(servicesTable)
     .where(and(eq(servicesTable.providerId, userId), eq(servicesTable.isActive, true)));
 
-  const enriched = services.map((s) => {
-    const { providerMatricNumber, ...rest } = s;
+  const enriched = await Promise.all(services.map(async (s) => {
+    const { providerMatricNumber, providerRole, ...rest } = s;
+    const role = providerRole ?? "student";
+    const postCount = await getPostCount(s.providerId);
     return {
       ...rest,
       providerName: s.providerName ?? "Unknown",
@@ -238,8 +302,10 @@ router.get("/users/:userId/services", async (req, res): Promise<void> => {
       providerCampusLocation: s.providerCampusLocation ?? "Ojo",
       providerAvatarUrl: s.providerAvatarUrl ?? null,
       providerIsVerified: !!(providerMatricNumber && providerMatricNumber.trim()),
+      providerCampusTitle: computeCampusTitle(role, postCount),
+      providerRole: role,
     };
-  });
+  }));
 
   res.json(GetUserServicesResponse.parse({ services: enriched, total: count }));
 });
@@ -266,6 +332,8 @@ router.get("/users/:userId", async (req, res): Promise<void> => {
       bio: usersTable.bio,
       avatarUrl: usersTable.avatarUrl,
       matricNumber: usersTable.matricNumber,
+      role: usersTable.role,
+      verificationStatus: usersTable.verificationStatus,
     })
     .from(usersTable)
     .where(eq(usersTable.clerkUserId, params.data.userId));
@@ -276,10 +344,15 @@ router.get("/users/:userId", async (req, res): Promise<void> => {
   }
 
   const { matricNumber, ...publicUser } = user;
+  const postCount = await getPostCount(user.clerkUserId);
+  const campusTitle = computeCampusTitle(user.role ?? "student", postCount);
 
   res.json(GetUserProfileResponse.parse({
     ...publicUser,
     isVerified: !!(matricNumber && matricNumber.trim()),
+    role: user.role ?? "student",
+    campusTitle,
+    verificationStatus: user.verificationStatus ?? "none",
   }));
 });
 

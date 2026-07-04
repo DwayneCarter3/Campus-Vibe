@@ -32,6 +32,9 @@ export const GetMyProfileResponse = zod.object({
   bio: zod.string().nullable(),
   avatarUrl: zod.string().nullable(),
   isAdmin: zod.boolean(),
+  role: zod.string(),
+  campusTitle: zod.string(),
+  verificationStatus: zod.string(),
   createdAt: zod.coerce.date(),
 });
 
@@ -66,7 +69,22 @@ export const UpdateMyProfileResponse = zod.object({
   bio: zod.string().nullable(),
   avatarUrl: zod.string().nullable(),
   isAdmin: zod.boolean(),
+  role: zod.string(),
+  campusTitle: zod.string(),
+  verificationStatus: zod.string(),
   createdAt: zod.coerce.date(),
+});
+
+/**
+ * @summary Request premium badge verification
+ */
+export const RequestPremiumBadgeBody = zod.object({
+  badgeType: zod.enum(["promo", "paid"]),
+});
+
+export const RequestPremiumBadgeResponse = zod.object({
+  success: zod.boolean(),
+  verificationStatus: zod.string(),
 });
 
 /**
@@ -89,6 +107,9 @@ export const GetUserProfileResponse = zod.object({
   bio: zod.string().nullable(),
   avatarUrl: zod.string().nullable(),
   isVerified: zod.boolean(),
+  role: zod.string(),
+  campusTitle: zod.string(),
+  verificationStatus: zod.string(),
 });
 
 /**
@@ -116,6 +137,9 @@ export const GetUserPostsResponse = zod.object({
       authorLevel: zod.string(),
       authorCampusLocation: zod.string(),
       authorAvatarUrl: zod.string().nullable(),
+      authorCampusTitle: zod.string(),
+      authorRole: zod.string(),
+      isAnonymous: zod.boolean(),
       content: zod.string(),
       imageUrl: zod.string().nullable(),
       videoUrl: zod.string().nullable(),
@@ -172,6 +196,8 @@ export const GetUserServicesResponse = zod.object({
       providerCampusLocation: zod.string(),
       providerIsVerified: zod.boolean(),
       providerAvatarUrl: zod.string().nullable(),
+      providerCampusTitle: zod.string(),
+      providerRole: zod.string(),
       title: zod.string(),
       description: zod.string(),
       category: zod.string(),
@@ -206,6 +232,9 @@ export const ListPostsResponse = zod.object({
       authorLevel: zod.string(),
       authorCampusLocation: zod.string(),
       authorAvatarUrl: zod.string().nullable(),
+      authorCampusTitle: zod.string(),
+      authorRole: zod.string(),
+      isAnonymous: zod.boolean(),
       content: zod.string(),
       imageUrl: zod.string().nullable(),
       videoUrl: zod.string().nullable(),
@@ -243,6 +272,7 @@ export const CreatePostBody = zod.object({
   content: zod.string(),
   imageUrl: zod.string().nullish(),
   videoUrl: zod.string().nullish(),
+  isAnonymous: zod.boolean().optional(),
 });
 
 /**
@@ -260,6 +290,9 @@ export const GetPostResponse = zod.object({
   authorLevel: zod.string(),
   authorCampusLocation: zod.string(),
   authorAvatarUrl: zod.string().nullable(),
+  authorCampusTitle: zod.string(),
+  authorRole: zod.string(),
+  isAnonymous: zod.boolean(),
   content: zod.string(),
   imageUrl: zod.string().nullable(),
   videoUrl: zod.string().nullable(),
@@ -288,7 +321,7 @@ export const GetPostResponse = zod.object({
 });
 
 /**
- * @summary Delete a post (owner only)
+ * @summary Delete a post (owner or moderator+)
  */
 export const DeletePostParams = zod.object({
   postId: zod.coerce.number(),
@@ -376,6 +409,8 @@ export const ListServicesResponse = zod.object({
       providerCampusLocation: zod.string(),
       providerIsVerified: zod.boolean(),
       providerAvatarUrl: zod.string().nullable(),
+      providerCampusTitle: zod.string(),
+      providerRole: zod.string(),
       title: zod.string(),
       description: zod.string(),
       category: zod.string(),
@@ -415,6 +450,8 @@ export const GetServiceResponse = zod.object({
   providerCampusLocation: zod.string(),
   providerIsVerified: zod.boolean(),
   providerAvatarUrl: zod.string().nullable(),
+  providerCampusTitle: zod.string(),
+  providerRole: zod.string(),
   title: zod.string(),
   description: zod.string(),
   category: zod.string(),
@@ -449,6 +486,8 @@ export const UpdateServiceResponse = zod.object({
   providerCampusLocation: zod.string(),
   providerIsVerified: zod.boolean(),
   providerAvatarUrl: zod.string().nullable(),
+  providerCampusTitle: zod.string(),
+  providerRole: zod.string(),
   title: zod.string(),
   description: zod.string(),
   category: zod.string(),
@@ -557,6 +596,156 @@ export const PinPostToFeedResponse = zod.object({
 export const ClaimAdminResponse = zod.object({
   success: zod.boolean(),
   message: zod.string(),
+});
+
+/**
+ * @summary List all users (CEO only)
+ */
+export const listAdminUsersQueryLimitDefault = 50;
+export const listAdminUsersQueryOffsetDefault = 0;
+
+export const ListAdminUsersQueryParams = zod.object({
+  search: zod.coerce.string().optional(),
+  limit: zod.coerce.number().default(listAdminUsersQueryLimitDefault),
+  offset: zod.coerce.number().default(listAdminUsersQueryOffsetDefault),
+});
+
+export const ListAdminUsersResponse = zod.object({
+  users: zod.array(
+    zod.object({
+      clerkUserId: zod.string(),
+      fullName: zod.string(),
+      email: zod.string(),
+      faculty: zod.string(),
+      level: zod.string(),
+      role: zod.string(),
+      verificationStatus: zod.string(),
+      matricNumber: zod.string(),
+      avatarUrl: zod.string().nullable(),
+      campusTitle: zod.string(),
+      postCount: zod.number(),
+    }),
+  ),
+  total: zod.number(),
+});
+
+/**
+ * @summary Update a user's role (CEO only)
+ */
+export const UpdateUserRoleParams = zod.object({
+  userId: zod.coerce.string(),
+});
+
+export const UpdateUserRoleBody = zod.object({
+  role: zod.enum(["student", "moderator", "admin", "ceo"]),
+});
+
+export const UpdateUserRoleResponse = zod.object({
+  success: zod.boolean(),
+  role: zod.string(),
+});
+
+/**
+ * @summary List users with pending badge verification (admin/CEO)
+ */
+export const ListPendingVerificationsResponse = zod.object({
+  users: zod.array(
+    zod.object({
+      clerkUserId: zod.string(),
+      fullName: zod.string(),
+      matricNumber: zod.string(),
+      faculty: zod.string(),
+      level: zod.string(),
+      avatarUrl: zod.string().nullable(),
+      verificationStatus: zod.string(),
+      badgeType: zod.string(),
+    }),
+  ),
+});
+
+/**
+ * @summary Approve a user's premium badge (admin/CEO)
+ */
+export const ApproveBadgeParams = zod.object({
+  userId: zod.coerce.string(),
+});
+
+export const ApproveBadgeResponse = zod.object({
+  success: zod.boolean(),
+});
+
+/**
+ * @summary List my conversations
+ */
+export const ListConversationsResponse = zod.object({
+  conversations: zod.array(
+    zod.object({
+      id: zod.number(),
+      otherUserId: zod.string(),
+      otherUserName: zod.string(),
+      otherUserAvatarUrl: zod.string().nullable(),
+      lastMessage: zod.string().nullish(),
+      lastMessageAt: zod.coerce.date(),
+      unreadCount: zod.number(),
+    }),
+  ),
+});
+
+/**
+ * @summary Start or get a conversation with a user
+ */
+export const StartConversationBody = zod.object({
+  targetUserId: zod.string(),
+});
+
+export const StartConversationResponse = zod.object({
+  id: zod.number(),
+  otherUserId: zod.string(),
+  otherUserName: zod.string(),
+  otherUserAvatarUrl: zod.string().nullable(),
+  createdAt: zod.coerce.date(),
+});
+
+/**
+ * @summary List messages in a conversation
+ */
+export const ListMessagesParams = zod.object({
+  conversationId: zod.coerce.number(),
+});
+
+export const listMessagesQueryLimitDefault = 50;
+export const listMessagesQueryOffsetDefault = 0;
+
+export const ListMessagesQueryParams = zod.object({
+  limit: zod.coerce.number().default(listMessagesQueryLimitDefault),
+  offset: zod.coerce.number().default(listMessagesQueryOffsetDefault),
+});
+
+export const ListMessagesResponse = zod.object({
+  messages: zod.array(
+    zod.object({
+      id: zod.number(),
+      conversationId: zod.number(),
+      senderId: zod.string(),
+      content: zod.string(),
+      isRead: zod.boolean(),
+      createdAt: zod.coerce.date(),
+    }),
+  ),
+  total: zod.number(),
+});
+
+/**
+ * @summary Send a message in a conversation
+ */
+export const SendMessageParams = zod.object({
+  conversationId: zod.coerce.number(),
+});
+
+export const sendMessageBodyContentMax = 2000;
+
+export const SendMessageBody = zod.object({
+  content: zod.string().min(1).max(sendMessageBodyContentMax),
 });
 
 /**

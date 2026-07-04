@@ -18,18 +18,27 @@ import type {
 
 import type {
   AdminClaimResponse,
+  ApproveBadgeResponse,
   Comment,
+  ConversationDetail,
   CreateCommentBody,
   CreatePostBody,
   CreateServiceBody,
+  DirectMessage,
   FeedStats,
   GetUserPostsParams,
   GetUserServicesParams,
   HealthStatus,
   LikeResponse,
+  ListAdminUsersParams,
+  ListAdminUsersResponse,
   ListCommentsResponse,
+  ListConversationsResponse,
+  ListMessagesParams,
+  ListMessagesResponse,
   ListNotificationsParams,
   ListNotificationsResponse,
+  ListPendingVerificationsResponse,
   ListPostsParams,
   ListPostsResponse,
   ListServicesParams,
@@ -39,12 +48,18 @@ import type {
   PinResponse,
   Post,
   PublicUserProfile,
+  RequestBadgeBody,
+  RequestBadgeResponse,
   ResharePostBody,
   ResharePostResponse,
+  SendMessageBody,
   Service,
+  StartConversationBody,
   TrackWhatsappClick200,
   UpdateProfileBody,
   UpdateServiceBody,
+  UpdateUserRoleBody,
+  UpdateUserRoleResponse,
   UploadUrlRequest,
   UploadUrlResponse,
   UserProfile,
@@ -293,6 +308,92 @@ export const useUpdateMyProfile = <
   TContext
 > => {
   return useMutation(getUpdateMyProfileMutationOptions(options));
+};
+
+/**
+ * @summary Request premium badge verification
+ */
+export const getRequestPremiumBadgeUrl = () => {
+  return `/api/users/me/request-badge`;
+};
+
+export const requestPremiumBadge = async (
+  requestBadgeBody: RequestBadgeBody,
+  options?: RequestInit,
+): Promise<RequestBadgeResponse> => {
+  return customFetch<RequestBadgeResponse>(getRequestPremiumBadgeUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(requestBadgeBody),
+  });
+};
+
+export const getRequestPremiumBadgeMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof requestPremiumBadge>>,
+    TError,
+    { data: BodyType<RequestBadgeBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof requestPremiumBadge>>,
+  TError,
+  { data: BodyType<RequestBadgeBody> },
+  TContext
+> => {
+  const mutationKey = ["requestPremiumBadge"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof requestPremiumBadge>>,
+    { data: BodyType<RequestBadgeBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return requestPremiumBadge(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RequestPremiumBadgeMutationResult = NonNullable<
+  Awaited<ReturnType<typeof requestPremiumBadge>>
+>;
+export type RequestPremiumBadgeMutationBody = BodyType<RequestBadgeBody>;
+export type RequestPremiumBadgeMutationError = ErrorType<void>;
+
+/**
+ * @summary Request premium badge verification
+ */
+export const useRequestPremiumBadge = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof requestPremiumBadge>>,
+    TError,
+    { data: BodyType<RequestBadgeBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof requestPremiumBadge>>,
+  TError,
+  { data: BodyType<RequestBadgeBody> },
+  TContext
+> => {
+  return useMutation(getRequestPremiumBadgeMutationOptions(options));
 };
 
 /**
@@ -864,7 +965,7 @@ export function useGetPost<
 }
 
 /**
- * @summary Delete a post (owner only)
+ * @summary Delete a post (owner or moderator+)
  */
 export const getDeletePostUrl = (postId: number) => {
   return `/api/posts/${postId}`;
@@ -925,7 +1026,7 @@ export type DeletePostMutationResult = NonNullable<
 export type DeletePostMutationError = ErrorType<void>;
 
 /**
- * @summary Delete a post (owner only)
+ * @summary Delete a post (owner or moderator+)
  */
 export const useDeletePost = <
   TError = ErrorType<void>,
@@ -2405,6 +2506,717 @@ export const useClaimAdmin = <
   TContext
 > => {
   return useMutation(getClaimAdminMutationOptions(options));
+};
+
+/**
+ * @summary List all users (CEO only)
+ */
+export const getListAdminUsersUrl = (params?: ListAdminUsersParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/admin/users?${stringifiedParams}`
+    : `/api/admin/users`;
+};
+
+export const listAdminUsers = async (
+  params?: ListAdminUsersParams,
+  options?: RequestInit,
+): Promise<ListAdminUsersResponse> => {
+  return customFetch<ListAdminUsersResponse>(getListAdminUsersUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListAdminUsersQueryKey = (params?: ListAdminUsersParams) => {
+  return [`/api/admin/users`, ...(params ? [params] : [])] as const;
+};
+
+export const getListAdminUsersQueryOptions = <
+  TData = Awaited<ReturnType<typeof listAdminUsers>>,
+  TError = ErrorType<void>,
+>(
+  params?: ListAdminUsersParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listAdminUsers>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListAdminUsersQueryKey(params);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listAdminUsers>>> = ({
+    signal,
+  }) => listAdminUsers(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listAdminUsers>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListAdminUsersQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listAdminUsers>>
+>;
+export type ListAdminUsersQueryError = ErrorType<void>;
+
+/**
+ * @summary List all users (CEO only)
+ */
+
+export function useListAdminUsers<
+  TData = Awaited<ReturnType<typeof listAdminUsers>>,
+  TError = ErrorType<void>,
+>(
+  params?: ListAdminUsersParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listAdminUsers>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListAdminUsersQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Update a user's role (CEO only)
+ */
+export const getUpdateUserRoleUrl = (userId: string) => {
+  return `/api/admin/users/${userId}/role`;
+};
+
+export const updateUserRole = async (
+  userId: string,
+  updateUserRoleBody: UpdateUserRoleBody,
+  options?: RequestInit,
+): Promise<UpdateUserRoleResponse> => {
+  return customFetch<UpdateUserRoleResponse>(getUpdateUserRoleUrl(userId), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(updateUserRoleBody),
+  });
+};
+
+export const getUpdateUserRoleMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateUserRole>>,
+    TError,
+    { userId: string; data: BodyType<UpdateUserRoleBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateUserRole>>,
+  TError,
+  { userId: string; data: BodyType<UpdateUserRoleBody> },
+  TContext
+> => {
+  const mutationKey = ["updateUserRole"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateUserRole>>,
+    { userId: string; data: BodyType<UpdateUserRoleBody> }
+  > = (props) => {
+    const { userId, data } = props ?? {};
+
+    return updateUserRole(userId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateUserRoleMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateUserRole>>
+>;
+export type UpdateUserRoleMutationBody = BodyType<UpdateUserRoleBody>;
+export type UpdateUserRoleMutationError = ErrorType<void>;
+
+/**
+ * @summary Update a user's role (CEO only)
+ */
+export const useUpdateUserRole = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateUserRole>>,
+    TError,
+    { userId: string; data: BodyType<UpdateUserRoleBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateUserRole>>,
+  TError,
+  { userId: string; data: BodyType<UpdateUserRoleBody> },
+  TContext
+> => {
+  return useMutation(getUpdateUserRoleMutationOptions(options));
+};
+
+/**
+ * @summary List users with pending badge verification (admin/CEO)
+ */
+export const getListPendingVerificationsUrl = () => {
+  return `/api/admin/pending-verifications`;
+};
+
+export const listPendingVerifications = async (
+  options?: RequestInit,
+): Promise<ListPendingVerificationsResponse> => {
+  return customFetch<ListPendingVerificationsResponse>(
+    getListPendingVerificationsUrl(),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getListPendingVerificationsQueryKey = () => {
+  return [`/api/admin/pending-verifications`] as const;
+};
+
+export const getListPendingVerificationsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listPendingVerifications>>,
+  TError = ErrorType<void>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listPendingVerifications>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListPendingVerificationsQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listPendingVerifications>>
+  > = ({ signal }) => listPendingVerifications({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listPendingVerifications>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListPendingVerificationsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listPendingVerifications>>
+>;
+export type ListPendingVerificationsQueryError = ErrorType<void>;
+
+/**
+ * @summary List users with pending badge verification (admin/CEO)
+ */
+
+export function useListPendingVerifications<
+  TData = Awaited<ReturnType<typeof listPendingVerifications>>,
+  TError = ErrorType<void>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listPendingVerifications>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListPendingVerificationsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Approve a user's premium badge (admin/CEO)
+ */
+export const getApproveBadgeUrl = (userId: string) => {
+  return `/api/admin/users/${userId}/approve-badge`;
+};
+
+export const approveBadge = async (
+  userId: string,
+  options?: RequestInit,
+): Promise<ApproveBadgeResponse> => {
+  return customFetch<ApproveBadgeResponse>(getApproveBadgeUrl(userId), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getApproveBadgeMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof approveBadge>>,
+    TError,
+    { userId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof approveBadge>>,
+  TError,
+  { userId: string },
+  TContext
+> => {
+  const mutationKey = ["approveBadge"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof approveBadge>>,
+    { userId: string }
+  > = (props) => {
+    const { userId } = props ?? {};
+
+    return approveBadge(userId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ApproveBadgeMutationResult = NonNullable<
+  Awaited<ReturnType<typeof approveBadge>>
+>;
+
+export type ApproveBadgeMutationError = ErrorType<void>;
+
+/**
+ * @summary Approve a user's premium badge (admin/CEO)
+ */
+export const useApproveBadge = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof approveBadge>>,
+    TError,
+    { userId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof approveBadge>>,
+  TError,
+  { userId: string },
+  TContext
+> => {
+  return useMutation(getApproveBadgeMutationOptions(options));
+};
+
+/**
+ * @summary List my conversations
+ */
+export const getListConversationsUrl = () => {
+  return `/api/messages/conversations`;
+};
+
+export const listConversations = async (
+  options?: RequestInit,
+): Promise<ListConversationsResponse> => {
+  return customFetch<ListConversationsResponse>(getListConversationsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListConversationsQueryKey = () => {
+  return [`/api/messages/conversations`] as const;
+};
+
+export const getListConversationsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listConversations>>,
+  TError = ErrorType<void>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listConversations>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListConversationsQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listConversations>>
+  > = ({ signal }) => listConversations({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listConversations>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListConversationsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listConversations>>
+>;
+export type ListConversationsQueryError = ErrorType<void>;
+
+/**
+ * @summary List my conversations
+ */
+
+export function useListConversations<
+  TData = Awaited<ReturnType<typeof listConversations>>,
+  TError = ErrorType<void>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listConversations>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListConversationsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Start or get a conversation with a user
+ */
+export const getStartConversationUrl = () => {
+  return `/api/messages/conversations`;
+};
+
+export const startConversation = async (
+  startConversationBody: StartConversationBody,
+  options?: RequestInit,
+): Promise<ConversationDetail> => {
+  return customFetch<ConversationDetail>(getStartConversationUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(startConversationBody),
+  });
+};
+
+export const getStartConversationMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof startConversation>>,
+    TError,
+    { data: BodyType<StartConversationBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof startConversation>>,
+  TError,
+  { data: BodyType<StartConversationBody> },
+  TContext
+> => {
+  const mutationKey = ["startConversation"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof startConversation>>,
+    { data: BodyType<StartConversationBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return startConversation(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type StartConversationMutationResult = NonNullable<
+  Awaited<ReturnType<typeof startConversation>>
+>;
+export type StartConversationMutationBody = BodyType<StartConversationBody>;
+export type StartConversationMutationError = ErrorType<void>;
+
+/**
+ * @summary Start or get a conversation with a user
+ */
+export const useStartConversation = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof startConversation>>,
+    TError,
+    { data: BodyType<StartConversationBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof startConversation>>,
+  TError,
+  { data: BodyType<StartConversationBody> },
+  TContext
+> => {
+  return useMutation(getStartConversationMutationOptions(options));
+};
+
+/**
+ * @summary List messages in a conversation
+ */
+export const getListMessagesUrl = (
+  conversationId: number,
+  params?: ListMessagesParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/messages/conversations/${conversationId}/messages?${stringifiedParams}`
+    : `/api/messages/conversations/${conversationId}/messages`;
+};
+
+export const listMessages = async (
+  conversationId: number,
+  params?: ListMessagesParams,
+  options?: RequestInit,
+): Promise<ListMessagesResponse> => {
+  return customFetch<ListMessagesResponse>(
+    getListMessagesUrl(conversationId, params),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getListMessagesQueryKey = (
+  conversationId: number,
+  params?: ListMessagesParams,
+) => {
+  return [
+    `/api/messages/conversations/${conversationId}/messages`,
+    ...(params ? [params] : []),
+  ] as const;
+};
+
+export const getListMessagesQueryOptions = <
+  TData = Awaited<ReturnType<typeof listMessages>>,
+  TError = ErrorType<void>,
+>(
+  conversationId: number,
+  params?: ListMessagesParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listMessages>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListMessagesQueryKey(conversationId, params);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listMessages>>> = ({
+    signal,
+  }) => listMessages(conversationId, params, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!conversationId,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof listMessages>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListMessagesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listMessages>>
+>;
+export type ListMessagesQueryError = ErrorType<void>;
+
+/**
+ * @summary List messages in a conversation
+ */
+
+export function useListMessages<
+  TData = Awaited<ReturnType<typeof listMessages>>,
+  TError = ErrorType<void>,
+>(
+  conversationId: number,
+  params?: ListMessagesParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listMessages>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListMessagesQueryOptions(
+    conversationId,
+    params,
+    options,
+  );
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Send a message in a conversation
+ */
+export const getSendMessageUrl = (conversationId: number) => {
+  return `/api/messages/conversations/${conversationId}/messages`;
+};
+
+export const sendMessage = async (
+  conversationId: number,
+  sendMessageBody: SendMessageBody,
+  options?: RequestInit,
+): Promise<DirectMessage> => {
+  return customFetch<DirectMessage>(getSendMessageUrl(conversationId), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(sendMessageBody),
+  });
+};
+
+export const getSendMessageMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof sendMessage>>,
+    TError,
+    { conversationId: number; data: BodyType<SendMessageBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof sendMessage>>,
+  TError,
+  { conversationId: number; data: BodyType<SendMessageBody> },
+  TContext
+> => {
+  const mutationKey = ["sendMessage"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof sendMessage>>,
+    { conversationId: number; data: BodyType<SendMessageBody> }
+  > = (props) => {
+    const { conversationId, data } = props ?? {};
+
+    return sendMessage(conversationId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type SendMessageMutationResult = NonNullable<
+  Awaited<ReturnType<typeof sendMessage>>
+>;
+export type SendMessageMutationBody = BodyType<SendMessageBody>;
+export type SendMessageMutationError = ErrorType<void>;
+
+/**
+ * @summary Send a message in a conversation
+ */
+export const useSendMessage = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof sendMessage>>,
+    TError,
+    { conversationId: number; data: BodyType<SendMessageBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof sendMessage>>,
+  TError,
+  { conversationId: number; data: BodyType<SendMessageBody> },
+  TContext
+> => {
+  return useMutation(getSendMessageMutationOptions(options));
 };
 
 /**

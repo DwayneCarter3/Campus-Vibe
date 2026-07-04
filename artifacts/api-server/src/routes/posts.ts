@@ -1,9 +1,10 @@
 import { Router, type IRouter } from "express";
-import { eq, desc, and, sql, ne } from "drizzle-orm";
+import { eq, desc, and, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { db, postsTable, postLikesTable, postNoCapsTable, postCommentsTable, usersTable, notificationsTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/auth";
 import { broadcastNotification } from "../sse-manager";
+import { computeCampusTitle } from "./admin";
 import {
   ListPostsQueryParams,
   ListPostsResponse,
@@ -41,9 +42,17 @@ async function getActorName(clerkUserId: string): Promise<string> {
   return user?.fullName ?? "A student";
 }
 
+async function getPostCount(clerkUserId: string): Promise<number> {
+  const [{ count }] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(postsTable)
+    .where(eq(postsTable.authorId, clerkUserId));
+  return count ?? 0;
+}
+
 async function notifyPostAuthor(postId: number, actorId: string, type: string, message: string) {
   const [post] = await db
-    .select({ authorId: postsTable.authorId })
+    .select({ authorId: postsTable.authorId, isAnonymous: postsTable.isAnonymous })
     .from(postsTable)
     .where(eq(postsTable.id, postId));
   if (!post || post.authorId === actorId) return;
@@ -55,11 +64,30 @@ async function notifyPostAuthor(postId: number, actorId: string, type: string, m
   broadcastNotification(post.authorId, notification);
 }
 
+function maskAnonymousPost(post: any, requesterId?: string) {
+  const isMyPost = post.authorId === requesterId;
+  if (post.isAnonymous && !isMyPost) {
+    return {
+      ...post,
+      authorId: "anonymous",
+      authorName: "Anonymous Student",
+      authorFaculty: "LASU",
+      authorLevel: "—",
+      authorCampusLocation: "Ojo",
+      authorAvatarUrl: null,
+      authorCampusTitle: "",
+      authorRole: "student",
+    };
+  }
+  return post;
+}
+
 async function buildPostWithMeta(postId: number, clerkUserId?: string) {
   const [post] = await db
     .select({
       id: postsTable.id,
       authorId: postsTable.authorId,
+      isAnonymous: postsTable.isAnonymous,
       content: postsTable.content,
       imageUrl: postsTable.imageUrl,
       videoUrl: postsTable.videoUrl,
@@ -75,6 +103,7 @@ async function buildPostWithMeta(postId: number, clerkUserId?: string) {
       authorLevel: usersTable.level,
       authorCampusLocation: usersTable.campusLocation,
       authorAvatarUrl: usersTable.avatarUrl,
+      authorRole: usersTable.role,
       opId: originalPostAlias.id,
       opAuthorId: originalPostAlias.authorId,
       opContent: originalPostAlias.content,
@@ -107,13 +136,20 @@ async function buildPostWithMeta(postId: number, clerkUserId?: string) {
     isNoCapByMe = nocap.length > 0;
   }
 
-  return {
+  const role = post.authorRole ?? "student";
+  const postCount = await getPostCount(post.authorId);
+  const campusTitle = computeCampusTitle(role, postCount);
+
+  const built = {
     ...post,
     authorName: post.authorName ?? "Unknown",
     authorFaculty: post.authorFaculty ?? "Unknown",
     authorLevel: post.authorLevel ?? "Unknown",
     authorCampusLocation: post.authorCampusLocation ?? "Ojo",
     authorAvatarUrl: post.authorAvatarUrl ?? null,
+    authorCampusTitle: campusTitle,
+    authorRole: role,
+    isAnonymous: post.isAnonymous ?? false,
     commentsCount: commentsCount ?? 0,
     reshareCount: post.reshareCount ?? 0,
     originalPostId: post.originalPostId ?? null,
@@ -131,6 +167,8 @@ async function buildPostWithMeta(postId: number, clerkUserId?: string) {
     isLikedByMe,
     isNoCapByMe,
   };
+
+  return maskAnonymousPost(built, clerkUserId);
 }
 
 router.get("/posts", async (req, res): Promise<void> => {
@@ -147,6 +185,7 @@ router.get("/posts", async (req, res): Promise<void> => {
     .select({
       id: postsTable.id,
       authorId: postsTable.authorId,
+      isAnonymous: postsTable.isAnonymous,
       content: postsTable.content,
       imageUrl: postsTable.imageUrl,
       videoUrl: postsTable.videoUrl,
@@ -162,6 +201,7 @@ router.get("/posts", async (req, res): Promise<void> => {
       authorLevel: usersTable.level,
       authorCampusLocation: usersTable.campusLocation,
       authorAvatarUrl: usersTable.avatarUrl,
+      authorRole: usersTable.role,
       opId: originalPostAlias.id,
       opAuthorId: originalPostAlias.authorId,
       opContent: originalPostAlias.content,
@@ -198,13 +238,21 @@ router.get("/posts", async (req, res): Promise<void> => {
         isLikedByMe = likes.length > 0;
         isNoCapByMe = nocaps.length > 0;
       }
-      return {
+
+      const role = post.authorRole ?? "student";
+      const postCount = await getPostCount(post.authorId);
+      const campusTitle = computeCampusTitle(role, postCount);
+
+      const built = {
         ...post,
         authorName: post.authorName ?? "Unknown",
         authorFaculty: post.authorFaculty ?? "Unknown",
         authorLevel: post.authorLevel ?? "Unknown",
         authorCampusLocation: post.authorCampusLocation ?? "Ojo",
         authorAvatarUrl: post.authorAvatarUrl ?? null,
+        authorCampusTitle: campusTitle,
+        authorRole: role,
+        isAnonymous: post.isAnonymous ?? false,
         commentsCount: commentsCount ?? 0,
         reshareCount: post.reshareCount ?? 0,
         originalPostId: post.originalPostId ?? null,
@@ -222,6 +270,8 @@ router.get("/posts", async (req, res): Promise<void> => {
         isLikedByMe,
         isNoCapByMe,
       };
+
+      return maskAnonymousPost(built, clerkUserId);
     })
   );
 
@@ -238,7 +288,13 @@ router.post("/posts", requireAuth, async (req, res): Promise<void> => {
 
   const [post] = await db
     .insert(postsTable)
-    .values({ authorId: userId, content: parsed.data.content, imageUrl: parsed.data.imageUrl ?? null, videoUrl: parsed.data.videoUrl ?? null })
+    .values({
+      authorId: userId,
+      content: parsed.data.content,
+      imageUrl: parsed.data.imageUrl ?? null,
+      videoUrl: parsed.data.videoUrl ?? null,
+      isAnonymous: (parsed.data as any).isAnonymous ?? false,
+    })
     .returning();
 
   const result = await buildPostWithMeta(post.id, userId);
@@ -277,7 +333,16 @@ router.delete("/posts/:postId", requireAuth, async (req, res): Promise<void> => 
     res.status(404).json({ error: "Post not found" });
     return;
   }
-  if (post.authorId !== userId) {
+
+  const [caller] = await db
+    .select({ role: usersTable.role })
+    .from(usersTable)
+    .where(eq(usersTable.clerkUserId, userId));
+
+  const isOwner = post.authorId === userId;
+  const isModerator = ["moderator", "admin", "ceo"].includes(caller?.role ?? "");
+
+  if (!isOwner && !isModerator) {
     res.status(403).json({ error: "Forbidden" });
     return;
   }
@@ -286,7 +351,6 @@ router.delete("/posts/:postId", requireAuth, async (req, res): Promise<void> => 
   res.sendStatus(204);
 });
 
-// 🔁 Reshare / Quote Gist
 router.post("/posts/:postId/reshare", requireAuth, async (req, res): Promise<void> => {
   const userId = (req as any).userId as string;
   const raw = Array.isArray(req.params.postId) ? req.params.postId[0] : req.params.postId;
@@ -302,19 +366,17 @@ router.post("/posts/:postId/reshare", requireAuth, async (req, res): Promise<voi
   const [original] = await db.select().from(postsTable).where(eq(postsTable.id, postId));
   if (!original) { res.status(404).json({ error: "Post not found" }); return; }
 
-  // Always point to the root original (never chain reshares)
   const rootPostId = original.originalPostId ?? original.id;
 
-  // Create the reshare post
   await db.insert(postsTable).values({
     authorId: userId,
     content: quoteText,
     imageUrl: null,
     videoUrl: null,
     originalPostId: rootPostId,
+    isAnonymous: false,
   });
 
-  // Increment reshare count on root original
   const [updated] = await db
     .update(postsTable)
     .set({ reshareCount: sql`${postsTable.reshareCount} + 1` })
@@ -324,7 +386,6 @@ router.post("/posts/:postId/reshare", requireAuth, async (req, res): Promise<voi
   res.json(ResharePostResponse.parse({ reshared: true, reshareCount: updated?.reshareCount ?? 0 }));
 });
 
-// 📌 Pin to profile (author only)
 router.patch("/posts/:postId/pin-profile", requireAuth, async (req, res): Promise<void> => {
   const userId = (req as any).userId as string;
   const raw = Array.isArray(req.params.postId) ? req.params.postId[0] : req.params.postId;
@@ -347,7 +408,6 @@ router.patch("/posts/:postId/pin-profile", requireAuth, async (req, res): Promis
   res.json(PinPostToProfileResponse.parse({ pinned: willPin }));
 });
 
-// 📌 Pin to feed (admin only)
 router.patch("/posts/:postId/pin-feed", requireAuth, async (req, res): Promise<void> => {
   const userId = (req as any).userId as string;
   const raw = Array.isArray(req.params.postId) ? req.params.postId[0] : req.params.postId;
@@ -357,8 +417,9 @@ router.patch("/posts/:postId/pin-feed", requireAuth, async (req, res): Promise<v
     return;
   }
 
-  const [caller] = await db.select({ isAdmin: usersTable.isAdmin }).from(usersTable).where(eq(usersTable.clerkUserId, userId));
-  if (!caller?.isAdmin) { res.status(403).json({ error: "Admin only" }); return; }
+  const [caller] = await db.select({ role: usersTable.role, isAdmin: usersTable.isAdmin }).from(usersTable).where(eq(usersTable.clerkUserId, userId));
+  const hasPermission = caller?.isAdmin || ["admin", "ceo"].includes(caller?.role ?? "");
+  if (!hasPermission) { res.status(403).json({ error: "Admin only" }); return; }
 
   const postId = params.data.postId;
   const [post] = await db.select().from(postsTable).where(eq(postsTable.id, postId));
@@ -372,7 +433,6 @@ router.patch("/posts/:postId/pin-feed", requireAuth, async (req, res): Promise<v
   res.json(PinPostToFeedResponse.parse({ pinned: willPin }));
 });
 
-// 🔥 Fire reaction (existing like)
 router.post("/posts/:postId/like", requireAuth, async (req, res): Promise<void> => {
   const userId = (req as any).userId as string;
   const raw = Array.isArray(req.params.postId) ? req.params.postId[0] : req.params.postId;
@@ -404,7 +464,6 @@ router.post("/posts/:postId/like", requireAuth, async (req, res): Promise<void> 
   res.json(LikePostResponse.parse({ liked, likesCount: updated?.likesCount ?? 0 }));
 });
 
-// 🧢 No Cap reaction
 router.post("/posts/:postId/nocap", requireAuth, async (req, res): Promise<void> => {
   const userId = (req as any).userId as string;
   const raw = Array.isArray(req.params.postId) ? req.params.postId[0] : req.params.postId;
@@ -436,7 +495,6 @@ router.post("/posts/:postId/nocap", requireAuth, async (req, res): Promise<void>
   res.json(NoCapPostResponse.parse({ noCaped, noCapsCount: updated?.noCapsCount ?? 0 }));
 });
 
-// 💬 List comments
 router.get("/posts/:postId/comments", async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.postId) ? req.params.postId[0] : req.params.postId;
   const params = ListPostCommentsParams.safeParse({ postId: raw });
@@ -475,7 +533,6 @@ router.get("/posts/:postId/comments", async (req, res): Promise<void> => {
   res.json(ListPostCommentsResponse.parse({ comments: mapped, total: mapped.length }));
 });
 
-// 💬 Create comment
 router.post("/posts/:postId/comments", requireAuth, async (req, res): Promise<void> => {
   const userId = (req as any).userId as string;
   const raw = Array.isArray(req.params.postId) ? req.params.postId[0] : req.params.postId;

@@ -41,6 +41,9 @@ export interface UserProfile {
   /** @nullable */
   avatarUrl: string | null;
   isAdmin: boolean;
+  role: string;
+  campusTitle: string;
+  verificationStatus: string;
   createdAt: string;
 }
 
@@ -59,6 +62,9 @@ export interface PublicUserProfile {
   /** @nullable */
   avatarUrl: string | null;
   isVerified: boolean;
+  role: string;
+  campusTitle: string;
+  verificationStatus: string;
 }
 
 export interface UpdateProfileBody {
@@ -74,6 +80,23 @@ export interface UpdateProfileBody {
   bio?: string | null;
   /** @nullable */
   avatarUrl?: string | null;
+}
+
+export type RequestBadgeBodyBadgeType =
+  (typeof RequestBadgeBodyBadgeType)[keyof typeof RequestBadgeBodyBadgeType];
+
+export const RequestBadgeBodyBadgeType = {
+  promo: "promo",
+  paid: "paid",
+} as const;
+
+export interface RequestBadgeBody {
+  badgeType: RequestBadgeBodyBadgeType;
+}
+
+export interface RequestBadgeResponse {
+  success: boolean;
+  verificationStatus: string;
 }
 
 export interface EmbeddedPost {
@@ -97,6 +120,9 @@ export interface Post {
   authorCampusLocation: string;
   /** @nullable */
   authorAvatarUrl: string | null;
+  authorCampusTitle: string;
+  authorRole: string;
+  isAnonymous: boolean;
   content: string;
   /** @nullable */
   imageUrl: string | null;
@@ -127,6 +153,7 @@ export interface CreatePostBody {
   imageUrl?: string | null;
   /** @nullable */
   videoUrl?: string | null;
+  isAnonymous?: boolean;
 }
 
 export interface LikeResponse {
@@ -172,6 +199,8 @@ export interface Service {
   providerIsVerified: boolean;
   /** @nullable */
   providerAvatarUrl: string | null;
+  providerCampusTitle: string;
+  providerRole: string;
   title: string;
   description: string;
   category: string;
@@ -264,6 +293,116 @@ export interface ErrorEnvelope {
   error: string;
 }
 
+export interface AdminUserItem {
+  clerkUserId: string;
+  fullName: string;
+  email: string;
+  faculty: string;
+  level: string;
+  role: string;
+  verificationStatus: string;
+  matricNumber: string;
+  /** @nullable */
+  avatarUrl: string | null;
+  campusTitle: string;
+  postCount: number;
+}
+
+export interface ListAdminUsersResponse {
+  users: AdminUserItem[];
+  total: number;
+}
+
+export type UpdateUserRoleBodyRole =
+  (typeof UpdateUserRoleBodyRole)[keyof typeof UpdateUserRoleBodyRole];
+
+export const UpdateUserRoleBodyRole = {
+  student: "student",
+  moderator: "moderator",
+  admin: "admin",
+  ceo: "ceo",
+} as const;
+
+export interface UpdateUserRoleBody {
+  role: UpdateUserRoleBodyRole;
+}
+
+export interface UpdateUserRoleResponse {
+  success: boolean;
+  role: string;
+}
+
+export interface PendingVerificationItem {
+  clerkUserId: string;
+  fullName: string;
+  matricNumber: string;
+  faculty: string;
+  level: string;
+  /** @nullable */
+  avatarUrl: string | null;
+  verificationStatus: string;
+  badgeType: string;
+}
+
+export interface ListPendingVerificationsResponse {
+  users: PendingVerificationItem[];
+}
+
+export interface ApproveBadgeResponse {
+  success: boolean;
+}
+
+export interface ConversationSummary {
+  id: number;
+  otherUserId: string;
+  otherUserName: string;
+  /** @nullable */
+  otherUserAvatarUrl: string | null;
+  /** @nullable */
+  lastMessage?: string | null;
+  lastMessageAt: string;
+  unreadCount: number;
+}
+
+export interface ListConversationsResponse {
+  conversations: ConversationSummary[];
+}
+
+export interface ConversationDetail {
+  id: number;
+  otherUserId: string;
+  otherUserName: string;
+  /** @nullable */
+  otherUserAvatarUrl: string | null;
+  createdAt: string;
+}
+
+export interface StartConversationBody {
+  targetUserId: string;
+}
+
+export interface DirectMessage {
+  id: number;
+  conversationId: number;
+  senderId: string;
+  content: string;
+  isRead: boolean;
+  createdAt: string;
+}
+
+export interface SendMessageBody {
+  /**
+   * @minLength 1
+   * @maxLength 2000
+   */
+  content: string;
+}
+
+export interface ListMessagesResponse {
+  messages: DirectMessage[];
+  total: number;
+}
+
 export type GetUserPostsParams = {
   limit?: number;
   offset?: number;
@@ -298,4 +437,15 @@ export type ListNotificationsParams = {
 
 export type TrackWhatsappClick200 = {
   ok: boolean;
+};
+
+export type ListAdminUsersParams = {
+  search?: string;
+  limit?: number;
+  offset?: number;
+};
+
+export type ListMessagesParams = {
+  limit?: number;
+  offset?: number;
 };
