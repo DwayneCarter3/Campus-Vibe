@@ -1,0 +1,127 @@
+Let's add the social communication layers, custom identity
+
+features, and our secure admin approval interface into our existing database
+
+and frontend code. Please implement these exact blocks:
+
+ 
+
+1. 1-ON-1 MESSAGING & REQUESTS:
+
+- Build an internal direct messaging (DM) module allowing
+
+users to send text messages and message requests to each other.
+
+- Add a highly visible direct 'Message Vendor' action button
+
+on all 'Hustle' marketplace listings that automatically opens a new chat
+
+session targeting that vendor's ID.
+
+ 
+
+2. DYNAMIC PROFILE PICTURES & CAMPUS TITLES:
+
+- Implement an engagement-based 'Campus Titles' array (e.g.,
+
+'Campus Daddy', 'Godfather', 'Big Daddy') directly next to usernames.
+
+- Profile Picture State Sync: When a user updates or uploads
+
+their custom profile picture, the app must instantly update globally across the
+
+state. The default generic placeholder icon in the top header navbar navigation
+
+bar must dynamically replace its source image with the user's newly uploaded
+
+secure URL profile image string immediately, ensuring a professional, high-end
+
+look across the entire UI layout.
+
+ 
+
+3. ONE-TAP PROFILE PICTURE FULL VIEW & ANONYMOUS
+
+POSTING:
+
+- Full View Modal: Implement a 'one-click/one-tap'
+
+interactive gesture listener on ALL user profile pictures across the app
+
+(including headers, feed items, and comments). When a student taps any user's
+
+profile image avatar, open a high-resolution full-screen modal backdrop overlay
+
+showcasing their full picture cleanly. Include a close button or
+
+swipe-to-dismiss feature to return back to the screen.
+
+- Inside the 'Amebo' feed post creator component, add an
+
+'Post Anonymously' toggle switch. If selected, strip out and hide their real
+
+profile picture, name, and campus title from the public feed item, replacing it
+
+with a generic label like 'Anonymous Student'. The underlying database table
+
+must still securely store the hidden true user ID internally for platform
+
+safety, but this identity must never be transmitted to other frontend clients.
+
+- If a post is anonymous, the 'one-tap full view' modal
+
+action on their image avatar must be completely disabled for that post.
+
+ 
+
+4. PRIVATE ADMIN CONTROL DASHBOARD, PROMO ROUTING, &
+
+ROLE MANAGEMENT:
+
+- Master Key Configuration: Hardcode a primary owner email
+
+string (e.g., your personal email) as the system's root 'Super Admin / CEO'.
+
+When an account matching this email logs in, automatically grant them
+
+unrestricted access to the hidden Admin Dashboard and flag their profile with
+
+the exclusive visual title 'CEO'.
+
+- Role Assignment Panel: Within the Admin Dashboard, build a
+
+secure 'User Management' tab accessible ONLY by the CEO email. This panel must
+
+allow searching for registered users by name or matriculation number and
+
+contain a dropdown/toggle to change their account role (e.g., 'Regular
+
+Student', 'Moderator', 'Admin').
+
+- Moderator Permissions: Users flagged as 'Moderator' or
+
+'Admin' by the CEO gain access to post-moderation actions (e.g., deleting
+
+flagging 'Amebo' posts or banning abusive marketplace accounts), but only the
+
+primary CEO email can assign or strip these roles away.
+
+- Pending Verifications Tab: Create a 'Pending
+
+Verifications' tab within this dashboard that dynamically displays a list of
+
+all users who are currently set to 'Premium_Pending_Approval'. Clearly label
+
+each user as either "Promo User (Free)" or "Paid User
+
+(Paystack)".
+
+- Each verification list item must display the
+
+user's name, matriculation number, and profile details alongside a prominent
+
+'Approve Badge' button. Tapping 'Approve Badge' must instantly update that
+
+user's status in the database to 'Approved', immediately rendering the glowing
+
+Premium Blue Tick next to their name across the entire app.
