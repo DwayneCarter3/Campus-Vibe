@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { useListPosts, useCreatePost, getListPostsQueryKey, useGetMyProfile, getGetMyProfileQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
@@ -7,9 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { Sparkles, Radio, Camera, Video, X, Loader2 } from "lucide-react";
+import { Sparkles, Radio, Camera, Video, X, Loader2, Ghost } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 
@@ -66,6 +65,7 @@ export default function FeedPage() {
   const [media, setMedia] = useState<MediaUpload | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [isAnonymous, setIsAnonymous] = useState(false);
 
   useEffect(() => {
     if (!isProfileLoading && (profileError || (profile && !profile.fullName))) {
@@ -105,10 +105,12 @@ export default function FeedPage() {
         content,
         imageUrl: media?.type === "image" ? media.url : null,
         videoUrl: media?.type === "video" ? media.url : null,
-      }
+        isAnonymous,
+      } as any
     }, {
       onSuccess: () => {
         setContent("");
+        setIsAnonymous(false);
         clearMedia();
         queryClient.invalidateQueries({ queryKey: getListPostsQueryKey() });
       }
@@ -318,7 +320,22 @@ export default function FeedPage() {
                   <Video className="h-4 w-4" />
                   <span className="hidden sm:inline">Video</span>
                 </button>
-                <span className="text-xs text-muted-foreground/50 ml-1 hidden sm:inline">Ctrl+Enter to post</span>
+
+                {/* Anonymous toggle */}
+                <button
+                  type="button"
+                  title="Post anonymously"
+                  onClick={() => setIsAnonymous((v) => !v)}
+                  className={cn(
+                    "flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all border",
+                    isAnonymous
+                      ? "bg-white/10 text-foreground border-white/20"
+                      : "text-muted-foreground hover:text-foreground hover:bg-white/5 border-transparent"
+                  )}
+                >
+                  <Ghost className="h-4 w-4" />
+                  <span className="hidden sm:inline">{isAnonymous ? "Anonymous" : "Anon?"}</span>
+                </button>
               </div>
               <Button
                 data-testid="btn-create-post"
@@ -326,7 +343,7 @@ export default function FeedPage() {
                 onClick={handlePost}
                 disabled={(!content.trim() && !media) || createPost.isPending || isUploading}
               >
-                {createPost.isPending ? "Posting..." : "Post Gist"}
+                {createPost.isPending ? "Posting..." : isAnonymous ? "Post Anon 👻" : "Post Gist"}
                 <Sparkles className="h-3 w-3 ml-1.5" />
               </Button>
             </div>
@@ -379,7 +396,7 @@ export default function FeedPage() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.04 }}
             >
-              <PostCard post={post} isAdmin={profile?.isAdmin} />
+              <PostCard post={post} isAdmin={profile?.isAdmin} isModerator={profile?.role === "moderator"} />
             </motion.div>
           ))
         )}

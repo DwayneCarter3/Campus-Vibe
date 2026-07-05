@@ -217,7 +217,7 @@ export default function EarnPage() {
                 exit={{ opacity: 0, scale: 0.9 }}
                 transition={{ delay: i * 0.04 }}
               >
-                <ServiceCard service={service} index={i} />
+                <ServiceCard service={service} index={i} currentUserId={profile?.clerkUserId} />
               </motion.div>
             ))}
           </AnimatePresence>

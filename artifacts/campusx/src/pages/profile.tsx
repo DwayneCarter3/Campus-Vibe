@@ -9,6 +9,7 @@ import {
   getGetUserServicesQueryKey,
   useRequestUploadUrl,
   useClaimAdmin,
+  useRequestPremiumBadge,
 } from "@workspace/api-client-react";
 import { useUser, useClerk } from "@clerk/react";
 import { useLocation } from "wouter";
@@ -33,10 +34,12 @@ import {
   Camera,
   Loader2,
   Crown,
+  Star,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { PostCard } from "@/components/post-card";
 import { ServiceCard } from "@/components/service-card";
+import { CampusTitleBadge } from "@/components/campus-title-badge";
 import { cn } from "@/lib/utils";
 
 type Tab = "posts" | "hustles";
@@ -55,6 +58,7 @@ export default function MyProfilePage() {
 
   const requestUploadUrl = useRequestUploadUrl();
   const claimAdmin = useClaimAdmin();
+  const requestBadge = useRequestPremiumBadge();
 
   const { data: profile, isLoading } = useGetMyProfile({
     query: { queryKey: getGetMyProfileQueryKey() },
@@ -173,10 +177,13 @@ export default function MyProfilePage() {
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap mb-1">
                 <h1 className="text-xl font-bold">{profile.fullName}</h1>
-                {hasMatric && (
+                {hasMatric && profile.verificationStatus === "approved" && (
                   <Badge className="text-[10px] px-1.5 py-0 h-4 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-medium flex items-center gap-0.5">
                     <ShieldCheck className="h-2.5 w-2.5" /> Verified
                   </Badge>
+                )}
+                {profile.campusTitle && (
+                  <CampusTitleBadge title={profile.campusTitle} role={profile.role ?? undefined} />
                 )}
               </div>
 
@@ -251,6 +258,43 @@ export default function MyProfilePage() {
             Your matric number is encrypted and never shared publicly. It is used only to grant your Verified Student badge.
           </p>
         </div>
+
+        {/* ── Badge Request Section ──────────────────────── */}
+        {hasMatric && profile.verificationStatus !== "approved" && (
+          <div className="rounded-2xl border border-sky-500/20 bg-sky-500/5 p-4 flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="h-8 w-8 rounded-full bg-sky-500/15 border border-sky-500/25 flex items-center justify-center shrink-0">
+                <Star className="h-4 w-4 text-sky-400" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-sky-200">Verified Student Badge</p>
+                <p className="text-[11px] text-muted-foreground">
+                  {profile.verificationStatus === "pending_promo" || profile.verificationStatus === "pending_paid"
+                    ? "Your badge request is pending admin review."
+                    : "Request a blue verification badge — free for active students."}
+                </p>
+              </div>
+            </div>
+            {profile.verificationStatus === "none" && (
+              <Button
+                size="sm"
+                className="shrink-0 text-xs bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/30"
+                onClick={() =>
+                  requestBadge.mutate(
+                    { data: { badgeType: "promo" as any } },
+                    { onSuccess: () => queryClient.invalidateQueries({ queryKey: getGetMyProfileQueryKey() }) }
+                  )
+                }
+                disabled={requestBadge.isPending}
+              >
+                {requestBadge.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Request Badge"}
+              </Button>
+            )}
+            {(profile.verificationStatus === "pending_promo" || profile.verificationStatus === "pending_paid") && (
+              <Badge className="shrink-0 text-[11px] bg-amber-500/15 text-amber-400 border border-amber-500/25">Pending</Badge>
+            )}
+          </div>
+        )}
 
         {/* ── Admin Section ──────────────────────────────── */}
         {profile.isAdmin ? (

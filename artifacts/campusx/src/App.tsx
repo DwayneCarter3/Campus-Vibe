@@ -20,6 +20,8 @@ import FeedPage from "@/pages/feed";
 import EarnPage from "@/pages/earn";
 import MyProfilePage from "@/pages/profile";
 import UserProfilePage from "@/pages/user-profile";
+import MessagesPage from "@/pages/messages";
+import AdminPage from "@/pages/admin";
 import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient();
@@ -153,20 +155,22 @@ function ClerkProviderWithRoutes() {
       <QueryClientProvider client={queryClient}>
         <ClerkQueryClientCacheInvalidator />
         <NotificationProvider>
-      <Layout>
-          <Switch>
-            <Route path="/" component={HomeRedirect} />
-            <Route path="/sign-in/*?" component={SignInPage} />
-            <Route path="/sign-up/*?" component={SignUpPage} />
-            <Route path="/onboarding" component={() => <ProtectedRoute component={Onboarding} />} />
-            <Route path="/feed" component={() => <ProtectedRoute component={FeedPage} />} />
-            <Route path="/earn" component={() => <ProtectedRoute component={EarnPage} />} />
-            <Route path="/profile" component={() => <ProtectedRoute component={MyProfilePage} />} />
-            <Route path="/profile/:userId" component={() => <ProtectedRoute component={UserProfilePage} />} />
-            <Route component={NotFound} />
-          </Switch>
-        </Layout>
-      </NotificationProvider>
+          <Layout>
+            <Switch>
+              <Route path="/" component={HomeRedirect} />
+              <Route path="/sign-in/*?" component={SignInPage} />
+              <Route path="/sign-up/*?" component={SignUpPage} />
+              <Route path="/onboarding" component={() => <ProtectedRoute component={Onboarding} />} />
+              <Route path="/feed" component={() => <ProtectedRoute component={FeedPage} />} />
+              <Route path="/earn" component={() => <ProtectedRoute component={EarnPage} />} />
+              <Route path="/messages" component={() => <ProtectedRoute component={MessagesPage} />} />
+              <Route path="/admin" component={() => <ProtectedRoute component={AdminPage} />} />
+              <Route path="/profile" component={() => <ProtectedRoute component={MyProfilePage} />} />
+              <Route path="/profile/:userId" component={() => <ProtectedRoute component={UserProfilePage} />} />
+              <Route component={NotFound} />
+            </Switch>
+          </Layout>
+        </NotificationProvider>
       </QueryClientProvider>
     </ClerkProvider>
   );

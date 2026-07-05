@@ -1,3 +1,5 @@
 - [Codegen barrel fix](codegen-barrel-fix.md) — after every `codegen` run, must manually fix both barrels; run `typecheck:libs` after.
 - [UploadUrlResponse field name](upload-url-fields.md) — generated type uses `uploadURL` (not `signedUrl`) and `objectPath`.
 - [Admin bootstrap pattern](admin-bootstrap.md) — first-claim endpoint; isAdmin in usersTable; pin-feed requires isAdmin check.
+- [Barrel split: api-zod vs api-client-react](codegen-barrel-fix.md) — api-zod generated dir has only `api.ts`; api-client-react has `api.ts` + `api.schemas.ts`. Never export `api.schemas` from api-zod barrel.
+- [Campus titles + role system](campus-roles.md) — computeCampusTitle in admin.ts, imported by users.ts and posts.ts; CEO_EMAIL env auto-upgrades on login; role values: ceo/admin/moderator/student.
