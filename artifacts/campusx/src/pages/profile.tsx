@@ -298,15 +298,29 @@ export default function MyProfilePage() {
 
         {/* ── Admin Section ──────────────────────────────── */}
         {profile.isAdmin ? (
-          <div className="rounded-2xl border border-primary/25 bg-primary/5 p-4 flex items-center gap-3">
-            <div className="h-8 w-8 rounded-full bg-primary/20 border border-primary/30 flex items-center justify-center shrink-0">
+          <button
+            onClick={() => setLocation("/admin")}
+            className="w-full text-left rounded-2xl border border-primary/25 bg-primary/5 p-4 flex items-center gap-3 hover:bg-primary/10 hover:border-primary/40 transition-all group"
+          >
+            <div className="h-9 w-9 rounded-full bg-primary/20 border border-primary/30 flex items-center justify-center shrink-0 group-hover:bg-primary/30 transition-colors">
               <Crown className="h-4 w-4 text-primary" />
             </div>
-            <div>
-              <p className="text-sm font-semibold text-primary">Campus Admin</p>
-              <p className="text-[11px] text-muted-foreground">You can pin posts to the main feed.</p>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-primary">
+                {profile.role === "ceo" ? "CEO Control Panel" : "Campus Admin Panel"}
+              </p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">
+                {profile.role === "ceo"
+                  ? "Manage roles, approve badges, view all users →"
+                  : "Approve student verification badges →"}
+              </p>
             </div>
-          </div>
+            <div className="text-primary/50 group-hover:text-primary transition-colors shrink-0">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M9 18l6-6-6-6"/>
+              </svg>
+            </div>
+          </button>
         ) : (
           <div className="rounded-2xl border border-white/5 bg-background/40 p-4 flex items-center justify-between gap-4">
             <div className="flex items-center gap-3 min-w-0">
