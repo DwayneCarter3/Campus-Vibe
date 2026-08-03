@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { eq, desc, and, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
+import { clerkClient } from "@clerk/express";
 import { db, usersTable, postsTable, postLikesTable, postNoCapsTable, postCommentsTable, servicesTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/auth";
 import {
@@ -40,6 +41,20 @@ router.get("/users/me", requireAuth, async (req, res): Promise<void> => {
   if (!user) {
     res.status(404).json({ error: "Profile not found" });
     return;
+  }
+
+  // Sync email from Clerk if DB email is missing/stale — enables CEO auto-detect
+  if (!user.email) {
+    try {
+      const clerkUser = await clerkClient.users.getUser(userId);
+      const clerkEmail = clerkUser.emailAddresses.find(
+        (e) => e.id === clerkUser.primaryEmailAddressId
+      )?.emailAddress ?? "";
+      if (clerkEmail) {
+        await db.update(usersTable).set({ email: clerkEmail }).where(eq(usersTable.clerkUserId, userId));
+        user = { ...user, email: clerkEmail };
+      }
+    } catch { /* non-fatal */ }
   }
 
   if (user.email === CEO_EMAIL && user.role !== "ceo") {

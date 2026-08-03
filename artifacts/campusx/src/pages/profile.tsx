@@ -40,6 +40,7 @@ import { motion } from "framer-motion";
 import { PostCard } from "@/components/post-card";
 import { ServiceCard } from "@/components/service-card";
 import { CampusTitleBadge } from "@/components/campus-title-badge";
+import { AvatarModal } from "@/components/avatar-modal";
 import { cn } from "@/lib/utils";
 
 type Tab = "posts" | "hustles";
@@ -51,6 +52,7 @@ export default function MyProfilePage() {
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<Tab>("posts");
   const [editOpen, setEditOpen] = useState(false);
+  const [avatarModalOpen, setAvatarModalOpen] = useState(false);
   const [editBio, setEditBio] = useState("");
   const [editAvatarUrl, setEditAvatarUrl] = useState("");
   const [isAvatarUploading, setIsAvatarUploading] = useState(false);
@@ -151,6 +153,9 @@ export default function MyProfilePage() {
   if (!profile) return null;
 
   const hasMatric = !!(profile.matricNumber && profile.matricNumber.trim());
+  const CEO_EMAIL = "dwaynecartergabriel@gmail.com";
+  const clerkEmail = clerkUser?.primaryEmailAddress?.emailAddress ?? "";
+  const effectiveIsAdmin = profile.isAdmin || clerkEmail === CEO_EMAIL;
 
   return (
     <div className="container mx-auto px-4 py-6 max-w-3xl pb-24">
@@ -160,13 +165,16 @@ export default function MyProfilePage() {
         <div className="glass rounded-3xl p-6 border border-white/5">
           <div className="flex flex-col sm:flex-row gap-5 items-start sm:items-center">
 
-            <div className="relative shrink-0">
-              <Avatar className="h-20 w-20 border-2 border-primary/30 shadow-lg">
+            <div className="relative shrink-0 cursor-pointer group/avatar" onClick={() => setAvatarModalOpen(true)}>
+              <Avatar className="h-20 w-20 border-2 border-primary/30 shadow-lg group-hover/avatar:border-primary/60 transition-colors">
                 <AvatarImage src={profile.avatarUrl || undefined} />
                 <AvatarFallback className="text-2xl gradient-text font-bold">
                   {profile.fullName.charAt(0)}
                 </AvatarFallback>
               </Avatar>
+              <div className="absolute inset-0 rounded-full bg-black/0 group-hover/avatar:bg-black/20 transition-colors flex items-center justify-center">
+                <Camera className="h-5 w-5 text-white opacity-0 group-hover/avatar:opacity-80 transition-opacity" />
+              </div>
               {hasMatric && (
                 <div className="absolute -bottom-1 -right-1 h-6 w-6 rounded-full bg-emerald-500 border-2 border-background flex items-center justify-center">
                   <ShieldCheck className="h-3 w-3 text-white" />
@@ -297,7 +305,7 @@ export default function MyProfilePage() {
         )}
 
         {/* ── Admin Section ──────────────────────────────── */}
-        {profile.isAdmin ? (
+        {effectiveIsAdmin ? (
           <button
             onClick={() => setLocation("/admin")}
             className="w-full text-left rounded-2xl border border-primary/25 bg-primary/5 p-4 flex items-center gap-3 hover:bg-primary/10 hover:border-primary/40 transition-all group"
@@ -307,10 +315,10 @@ export default function MyProfilePage() {
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold text-primary">
-                {profile.role === "ceo" ? "CEO Control Panel" : "Campus Admin Panel"}
+                {(profile.role === "ceo" || clerkEmail === CEO_EMAIL) ? "CEO Control Panel" : "Campus Admin Panel"}
               </p>
               <p className="text-[11px] text-muted-foreground mt-0.5">
-                {profile.role === "ceo"
+                {(profile.role === "ceo" || clerkEmail === CEO_EMAIL)
                   ? "Manage roles, approve badges, view all users →"
                   : "Approve student verification badges →"}
               </p>
@@ -493,6 +501,13 @@ export default function MyProfilePage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <AvatarModal
+        open={avatarModalOpen}
+        onClose={() => setAvatarModalOpen(false)}
+        avatarUrl={profile.avatarUrl}
+        name={profile.fullName}
+      />
     </div>
   );
 }

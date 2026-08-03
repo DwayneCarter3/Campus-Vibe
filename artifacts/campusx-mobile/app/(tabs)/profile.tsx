@@ -1,11 +1,14 @@
-import { useAuth, useUser } from "@clerk/expo";
+import { useAuth, useUser as useClerkUser } from "@clerk/expo";
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import React, { useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Image,
+  Modal,
   Platform,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -20,10 +23,14 @@ import {
   useGetMyProfile,
   getGetMyProfileQueryKey,
   useGetUserPosts,
+  getGetUserPostsQueryKey,
   useGetUserServices,
+  getGetUserServicesQueryKey,
   useRequestPremiumBadge,
 } from "@workspace/api-client-react";
 import { useColors } from "@/hooks/useColors";
+
+const CEO_EMAIL = "dwaynecartergabriel@gmail.com";
 
 const CAMPUS_TITLE_COLORS: Record<string, string> = {
   "CEO": "#F59E0B",
@@ -41,9 +48,10 @@ export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { signOut } = useAuth();
-  const { user: clerkUser } = useUser();
+  const { user: clerkUser } = useClerkUser();
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<"gist" | "hustles">("gist");
+  const [avatarModalOpen, setAvatarModalOpen] = useState(false);
 
   const { data: profile, isLoading } = useGetMyProfile({
     query: { queryKey: getGetMyProfileQueryKey() },
@@ -51,8 +59,8 @@ export default function ProfileScreen() {
   const requestBadge = useRequestPremiumBadge();
 
   const clerkUserId = clerkUser?.id ?? "";
-  const { data: postsData } = useGetUserPosts(clerkUserId, {}, { query: { enabled: !!clerkUserId } });
-  const { data: servicesData } = useGetUserServices(clerkUserId, {}, { query: { enabled: !!clerkUserId } });
+  const { data: postsData } = useGetUserPosts(clerkUserId, {}, { query: { queryKey: getGetUserPostsQueryKey(clerkUserId, {}), enabled: !!clerkUserId } });
+  const { data: servicesData } = useGetUserServices(clerkUserId, {}, { query: { queryKey: getGetUserServicesQueryKey(clerkUserId, {}), enabled: !!clerkUserId } });
 
   const myPosts = postsData?.posts ?? [];
   const myServices = servicesData?.services ?? [];
@@ -103,9 +111,10 @@ export default function ProfileScreen() {
   const verificationStatus = (profile as any)?.verificationStatus ?? "none";
   const isVerified = verificationStatus === "approved";
   const badgePending = verificationStatus === "pending_promo" || verificationStatus === "pending_paid";
+  const clerkEmail = clerkUser?.primaryEmailAddress?.emailAddress ?? "";
   const isAdmin = profile?.isAdmin;
-  const isAdminOrCEO = isAdmin || (profile as any)?.role === "admin" || (profile as any)?.role === "ceo";
-  const isCEO = (profile as any)?.role === "ceo";
+  const isCEO = (profile as any)?.role === "ceo" || clerkEmail === CEO_EMAIL;
+  const isAdminOrCEO = isCEO || isAdmin || (profile as any)?.role === "admin";
   const totalFires = myPosts.reduce((s, p) => s + p.likesCount, 0);
 
   return (
@@ -122,15 +131,23 @@ export default function ProfileScreen() {
 
         {/* Profile card */}
         <View style={[styles.profileCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          {/* Avatar */}
-          <View style={[styles.bigAvatar, { backgroundColor: colors.primary + "25", borderColor: colors.primary + "40" }]}>
-            <Text style={[styles.bigAvatarText, { color: colors.primary }]}>{displayName.charAt(0)}</Text>
+          {/* Avatar — tap for full-screen view */}
+          <TouchableOpacity
+            activeOpacity={0.85}
+            onPress={() => setAvatarModalOpen(true)}
+            style={[styles.bigAvatar, { backgroundColor: colors.primary + "25", borderColor: colors.primary + "40" }]}
+          >
+            {profile?.avatarUrl ? (
+              <Image source={{ uri: profile.avatarUrl }} style={styles.bigAvatarImg} />
+            ) : (
+              <Text style={[styles.bigAvatarText, { color: colors.primary }]}>{displayName.charAt(0)}</Text>
+            )}
             {isVerified && (
               <View style={styles.verifiedDot}>
                 <Feather name="check" size={8} color="#fff" />
               </View>
             )}
-          </View>
+          </TouchableOpacity>
 
           {/* Name + campus title */}
           <Text style={[styles.profileName, { color: colors.foreground }]}>{displayName}</Text>
@@ -349,6 +366,36 @@ export default function ProfileScreen() {
           )}
         </View>
       </ScrollView>
+
+      {/* Full-screen avatar modal */}
+      <Modal
+        visible={avatarModalOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setAvatarModalOpen(false)}
+      >
+        <Pressable
+          style={styles.modalOverlay}
+          onPress={() => setAvatarModalOpen(false)}
+        >
+          <View style={styles.modalContent}>
+            {profile?.avatarUrl ? (
+              <Image
+                source={{ uri: profile.avatarUrl }}
+                style={styles.modalAvatar}
+                resizeMode="cover"
+              />
+            ) : (
+              <View style={[styles.modalAvatarFallback, { backgroundColor: colors.primary + "30", borderColor: colors.primary + "60" }]}>
+                <Text style={[styles.modalAvatarFallbackText, { color: colors.primary }]}>
+                  {displayName.charAt(0).toUpperCase()}
+                </Text>
+              </View>
+            )}
+            <Text style={styles.modalName}>{displayName}</Text>
+          </View>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -364,6 +411,13 @@ const styles = StyleSheet.create({
   profileCard: { margin: 16, borderRadius: 20, borderWidth: 1, padding: 20, alignItems: "center" },
   bigAvatar: { width: 80, height: 80, borderRadius: 40, alignItems: "center", justifyContent: "center", borderWidth: 2, marginBottom: 12, position: "relative" },
   bigAvatarText: { fontSize: 36, fontWeight: "700" },
+  bigAvatarImg: { width: 80, height: 80, borderRadius: 40 },
+  modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.85)", alignItems: "center", justifyContent: "center" },
+  modalContent: { alignItems: "center", gap: 16 },
+  modalAvatar: { width: 260, height: 260, borderRadius: 130, borderWidth: 3, borderColor: "rgba(255,255,255,0.2)" },
+  modalAvatarFallback: { width: 260, height: 260, borderRadius: 130, alignItems: "center", justifyContent: "center", borderWidth: 3 },
+  modalAvatarFallbackText: { fontSize: 100, fontWeight: "800" },
+  modalName: { color: "#fff", fontSize: 18, fontWeight: "700", textShadowColor: "rgba(0,0,0,0.5)", textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4 },
   verifiedDot: { position: "absolute", bottom: 0, right: 0, width: 22, height: 22, borderRadius: 11, backgroundColor: "#10B981", alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: "#090912" },
   profileName: { fontSize: 20, fontWeight: "700", marginBottom: 6 },
   titlePill: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20, borderWidth: 1, marginBottom: 10 },

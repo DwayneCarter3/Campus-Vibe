@@ -25,6 +25,9 @@ import {
 } from "@workspace/api-client-react";
 import type { AdminUserItem, PendingVerificationItem } from "@workspace/api-client-react";
 import { useColors } from "@/hooks/useColors";
+import { useUser } from "@clerk/expo";
+
+const CEO_EMAIL = "dwaynecartergabriel@gmail.com";
 
 type AdminTab = "verifications" | "users";
 type UserRole = "student" | "moderator" | "admin" | "ceo";
@@ -49,8 +52,10 @@ export default function AdminScreen() {
   const [activeTab, setActiveTab] = useState<AdminTab>("verifications");
   const [search, setSearch] = useState("");
 
+  const { user: clerkUser } = useUser();
   const { data: profile, isLoading: profileLoading } = useGetMyProfile();
-  const isCEO = profile?.role === "ceo";
+  const clerkEmail = clerkUser?.primaryEmailAddress?.emailAddress ?? "";
+  const isCEO = profile?.role === "ceo" || clerkEmail === CEO_EMAIL;
   const isAdminOrCEO = isCEO || profile?.role === "admin";
 
   const { data: usersData, isLoading: usersLoading } = useListAdminUsers(

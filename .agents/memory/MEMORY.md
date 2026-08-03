@@ -3,3 +3,4 @@
 - [Admin bootstrap pattern](admin-bootstrap.md) — first-claim endpoint; isAdmin in usersTable; pin-feed requires isAdmin check.
 - [Barrel split: api-zod vs api-client-react](codegen-barrel-fix.md) — api-zod generated dir has only `api.ts`; api-client-react has `api.ts` + `api.schemas.ts`. Never export `api.schemas` from api-zod barrel.
 - [Campus titles + role system](campus-roles.md) — computeCampusTitle in admin.ts, imported by users.ts and posts.ts; CEO_EMAIL env auto-upgrades on login; role values: ceo/admin/moderator/student.
+- [CEO access guard pattern](ceo-access-guard.md) — DB email may be empty if not sent during onboarding; use Clerk email as frontend bypass + sync email via clerkClient in GET /users/me.

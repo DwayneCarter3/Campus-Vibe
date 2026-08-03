@@ -11,6 +11,7 @@ import {
 } from "@workspace/api-client-react";
 import type { AdminUserItem, PendingVerificationItem } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useUser } from "@clerk/react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -31,17 +32,21 @@ import { useLocation } from "wouter";
 
 type AdminTab = "users" | "verifications";
 
+const CEO_EMAIL = "dwaynecartergabriel@gmail.com";
+
 export default function AdminPage() {
   const [, setLocation] = useLocation();
   const [activeTab, setActiveTab] = useState<AdminTab>("users");
   const [search, setSearch] = useState("");
   const queryClient = useQueryClient();
+  const { user: clerkUser } = useUser();
 
   const { data: profile, isLoading: profileLoading } = useGetMyProfile({
     query: { queryKey: getGetMyProfileQueryKey() },
   });
 
-  const isCEO = profile?.role === "ceo";
+  const clerkEmail = clerkUser?.primaryEmailAddress?.emailAddress ?? "";
+  const isCEO = profile?.role === "ceo" || clerkEmail === CEO_EMAIL;
   const isAdminOrCEO = isCEO || profile?.role === "admin";
 
   const { data: usersData, isLoading: usersLoading } = useListAdminUsers(
