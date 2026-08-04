@@ -24,3 +24,16 @@ export function broadcastNotification(userId: string, notification: object): voi
     }
   });
 }
+
+export function broadcastDm(userId: string, payload: object): void {
+  const userClients = clients.get(userId);
+  if (!userClients || userClients.size === 0) return;
+  const data = `event: dm\ndata: ${JSON.stringify(payload)}\n\n`;
+  userClients.forEach((res) => {
+    try {
+      res.write(data);
+    } catch {
+      // client disconnected
+    }
+  });
+}

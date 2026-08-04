@@ -17,9 +17,12 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { useQueryClient } from "@tanstack/react-query";
+import { useRouter } from "expo-router";
+import { useAuth } from "@clerk/expo";
 import {
   useListServices,
   getListServicesQueryKey,
+  useStartConversation,
   useCreateService,
   useTrackWhatsappClick,
   Service,
@@ -41,7 +44,10 @@ const CATEGORY_ICONS: Record<string, string> = {
 
 function ServiceCard({ service }: { service: Service }) {
   const colors = useColors();
+  const router = useRouter();
+  const { userId: myClerkId } = useAuth();
   const trackClick = useTrackWhatsappClick();
+  const startConv = useStartConversation();
 
   const handleWhatsApp = () => {
     const number = service.contactInfo.replace(/\D/g, "");
@@ -50,6 +56,13 @@ function ServiceCard({ service }: { service: Service }) {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     trackClick.mutate({ serviceId: String(service.id) });
   };
+
+  const handleMessage = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    router.push(`/messages?with=${service.providerId}`);
+  };
+
+  const isOwnListing = myClerkId === service.providerId;
 
   return (
     <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
@@ -82,10 +95,22 @@ function ServiceCard({ service }: { service: Service }) {
             ) : null}
           </View>
         </View>
-        <TouchableOpacity onPress={handleWhatsApp} style={[styles.whatsappBtn, { backgroundColor: "#25D366" }]} activeOpacity={0.8}>
-          <Feather name="message-circle" size={14} color="#fff" />
-          <Text style={styles.whatsappText}>Chat</Text>
-        </TouchableOpacity>
+        <View style={styles.actionBtns}>
+          {!isOwnListing && (
+            <TouchableOpacity
+              onPress={handleMessage}
+              style={[styles.dmBtn, { backgroundColor: colors.primary + "20", borderColor: colors.primary + "40" }]}
+              activeOpacity={0.8}
+              disabled={startConv.isPending}
+            >
+              <Feather name="message-square" size={14} color={colors.primary} />
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity onPress={handleWhatsApp} style={[styles.whatsappBtn, { backgroundColor: "#25D366" }]} activeOpacity={0.8}>
+            <Feather name="message-circle" size={14} color="#fff" />
+            <Text style={styles.whatsappText}>Chat</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     </View>
   );
@@ -309,6 +334,8 @@ const styles = StyleSheet.create({
   avatarSmText: { fontSize: 14, fontWeight: "700" },
   authorName: { fontSize: 13, fontWeight: "600" },
   priceText: { fontSize: 15, fontWeight: "700" },
+  actionBtns: { flexDirection: "row", alignItems: "center", gap: 8 },
+  dmBtn: { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center", borderWidth: 1 },
   whatsappBtn: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20 },
   whatsappText: { color: "#fff", fontSize: 13, fontWeight: "700" },
   fab: { position: "absolute", right: 20, width: 56, height: 56, borderRadius: 28, alignItems: "center", justifyContent: "center", shadowColor: "#FF3399", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.4, shadowRadius: 12, elevation: 8 },

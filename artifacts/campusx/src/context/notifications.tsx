@@ -12,6 +12,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "@/hooks/use-toast";
 import {
   getListNotificationsQueryKey,
+  getListConversationsQueryKey,
+  getListMessagesQueryKey,
   useListNotifications,
 } from "@workspace/api-client-react";
 import type { AppNotification } from "@workspace/api-client-react";
@@ -117,6 +119,28 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
         toast({
           title: `${emoji} ${notif.message}`,
           description: notif.actorName ? `from ${notif.actorName}` : undefined,
+        });
+      } catch {
+        // malformed event
+      }
+    });
+
+    es.addEventListener("dm", (e: MessageEvent) => {
+      try {
+        const dm = JSON.parse(e.data) as {
+          conversationId: number;
+          senderId: string;
+          senderName: string;
+          content: string;
+        };
+        // Refresh conversation list sidebar immediately
+        queryClient.invalidateQueries({ queryKey: getListConversationsQueryKey() });
+        // Refresh messages if this conversation is open
+        queryClient.invalidateQueries({ queryKey: getListMessagesQueryKey(dm.conversationId) });
+        playPopSound();
+        toast({
+          title: `💬 ${dm.senderName}`,
+          description: dm.content.length > 60 ? dm.content.slice(0, 60) + "…" : dm.content,
         });
       } catch {
         // malformed event

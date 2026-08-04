@@ -47,7 +47,7 @@ export default function MessagesPage() {
       query: {
         queryKey: getListMessagesQueryKey(activeConvId ?? 0),
         enabled: activeConvId !== null,
-        refetchInterval: 3000,
+        refetchInterval: 10000, // SSE handles instant updates; this is a safety fallback
       },
     }
   );

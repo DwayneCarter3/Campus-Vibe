@@ -27,8 +27,11 @@ import {
   useGetUserServices,
   getGetUserServicesQueryKey,
   useRequestPremiumBadge,
+  useUpdateMyProfile,
+  useRequestUploadUrl,
 } from "@workspace/api-client-react";
 import { useColors } from "@/hooks/useColors";
+import * as ImagePicker from "expo-image-picker";
 
 const CEO_EMAIL = "dwaynecartergabriel@gmail.com";
 
@@ -52,11 +55,14 @@ export default function ProfileScreen() {
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<"gist" | "hustles">("gist");
   const [avatarModalOpen, setAvatarModalOpen] = useState(false);
+  const [isAvatarUploading, setIsAvatarUploading] = useState(false);
 
   const { data: profile, isLoading } = useGetMyProfile({
     query: { queryKey: getGetMyProfileQueryKey() },
   });
   const requestBadge = useRequestPremiumBadge();
+  const updateProfile = useUpdateMyProfile();
+  const requestUploadUrl = useRequestUploadUrl();
 
   const clerkUserId = clerkUser?.id ?? "";
   const { data: postsData } = useGetUserPosts(clerkUserId, {}, { query: { queryKey: getGetUserPostsQueryKey(clerkUserId, {}), enabled: !!clerkUserId } });
@@ -91,6 +97,48 @@ export default function ProfileScreen() {
   const handleAdminNav = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     router.push("/admin");
+  };
+
+  const handlePickPhoto = async () => {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert("Permission needed", "Please allow access to your photo library to upload an avatar.");
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["images"],
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+    if (result.canceled || !result.assets[0]) return;
+
+    const asset = result.assets[0];
+    const filename = asset.uri.split("/").pop() ?? "avatar.jpg";
+    const contentType = asset.mimeType ?? "image/jpeg";
+
+    setIsAvatarUploading(true);
+    setAvatarModalOpen(false);
+    try {
+      const { uploadURL, objectPath } = await requestUploadUrl.mutateAsync({
+        data: { name: filename, size: asset.fileSize ?? 0, contentType },
+      });
+      const blob = await fetch(asset.uri).then((r) => r.blob());
+      const upload = await fetch(uploadURL, {
+        method: "PUT",
+        body: blob,
+        headers: { "Content-Type": contentType },
+      });
+      if (!upload.ok) throw new Error("Upload failed");
+      const newAvatarUrl = `/api/storage${objectPath}`;
+      await updateProfile.mutateAsync({ data: { avatarUrl: newAvatarUrl } });
+      queryClient.invalidateQueries({ queryKey: getGetMyProfileQueryKey() });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch {
+      Alert.alert("Upload failed", "Could not upload your photo. Please try again.");
+    } finally {
+      setIsAvatarUploading(false);
+    }
   };
 
   if (isLoading) {
@@ -136,15 +184,24 @@ export default function ProfileScreen() {
             activeOpacity={0.85}
             onPress={() => setAvatarModalOpen(true)}
             style={[styles.bigAvatar, { backgroundColor: colors.primary + "25", borderColor: colors.primary + "40" }]}
+            disabled={isAvatarUploading}
           >
-            {profile?.avatarUrl ? (
+            {isAvatarUploading ? (
+              <ActivityIndicator color={colors.primary} />
+            ) : profile?.avatarUrl ? (
               <Image source={{ uri: profile.avatarUrl }} style={styles.bigAvatarImg} />
             ) : (
               <Text style={[styles.bigAvatarText, { color: colors.primary }]}>{displayName.charAt(0)}</Text>
             )}
-            {isVerified && (
+            {isVerified && !isAvatarUploading && (
               <View style={styles.verifiedDot}>
                 <Feather name="check" size={8} color="#fff" />
+              </View>
+            )}
+            {/* Camera badge */}
+            {!isAvatarUploading && (
+              <View style={[styles.cameraBadge, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                <Feather name="camera" size={9} color={colors.mutedForeground} />
               </View>
             )}
           </TouchableOpacity>
@@ -393,6 +450,14 @@ export default function ProfileScreen() {
               </View>
             )}
             <Text style={styles.modalName}>{displayName}</Text>
+            <TouchableOpacity
+              onPress={handlePickPhoto}
+              style={styles.changePhotoBtn}
+              activeOpacity={0.8}
+            >
+              <Feather name="camera" size={14} color="#fff" />
+              <Text style={styles.changePhotoBtnText}>Change Photo</Text>
+            </TouchableOpacity>
           </View>
         </Pressable>
       </Modal>
@@ -412,12 +477,15 @@ const styles = StyleSheet.create({
   bigAvatar: { width: 80, height: 80, borderRadius: 40, alignItems: "center", justifyContent: "center", borderWidth: 2, marginBottom: 12, position: "relative" },
   bigAvatarText: { fontSize: 36, fontWeight: "700" },
   bigAvatarImg: { width: 80, height: 80, borderRadius: 40 },
+  cameraBadge: { position: "absolute", bottom: 0, left: 0, width: 20, height: 20, borderRadius: 10, alignItems: "center", justifyContent: "center", borderWidth: 1 },
   modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.85)", alignItems: "center", justifyContent: "center" },
   modalContent: { alignItems: "center", gap: 16 },
   modalAvatar: { width: 260, height: 260, borderRadius: 130, borderWidth: 3, borderColor: "rgba(255,255,255,0.2)" },
   modalAvatarFallback: { width: 260, height: 260, borderRadius: 130, alignItems: "center", justifyContent: "center", borderWidth: 3 },
   modalAvatarFallbackText: { fontSize: 100, fontWeight: "800" },
   modalName: { color: "#fff", fontSize: 18, fontWeight: "700", textShadowColor: "rgba(0,0,0,0.5)", textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4 },
+  changePhotoBtn: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: "rgba(255,255,255,0.15)", borderRadius: 24, paddingHorizontal: 20, paddingVertical: 10, borderWidth: 1, borderColor: "rgba(255,255,255,0.2)" },
+  changePhotoBtnText: { color: "#fff", fontSize: 14, fontWeight: "600" },
   verifiedDot: { position: "absolute", bottom: 0, right: 0, width: 22, height: 22, borderRadius: 11, backgroundColor: "#10B981", alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: "#090912" },
   profileName: { fontSize: 20, fontWeight: "700", marginBottom: 6 },
   titlePill: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20, borderWidth: 1, marginBottom: 10 },

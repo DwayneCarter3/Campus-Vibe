@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { eq, or, and, desc, sql } from "drizzle-orm";
 import { db, conversationsTable, messagesTable, usersTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/auth";
+import { broadcastDm } from "../sse-manager";
 
 const router: IRouter = Router();
 
@@ -216,6 +217,23 @@ router.post("/messages/conversations/:conversationId/messages", requireAuth, asy
     .update(conversationsTable)
     .set({ lastMessageAt: new Date() })
     .where(eq(conversationsTable.id, conversationId));
+
+  // Push real-time DM event to the recipient via SSE
+  const recipientId = conv.participant1Id === userId ? conv.participant2Id : conv.participant1Id;
+  try {
+    const [sender] = await db
+      .select({ fullName: usersTable.fullName })
+      .from(usersTable)
+      .where(eq(usersTable.clerkUserId, userId));
+    broadcastDm(recipientId, {
+      conversationId,
+      senderId: userId,
+      senderName: sender?.fullName ?? "Someone",
+      content: content.trim(),
+    });
+  } catch {
+    // non-fatal — SSE best-effort
+  }
 
   res.status(201).json({
     id: inserted.id,
