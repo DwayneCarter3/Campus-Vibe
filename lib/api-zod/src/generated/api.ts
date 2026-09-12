@@ -19,6 +19,7 @@ export const HealthCheckResponse = zod.object({
  */
 export const GetMyProfileResponse = zod.object({
   id: zod.number(),
+  registrationRank: zod.number(),
   clerkUserId: zod.string(),
   fullName: zod.string(),
   email: zod.string(),
@@ -35,6 +36,9 @@ export const GetMyProfileResponse = zod.object({
   role: zod.string(),
   campusTitle: zod.string(),
   verificationStatus: zod.string(),
+  premiumBadgeDiscountPercent: zod.number(),
+  promoExpiresAt: zod.coerce.date().nullable().optional(),
+  hustlePromoExpiresAt: zod.coerce.date().nullable().optional(),
   createdAt: zod.coerce.date(),
 });
 
@@ -56,6 +60,7 @@ export const UpdateMyProfileBody = zod.object({
 
 export const UpdateMyProfileResponse = zod.object({
   id: zod.number(),
+  registrationRank: zod.number(),
   clerkUserId: zod.string(),
   fullName: zod.string(),
   email: zod.string(),
@@ -72,6 +77,9 @@ export const UpdateMyProfileResponse = zod.object({
   role: zod.string(),
   campusTitle: zod.string(),
   verificationStatus: zod.string(),
+  premiumBadgeDiscountPercent: zod.number(),
+  promoExpiresAt: zod.coerce.date().nullable().optional(),
+  hustlePromoExpiresAt: zod.coerce.date().nullable().optional(),
   createdAt: zod.coerce.date(),
 });
 

@@ -7,3 +7,4 @@
 - [SSE DM real-time pattern](sse-dm.md) — broadcastDm() in sse-manager.ts emits "dm" event; notifications.tsx listens and invalidates conversation+message queries; web poll reduced to 10s fallback.
 - [Mobile messages screen](mobile-messages.md) — artifacts/campusx-mobile/app/messages.tsx is a full DM screen; hustle ServiceCard navigates to /messages?with=providerId; expo-router useLocalSearchParams for ?with= param.
 - [Mobile avatar upload flow](mobile-avatar-upload.md) — expo-image-picker already installed; signed URL flow matches web (requestUploadUrl → PUT → /api/storage+objectPath); Change Photo button in avatar modal.
+- [Early-bird launch eligibility](early-bird-launch.md) — use the database registration sequence/rank, case-insensitive non-empty email uniqueness, explicit promo expiry fields, and paid-tier fallback after expiry.

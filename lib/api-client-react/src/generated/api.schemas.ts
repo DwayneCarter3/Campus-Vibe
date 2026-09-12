@@ -26,6 +26,7 @@ export interface HealthStatus {
 
 export interface UserProfile {
   id: number;
+  registrationRank: number;
   clerkUserId: string;
   fullName: string;
   email: string;
@@ -44,6 +45,11 @@ export interface UserProfile {
   role: string;
   campusTitle: string;
   verificationStatus: string;
+  premiumBadgeDiscountPercent: number;
+  /** @nullable */
+  promoExpiresAt?: string | null;
+  /** @nullable */
+  hustlePromoExpiresAt?: string | null;
   createdAt: string;
 }
 

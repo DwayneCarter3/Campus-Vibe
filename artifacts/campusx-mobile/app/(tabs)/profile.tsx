@@ -83,7 +83,7 @@ export default function ProfileScreen() {
   const handleRequestBadge = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     requestBadge.mutate(
-      { data: { badgeType: "promo" as any } },
+      { data: { badgeType: profile?.promoExpiresAt ? "promo" : "paid" } },
       {
         onSuccess: () => {
           queryClient.invalidateQueries({ queryKey: getGetMyProfileQueryKey() });
@@ -256,6 +256,27 @@ export default function ProfileScreen() {
           </View>
         </View>
 
+        {/* ── Early Bird Promo Banner ─────────────────── */}
+        {profile?.promoExpiresAt && new Date(profile.promoExpiresAt) > new Date() && (() => {
+          const msLeft = new Date(profile.promoExpiresAt!).getTime() - Date.now();
+          const daysLeft = Math.floor(msLeft / (1000 * 60 * 60 * 24));
+          const hoursLeft = Math.floor((msLeft % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+          return (
+            <View style={[styles.promoBanner, { borderColor: "#F59E0B40", backgroundColor: "#F59E0B08" }]}>
+              <Text style={styles.promoEmoji}>🎉</Text>
+              <View style={styles.promoInfo}>
+                <Text style={styles.promoTitle}>Early Bird Launch Perk</Text>
+                <Text style={styles.promoSub}>Free Blue Tick + Unlimited Hustle Promos</Text>
+                <Text style={styles.promoExpiry}>⏳ Expires in {daysLeft}d {hoursLeft}h</Text>
+              </View>
+              <View style={styles.promoRank}>
+                <Text style={styles.promoRankLabel}>Reg.</Text>
+                <Text style={styles.promoRankNum}>#{profile.registrationRank}</Text>
+              </View>
+            </View>
+          );
+        })()}
+
         {/* ── Verified Student Badge Section ─────────── */}
         {hasMatric && !isVerified && (
           <TouchableOpacity
@@ -278,7 +299,9 @@ export default function ProfileScreen() {
               <Text style={[styles.actionSub, { color: colors.mutedForeground }]}>
                 {badgePending
                   ? "Your request is pending admin review ⏳"
-                  : "Tap to request your blue verification badge — free!"}
+                  : profile?.promoExpiresAt
+                    ? "Tap to request your free launch badge"
+                    : "Launch perk ended — tap to renew through a paid tier"}
               </Text>
             </View>
             {requestBadge.isPending ? (
@@ -478,6 +501,15 @@ const styles = StyleSheet.create({
   bigAvatarText: { fontSize: 36, fontWeight: "700" },
   bigAvatarImg: { width: 80, height: 80, borderRadius: 40 },
   cameraBadge: { position: "absolute", bottom: 0, left: 0, width: 20, height: 20, borderRadius: 10, alignItems: "center", justifyContent: "center", borderWidth: 1 },
+  promoBanner: { marginHorizontal: 16, marginBottom: 10, borderRadius: 16, borderWidth: 1, padding: 14, flexDirection: "row", alignItems: "center", gap: 10 },
+  promoEmoji: { fontSize: 24 },
+  promoInfo: { flex: 1 },
+  promoTitle: { color: "#FCD34D", fontSize: 13, fontWeight: "800" },
+  promoSub: { color: "#FDE68A99", fontSize: 11, marginTop: 2 },
+  promoExpiry: { color: "#F59E0B", fontSize: 11, fontWeight: "700", marginTop: 4 },
+  promoRank: { alignItems: "center" },
+  promoRankLabel: { color: "#FDE68A99", fontSize: 10, fontWeight: "600" },
+  promoRankNum: { color: "#F59E0B", fontSize: 18, fontWeight: "900" },
   modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.85)", alignItems: "center", justifyContent: "center" },
   modalContent: { alignItems: "center", gap: 16 },
   modalAvatar: { width: 260, height: 260, borderRadius: 130, borderWidth: 3, borderColor: "rgba(255,255,255,0.2)" },

@@ -22,12 +22,41 @@ const ouAlias = alias(usersTable, "ou");
 
 const router: IRouter = Router();
 
+// How many registrants get the early-bird perk
+const EARLY_BIRD_LIMIT = 100;
+// Duration in milliseconds (30 days)
+const PROMO_DURATION_MS = 30 * 24 * 60 * 60 * 1000;
+
 async function getPostCount(clerkUserId: string): Promise<number> {
   const [{ count }] = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(postsTable)
     .where(eq(postsTable.authorId, clerkUserId));
   return count ?? 0;
+}
+
+/** Strip expired promo badges (lazy check on any user read). Returns updated user. */
+async function expirePromoIfNeeded(user: typeof usersTable.$inferSelect): Promise<typeof usersTable.$inferSelect> {
+  if (user.promoExpiresAt && user.promoExpiresAt < new Date()) {
+    const [updated] = await db
+      .update(usersTable)
+      .set({
+        verificationStatus: "none",
+        premiumBadgeDiscountPercent: 0,
+        promoExpiresAt: null,
+        hustlePromoExpiresAt: null,
+      })
+      .where(eq(usersTable.clerkUserId, user.clerkUserId))
+      .returning();
+    return updated ?? {
+      ...user,
+      verificationStatus: "none",
+      premiumBadgeDiscountPercent: 0,
+      promoExpiresAt: null,
+      hustlePromoExpiresAt: null,
+    };
+  }
+  return user;
 }
 
 router.get("/users/me", requireAuth, async (req, res): Promise<void> => {
@@ -49,7 +78,7 @@ router.get("/users/me", requireAuth, async (req, res): Promise<void> => {
       const clerkUser = await clerkClient.users.getUser(userId);
       const clerkEmail = clerkUser.emailAddresses.find(
         (e) => e.id === clerkUser.primaryEmailAddressId
-      )?.emailAddress ?? "";
+      )?.emailAddress?.trim().toLowerCase() ?? "";
       if (clerkEmail) {
         await db.update(usersTable).set({ email: clerkEmail }).where(eq(usersTable.clerkUserId, userId));
         user = { ...user, email: clerkEmail };
@@ -57,10 +86,13 @@ router.get("/users/me", requireAuth, async (req, res): Promise<void> => {
     } catch { /* non-fatal */ }
   }
 
-  if (user.email === CEO_EMAIL && user.role !== "ceo") {
+  if (user.email.trim().toLowerCase() === CEO_EMAIL && user.role !== "ceo") {
     await db.update(usersTable).set({ role: "ceo", isAdmin: true }).where(eq(usersTable.clerkUserId, userId));
     user = { ...user, role: "ceo", isAdmin: true };
   }
+
+  // Lazy expiry: strip promo badge if 30-day window has closed
+  user = await expirePromoIfNeeded(user);
 
   const postCount = await getPostCount(userId);
   const campusTitle = computeCampusTitle(user.role, postCount);
@@ -84,47 +116,140 @@ router.put("/users/me", requireAuth, async (req, res): Promise<void> => {
 
   let user;
   if (existing.length === 0) {
+    // ── New registration ─────────────────────────────────────────
     const data = parsed.data as any;
     if (!data.fullName || !data.level || !data.faculty || !data.enrollmentStatus || !data.matricNumber) {
       res.status(400).json({ error: "Missing required profile fields" });
       return;
     }
-    const emailVal = data.email || "";
+
+    let emailVal: string = typeof data.email === "string" ? data.email.trim().toLowerCase() : "";
+    if (!emailVal) {
+      try {
+        const clerkUser = await clerkClient.users.getUser(userId);
+        emailVal = clerkUser.emailAddresses.find(
+          (e) => e.id === clerkUser.primaryEmailAddressId
+        )?.emailAddress?.trim().toLowerCase() ?? "";
+      } catch {
+        // Email is still protected by the database when available; Clerk lookup is best-effort.
+      }
+    }
+    const matricVal: string = data.matricNumber;
+
+    // ── Unique constraint: Matriculation Number ──────────────────
+    const [matricConflict] = await db
+      .select({ id: usersTable.id })
+      .from(usersTable)
+      .where(eq(usersTable.matricNumber, matricVal))
+      .limit(1);
+    if (matricConflict) {
+      res.status(409).json({ error: "This Matriculation Number is already registered to another account. Each student may only create one CampusX account." });
+      return;
+    }
+
+    // ── Unique constraint: Email (skip empty string) ─────────────
+    if (emailVal) {
+      const [emailConflict] = await db
+        .select({ id: usersTable.id })
+        .from(usersTable)
+        .where(sql`lower(${usersTable.email}) = ${emailVal}`)
+        .limit(1);
+      if (emailConflict) {
+        res.status(409).json({ error: "This email address is already registered to another account." });
+        return;
+      }
+    }
+
     const roleVal = emailVal === CEO_EMAIL ? "ceo" : "student";
     const isAdminVal = roleVal === "ceo";
-    [user] = await db
-      .insert(usersTable)
-      .values({
-        clerkUserId: userId,
-        fullName: data.fullName,
-        email: emailVal,
-        school: data.school || "Lagos State University (LASU)",
-        campusLocation: data.campusLocation || "Ojo",
-        level: data.level,
-        faculty: data.faculty,
-        enrollmentStatus: data.enrollmentStatus,
-        matricNumber: data.matricNumber,
-        campus: data.campus || "LASU Ojo",
-        bio: data.bio ?? null,
-        avatarUrl: data.avatarUrl ?? null,
-        role: roleVal,
-        isAdmin: isAdminVal,
-      })
-      .returning();
+
+    // ── Insert new user ──────────────────────────────────────────
+    try {
+      [user] = await db
+        .insert(usersTable)
+        .values({
+          clerkUserId: userId,
+          fullName: data.fullName,
+          email: emailVal,
+          school: data.school || "Lagos State University (LASU)",
+          campusLocation: data.campusLocation || "Ojo",
+          level: data.level,
+          faculty: data.faculty,
+          enrollmentStatus: data.enrollmentStatus,
+          matricNumber: matricVal,
+          campus: data.campus || "LASU Ojo",
+          bio: data.bio ?? null,
+          avatarUrl: data.avatarUrl ?? null,
+          role: roleVal,
+          isAdmin: isAdminVal,
+        })
+        .returning();
+    } catch (err: any) {
+      // Catch any DB-level unique violations that slipped the pre-checks (race condition)
+      if (err?.code === "23505") {
+        const constraint = err?.constraint ?? "";
+        if (constraint.includes("matric")) {
+          res.status(409).json({ error: "This Matriculation Number is already registered to another account." });
+        } else if (constraint.includes("email")) {
+          res.status(409).json({ error: "This email address is already registered to another account." });
+        } else {
+          res.status(409).json({ error: "An account with these details already exists." });
+        }
+        return;
+      }
+      throw err;
+    }
+
+    // ── Early-bird promo: first 100 users get free badge + hustle promo for 30 days ──
+    const isEarlyBird = !!user && user.registrationRank <= EARLY_BIRD_LIMIT;
+    if (isEarlyBird && user) {
+      const promoExpiresAt = new Date(user.createdAt.getTime() + PROMO_DURATION_MS);
+      [user] = await db
+        .update(usersTable)
+        .set({
+          verificationStatus: "approved", // free Blue Tick
+          premiumBadgeDiscountPercent: 100,
+          promoExpiresAt,
+          hustlePromoExpiresAt: promoExpiresAt,
+        })
+        .where(eq(usersTable.clerkUserId, userId))
+        .returning();
+    }
   } else {
+    // ── Profile update (existing user) ─────────────────────────────
+    // If user is trying to change their matric number, check uniqueness
+    if (parsed.data.matricNumber && parsed.data.matricNumber !== existing[0].matricNumber) {
+      const [conflict] = await db
+        .select({ id: usersTable.id })
+        .from(usersTable)
+        .where(and(
+          eq(usersTable.matricNumber, parsed.data.matricNumber),
+          // exclude this user
+          sql`${usersTable.clerkUserId} != ${userId}`
+        ))
+        .limit(1);
+      if (conflict) {
+        res.status(409).json({ error: "This Matriculation Number is already registered to another account." });
+        return;
+      }
+    }
+
     [user] = await db
       .update(usersTable)
       .set(parsed.data)
       .where(eq(usersTable.clerkUserId, userId))
       .returning();
 
-    if (user.email === CEO_EMAIL && user.role !== "ceo") {
+    if (user.email.trim().toLowerCase() === CEO_EMAIL && user.role !== "ceo") {
       [user] = await db
         .update(usersTable)
         .set({ role: "ceo", isAdmin: true })
         .where(eq(usersTable.clerkUserId, userId))
         .returning();
     }
+
+    // Lazy expiry check on update too
+    user = await expirePromoIfNeeded(user);
   }
 
   const postCount = await getPostCount(userId);
@@ -142,7 +267,37 @@ router.post("/users/me/request-badge", requireAuth, async (req, res): Promise<vo
     return;
   }
 
-  const verificationStatus = badgeType === "paid" ? "pending_paid" : "pending_promo";
+  const [user] = await db
+    .select()
+    .from(usersTable)
+    .where(eq(usersTable.clerkUserId, userId));
+
+  if (!user) {
+    res.status(404).json({ error: "Profile not found" });
+    return;
+  }
+
+  if (user.promoExpiresAt && user.promoExpiresAt < new Date()) {
+    await db
+      .update(usersTable)
+      .set({
+        verificationStatus: "none",
+        premiumBadgeDiscountPercent: 0,
+        promoExpiresAt: null,
+        hustlePromoExpiresAt: null,
+      })
+      .where(eq(usersTable.clerkUserId, userId));
+  }
+
+  if (badgeType === "promo") {
+    const promoActive = !!user.promoExpiresAt && user.promoExpiresAt >= new Date() && user.premiumBadgeDiscountPercent === 100;
+    if (!promoActive) {
+      res.status(402).json({ error: "The free early-bird promotion is unavailable. Please use a standard paid verification tier." });
+      return;
+    }
+  }
+
+  const verificationStatus = badgeType === "paid" ? "pending_paid" : "approved";
 
   await db
     .update(usersTable)

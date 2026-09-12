@@ -267,6 +267,32 @@ export default function MyProfilePage() {
           </p>
         </div>
 
+        {/* ── Early Bird Promo Banner ────────────────────── */}
+        {profile.promoExpiresAt && new Date(profile.promoExpiresAt) > new Date() && (() => {
+          const msLeft = new Date(profile.promoExpiresAt!).getTime() - Date.now();
+          const daysLeft = Math.floor(msLeft / (1000 * 60 * 60 * 24));
+          const hoursLeft = Math.floor((msLeft % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+          return (
+            <div className="rounded-2xl border border-amber-500/30 bg-gradient-to-r from-amber-500/10 to-orange-500/10 p-4 flex items-center gap-3">
+              <div className="text-2xl shrink-0">🎉</div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-bold text-amber-300">Early Bird Launch Perk — Active</p>
+                <p className="text-[11px] text-amber-200/70 mt-0.5">
+                  Free Blue Tick + Unlimited Hustle Promotions
+                </p>
+                <p className="text-[11px] text-amber-400 font-semibold mt-1">
+                  ⏳ Expires in {daysLeft}d {hoursLeft}h
+                </p>
+              </div>
+              <div className="shrink-0 text-right">
+                <div className="text-[10px] text-amber-300/60 font-medium">Registrant</div>
+                <div className="text-lg font-black text-amber-400">#{profile.registrationRank}</div>
+                <div className="text-[10px] text-amber-300/60">of first 100</div>
+              </div>
+            </div>
+          );
+        })()}
+
         {/* ── Badge Request Section ──────────────────────── */}
         {hasMatric && profile.verificationStatus !== "approved" && (
           <div className="rounded-2xl border border-sky-500/20 bg-sky-500/5 p-4 flex items-center justify-between gap-4">
@@ -276,10 +302,12 @@ export default function MyProfilePage() {
               </div>
               <div className="min-w-0">
                 <p className="text-sm font-medium text-sky-200">Verified Student Badge</p>
-                <p className="text-[11px] text-muted-foreground">
+                 <p className="text-[11px] text-muted-foreground">
                   {profile.verificationStatus === "pending_promo" || profile.verificationStatus === "pending_paid"
                     ? "Your badge request is pending admin review."
-                    : "Request a blue verification badge — free for active students."}
+                     : profile.promoExpiresAt
+                       ? "Request your free blue verification badge while your launch perk is active."
+                       : "The launch perk has ended. Request a paid verification tier to renew."}
                 </p>
               </div>
             </div>
@@ -289,13 +317,13 @@ export default function MyProfilePage() {
                 className="shrink-0 text-xs bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/30"
                 onClick={() =>
                   requestBadge.mutate(
-                    { data: { badgeType: "promo" as any } },
+                     { data: { badgeType: profile.promoExpiresAt ? "promo" : "paid" } },
                     { onSuccess: () => queryClient.invalidateQueries({ queryKey: getGetMyProfileQueryKey() }) }
                   )
                 }
                 disabled={requestBadge.isPending}
               >
-                {requestBadge.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Request Badge"}
+                 {requestBadge.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : profile.promoExpiresAt ? "Request Free Badge" : "Request Paid Badge"}
               </Button>
             )}
             {(profile.verificationStatus === "pending_promo" || profile.verificationStatus === "pending_paid") && (

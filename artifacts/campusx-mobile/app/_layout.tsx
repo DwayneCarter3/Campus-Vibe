@@ -22,8 +22,11 @@ import { setBaseUrl, setAuthTokenGetter } from "@workspace/api-client-react";
 
 SplashScreen.preventAutoHideAsync();
 
-const publishableKey: string = Constants.expoConfig?.extra?.clerkPublishableKey || "";
-const devDomain: string = Constants.expoConfig?.extra?.devDomain || "";
+const publishableKey: string =
+  Constants.expoConfig?.extra?.clerkPublishableKey || "";
+const devDomain: string =
+  Constants.expoConfig?.extra?.devDomain ||
+  "campus-vibe-carterthe3rd.replit.dev";
 
 if (devDomain) {
   setBaseUrl(`https://${devDomain}`);
@@ -74,7 +77,10 @@ function RootLayoutNav() {
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="sign-in" options={{ headerShown: false }} />
-      <Stack.Screen name="admin" options={{ headerShown: false, presentation: "modal" }} />
+      <Stack.Screen
+        name="admin"
+        options={{ headerShown: false, presentation: "modal" }}
+      />
     </Stack>
   );
 }
