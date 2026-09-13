@@ -29,6 +29,8 @@ import type {
   GetUserPostsParams,
   GetUserServicesParams,
   HealthStatus,
+  InitializePaymentBody,
+  InitializePaymentResponse,
   LikeResponse,
   ListAdminUsersParams,
   ListAdminUsersResponse,
@@ -38,6 +40,7 @@ import type {
   ListMessagesResponse,
   ListNotificationsParams,
   ListNotificationsResponse,
+  ListPaymentsResponse,
   ListPendingVerificationsResponse,
   ListPostsParams,
   ListPostsResponse,
@@ -45,15 +48,20 @@ import type {
   ListServicesResponse,
   MarketplaceStats,
   NoCapResponse,
+  PaymentStatusResponse,
   PinResponse,
   Post,
   PublicUserProfile,
+  ReceivePaystackWebhook200,
+  ReceivePaystackWebhookBody,
   RequestBadgeBody,
   RequestBadgeResponse,
   ResharePostBody,
   ResharePostResponse,
   SendMessageBody,
   Service,
+  SetUserVerificationBody,
+  SetUserVerificationResponse,
   StartConversationBody,
   TrackWhatsappClick200,
   UpdateProfileBody,
@@ -2851,6 +2859,520 @@ export const useApproveBadge = <
 > => {
   return useMutation(getApproveBadgeMutationOptions(options));
 };
+
+/**
+ * @summary Reject a pending verification or revoke an existing badge
+ */
+export const getRejectBadgeUrl = (userId: string) => {
+  return `/api/admin/users/${userId}/reject-badge`;
+};
+
+export const rejectBadge = async (
+  userId: string,
+  options?: RequestInit,
+): Promise<ApproveBadgeResponse> => {
+  return customFetch<ApproveBadgeResponse>(getRejectBadgeUrl(userId), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getRejectBadgeMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof rejectBadge>>,
+    TError,
+    { userId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof rejectBadge>>,
+  TError,
+  { userId: string },
+  TContext
+> => {
+  const mutationKey = ["rejectBadge"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof rejectBadge>>,
+    { userId: string }
+  > = (props) => {
+    const { userId } = props ?? {};
+
+    return rejectBadge(userId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RejectBadgeMutationResult = NonNullable<
+  Awaited<ReturnType<typeof rejectBadge>>
+>;
+
+export type RejectBadgeMutationError = ErrorType<void>;
+
+/**
+ * @summary Reject a pending verification or revoke an existing badge
+ */
+export const useRejectBadge = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof rejectBadge>>,
+    TError,
+    { userId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof rejectBadge>>,
+  TError,
+  { userId: string },
+  TContext
+> => {
+  return useMutation(getRejectBadgeMutationOptions(options));
+};
+
+/**
+ * @summary Approve or revoke any user's verification from the user list
+ */
+export const getSetUserVerificationUrl = (userId: string) => {
+  return `/api/admin/users/${userId}/verification`;
+};
+
+export const setUserVerification = async (
+  userId: string,
+  setUserVerificationBody: SetUserVerificationBody,
+  options?: RequestInit,
+): Promise<SetUserVerificationResponse> => {
+  return customFetch<SetUserVerificationResponse>(
+    getSetUserVerificationUrl(userId),
+    {
+      ...options,
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(setUserVerificationBody),
+    },
+  );
+};
+
+export const getSetUserVerificationMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof setUserVerification>>,
+    TError,
+    { userId: string; data: BodyType<SetUserVerificationBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof setUserVerification>>,
+  TError,
+  { userId: string; data: BodyType<SetUserVerificationBody> },
+  TContext
+> => {
+  const mutationKey = ["setUserVerification"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof setUserVerification>>,
+    { userId: string; data: BodyType<SetUserVerificationBody> }
+  > = (props) => {
+    const { userId, data } = props ?? {};
+
+    return setUserVerification(userId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type SetUserVerificationMutationResult = NonNullable<
+  Awaited<ReturnType<typeof setUserVerification>>
+>;
+export type SetUserVerificationMutationBody = BodyType<SetUserVerificationBody>;
+export type SetUserVerificationMutationError = ErrorType<void>;
+
+/**
+ * @summary Approve or revoke any user's verification from the user list
+ */
+export const useSetUserVerification = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof setUserVerification>>,
+    TError,
+    { userId: string; data: BodyType<SetUserVerificationBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof setUserVerification>>,
+  TError,
+  { userId: string; data: BodyType<SetUserVerificationBody> },
+  TContext
+> => {
+  return useMutation(getSetUserVerificationMutationOptions(options));
+};
+
+/**
+ * @summary Initialize a Paystack payment or claim an eligible early-bird benefit
+ */
+export const getInitializePaymentUrl = () => {
+  return `/api/payments/initialize`;
+};
+
+export const initializePayment = async (
+  initializePaymentBody: InitializePaymentBody,
+  options?: RequestInit,
+): Promise<InitializePaymentResponse> => {
+  return customFetch<InitializePaymentResponse>(getInitializePaymentUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(initializePaymentBody),
+  });
+};
+
+export const getInitializePaymentMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof initializePayment>>,
+    TError,
+    { data: BodyType<InitializePaymentBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof initializePayment>>,
+  TError,
+  { data: BodyType<InitializePaymentBody> },
+  TContext
+> => {
+  const mutationKey = ["initializePayment"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof initializePayment>>,
+    { data: BodyType<InitializePaymentBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return initializePayment(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type InitializePaymentMutationResult = NonNullable<
+  Awaited<ReturnType<typeof initializePayment>>
+>;
+export type InitializePaymentMutationBody = BodyType<InitializePaymentBody>;
+export type InitializePaymentMutationError = ErrorType<void>;
+
+/**
+ * @summary Initialize a Paystack payment or claim an eligible early-bird benefit
+ */
+export const useInitializePayment = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof initializePayment>>,
+    TError,
+    { data: BodyType<InitializePaymentBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof initializePayment>>,
+  TError,
+  { data: BodyType<InitializePaymentBody> },
+  TContext
+> => {
+  return useMutation(getInitializePaymentMutationOptions(options));
+};
+
+/**
+ * @summary Get the current status of one of the current user's payments
+ */
+export const getGetPaymentStatusUrl = (reference: string) => {
+  return `/api/payments/${reference}`;
+};
+
+export const getPaymentStatus = async (
+  reference: string,
+  options?: RequestInit,
+): Promise<PaymentStatusResponse> => {
+  return customFetch<PaymentStatusResponse>(getGetPaymentStatusUrl(reference), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetPaymentStatusQueryKey = (reference: string) => {
+  return [`/api/payments/${reference}`] as const;
+};
+
+export const getGetPaymentStatusQueryOptions = <
+  TData = Awaited<ReturnType<typeof getPaymentStatus>>,
+  TError = ErrorType<void>,
+>(
+  reference: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getPaymentStatus>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetPaymentStatusQueryKey(reference);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getPaymentStatus>>
+  > = ({ signal }) =>
+    getPaymentStatus(reference, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!reference,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getPaymentStatus>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetPaymentStatusQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getPaymentStatus>>
+>;
+export type GetPaymentStatusQueryError = ErrorType<void>;
+
+/**
+ * @summary Get the current status of one of the current user's payments
+ */
+
+export function useGetPaymentStatus<
+  TData = Awaited<ReturnType<typeof getPaymentStatus>>,
+  TError = ErrorType<void>,
+>(
+  reference: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getPaymentStatus>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetPaymentStatusQueryOptions(reference, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Receive a signed Paystack webhook
+ */
+export const getReceivePaystackWebhookUrl = () => {
+  return `/api/payments/webhook/paystack`;
+};
+
+export const receivePaystackWebhook = async (
+  receivePaystackWebhookBody: ReceivePaystackWebhookBody,
+  options?: RequestInit,
+): Promise<ReceivePaystackWebhook200> => {
+  return customFetch<ReceivePaystackWebhook200>(
+    getReceivePaystackWebhookUrl(),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(receivePaystackWebhookBody),
+    },
+  );
+};
+
+export const getReceivePaystackWebhookMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof receivePaystackWebhook>>,
+    TError,
+    { data: BodyType<ReceivePaystackWebhookBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof receivePaystackWebhook>>,
+  TError,
+  { data: BodyType<ReceivePaystackWebhookBody> },
+  TContext
+> => {
+  const mutationKey = ["receivePaystackWebhook"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof receivePaystackWebhook>>,
+    { data: BodyType<ReceivePaystackWebhookBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return receivePaystackWebhook(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ReceivePaystackWebhookMutationResult = NonNullable<
+  Awaited<ReturnType<typeof receivePaystackWebhook>>
+>;
+export type ReceivePaystackWebhookMutationBody =
+  BodyType<ReceivePaystackWebhookBody>;
+export type ReceivePaystackWebhookMutationError = ErrorType<void>;
+
+/**
+ * @summary Receive a signed Paystack webhook
+ */
+export const useReceivePaystackWebhook = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof receivePaystackWebhook>>,
+    TError,
+    { data: BodyType<ReceivePaystackWebhookBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof receivePaystackWebhook>>,
+  TError,
+  { data: BodyType<ReceivePaystackWebhookBody> },
+  TContext
+> => {
+  return useMutation(getReceivePaystackWebhookMutationOptions(options));
+};
+
+/**
+ * @summary List the current user's payments
+ */
+export const getListPaymentsUrl = () => {
+  return `/api/payments`;
+};
+
+export const listPayments = async (
+  options?: RequestInit,
+): Promise<ListPaymentsResponse> => {
+  return customFetch<ListPaymentsResponse>(getListPaymentsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListPaymentsQueryKey = () => {
+  return [`/api/payments`] as const;
+};
+
+export const getListPaymentsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listPayments>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listPayments>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListPaymentsQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listPayments>>> = ({
+    signal,
+  }) => listPayments({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listPayments>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListPaymentsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listPayments>>
+>;
+export type ListPaymentsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List the current user's payments
+ */
+
+export function useListPayments<
+  TData = Awaited<ReturnType<typeof listPayments>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listPayments>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListPaymentsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
 
 /**
  * @summary List my conversations

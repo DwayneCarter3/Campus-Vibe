@@ -1,0 +1,22 @@
+erfect. Let's finish the app by adding the payment infrastructure and linking my workspace:
+
+ADVERTISING & PROMOTION PAYMENTS & PROMO COUNTER LOGIC:
+Create a dynamic database counter tracking the overall total of registered users who have claimed a badge or marketplace promotion.
+First 100 Users Promo Rule: If the counter is less than or equal to 100, completely bypass Paystack checkout for the Premium Blue Tick and 'Hustle' marketplace promotions. Set their status straight to 'Premium_Pending_Approval' and route them immediately to the Private Admin Dashboard for review without asking for payment.
+Post-Promo Rule (User 101+): If the counter is greater than 100, require full payment via Paystack.
+Integrate Paystack to handle these localized promotional ad packages and paid badges for users who do not qualify for the free promo.
+Securely pull authentication using environment variables via process.env from the Replit Secrets tool.
+Hardwire the app to use ONLY PAYSTACK_LIVE_PUBLIC_KEY and PAYSTACK_LIVE_SECRET_KEY for all paid transactions. Do not use test keys.
+Do NOT hardcode any keys anywhere. Implement an API route that handles Paystack initializations, charges the transaction fee to the customer (passing the fee on so CampusX receives the exact flat amount), and listens for successful live webhooks.
+Visual Badge Hierarchy & Paid Webhook Logic:
+Student Verification Badge (₦1,500/month): Renders as a clean, distinct green verification badge next to the user's name. When the live Paystack webhook returns a success status for this specific ₦1,500 tier, the database must instantly change their status to 'Student_Verified' automatically.
+Premium Blue Tick (₦5,000/month): Renders as a sleek, glowing blue verification badge next to the user's name. When the live Paystack webhook returns a success status for this ₦5,000 tier, the database must automatically tag their profile status as 'Premium_Pending_Approval' and send it to our Private Admin Dashboard from Day 2 for manual review.
+EXPO CLI & EAS DEPLOYMENT CONFIGURATION:
+Configure the React Native app.json configuration file to line up directly with the owner/username 'CarterThe3rd' and set the project slug explicitly to 'campusx'.
+Structure the build files to support Expo EAS Update configurations for dynamic Over-The-Air (OTA) frontend updates.
+Programmatically inject the pre-saved environment variables process.env.EXPO_USERNAME and process.env.EXPO_PASSWORD from the Secrets locker to authenticate terminal deployment requests securely so that running 'eas build' maps straight to your account workspace dashboard.
+CAMPUSX "PRIVACY POLICY" AND "TERMS OF SERVICE"
+Legal Documents Generation: Programmatically generate two comprehensive plain text files saved in the assets directory: 'Privacy_Policy.txt' and 'Terms_of_Service.txt'.
+The Terms of Service must include a strict section for 'User-Generated Content' explicitly prohibiting defamation, bullying, or illegal activity on the anonymous "Amebo" feed, and include a 'Limitation of Liability' clause stating CampusX is a platform provider and is not responsible for marketplace transaction disputes or user posts.
+The Privacy Policy must state that we collect user emails, phone numbers, and matriculation numbers for student verification and marketplace account safety purposes only, and process payments securely via Paystack without storing raw card details.
+Create two clean, clickable buttons in the App Settings screen titled 'Privacy Policy' and 'Terms of Service' that render this generated text cleanly inside a scrollable view overlay

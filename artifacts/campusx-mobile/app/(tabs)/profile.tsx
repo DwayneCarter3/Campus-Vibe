@@ -6,6 +6,7 @@ import {
   ActivityIndicator,
   Alert,
   Image,
+  Linking,
   Modal,
   Platform,
   Pressable,
@@ -26,12 +27,14 @@ import {
   getGetUserPostsQueryKey,
   useGetUserServices,
   getGetUserServicesQueryKey,
-  useRequestPremiumBadge,
   useUpdateMyProfile,
   useRequestUploadUrl,
+  useInitializePayment,
 } from "@workspace/api-client-react";
+import type { PaymentPackage } from "@workspace/api-client-react";
 import { useColors } from "@/hooks/useColors";
 import * as ImagePicker from "expo-image-picker";
+import { PRIVACY_POLICY, TERMS_OF_SERVICE } from "@/constants/legal";
 
 const CEO_EMAIL = "dwaynecartergabriel@gmail.com";
 
@@ -56,11 +59,12 @@ export default function ProfileScreen() {
   const [activeTab, setActiveTab] = useState<"gist" | "hustles">("gist");
   const [avatarModalOpen, setAvatarModalOpen] = useState(false);
   const [isAvatarUploading, setIsAvatarUploading] = useState(false);
+  const [legalOpen, setLegalOpen] = useState<"privacy" | "terms" | null>(null);
 
   const { data: profile, isLoading } = useGetMyProfile({
     query: { queryKey: getGetMyProfileQueryKey() },
   });
-  const requestBadge = useRequestPremiumBadge();
+  const initializePayment = useInitializePayment();
   const updateProfile = useUpdateMyProfile();
   const requestUploadUrl = useRequestUploadUrl();
 
@@ -80,17 +84,21 @@ export default function ProfileScreen() {
     await signOut();
   };
 
-  const handleRequestBadge = () => {
+  const startPayment = (packageType: PaymentPackage) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    requestBadge.mutate(
-      { data: { badgeType: profile?.promoExpiresAt ? "promo" : "paid" } },
+    initializePayment.mutate(
+      { data: { packageType } },
       {
-        onSuccess: () => {
+        onSuccess: async (result) => {
           queryClient.invalidateQueries({ queryKey: getGetMyProfileQueryKey() });
-          Alert.alert("Request Sent! ✅", "Your badge request has been submitted. An admin will review it shortly.");
+          if (result.requiresPayment && result.authorizationUrl) {
+            await Linking.openURL(result.authorizationUrl);
+            return;
+          }
+          Alert.alert("Benefit active", result.message ?? "Your CampusX benefit is now active.");
         },
-        onError: () => Alert.alert("Error", "Could not submit badge request. Try again."),
-      }
+        onError: () => Alert.alert("Error", "Could not start payment. Try again."),
+      },
     );
   };
 
@@ -157,8 +165,9 @@ export default function ProfileScreen() {
   const titleColor = campusTitle ? (CAMPUS_TITLE_COLORS[campusTitle] ?? colors.primary) : null;
   const hasMatric = !!(profile?.matricNumber && profile.matricNumber.trim());
   const verificationStatus = (profile as any)?.verificationStatus ?? "none";
-  const isVerified = verificationStatus === "approved";
-  const badgePending = verificationStatus === "pending_promo" || verificationStatus === "pending_paid";
+  const isVerified = verificationStatus === "approved" || verificationStatus === "Student_Verified";
+  const isPremium = verificationStatus === "Premium_Approved";
+  const badgePending = verificationStatus === "pending_promo" || verificationStatus === "pending_paid" || verificationStatus === "Premium_Pending_Approval";
   const clerkEmail = clerkUser?.primaryEmailAddress?.emailAddress ?? "";
   const isAdmin = profile?.isAdmin;
   const isCEO = (profile as any)?.role === "ceo" || clerkEmail === CEO_EMAIL;
@@ -278,11 +287,11 @@ export default function ProfileScreen() {
         })()}
 
         {/* ── Verified Student Badge Section ─────────── */}
-        {hasMatric && !isVerified && (
+        {hasMatric && !isVerified && !isPremium && (
           <TouchableOpacity
             activeOpacity={badgePending ? 1 : 0.75}
-            onPress={badgePending ? undefined : handleRequestBadge}
-            disabled={requestBadge.isPending || badgePending}
+            onPress={badgePending ? undefined : () => startPayment("student_verification")}
+            disabled={initializePayment.isPending || badgePending}
             style={[
               styles.actionCard,
               {
@@ -300,11 +309,11 @@ export default function ProfileScreen() {
                 {badgePending
                   ? "Your request is pending admin review ⏳"
                   : profile?.promoExpiresAt
-                    ? "Tap to request your free launch badge"
-                    : "Launch perk ended — tap to renew through a paid tier"}
+                    ? "Tap to claim your free launch badge"
+                    : "Launch perk ended — verify for ₦1,500"}
               </Text>
             </View>
-            {requestBadge.isPending ? (
+            {initializePayment.isPending ? (
               <ActivityIndicator size="small" color="#38BDF8" />
             ) : badgePending ? (
               <View style={[styles.pendingPill, { backgroundColor: "#F59E0B20", borderColor: "#F59E0B40" }]}>
@@ -313,6 +322,24 @@ export default function ProfileScreen() {
             ) : (
               <Feather name="chevron-right" size={16} color="#38BDF8" />
             )}
+          </TouchableOpacity>
+        )}
+
+        {hasMatric && !isVerified && !isPremium && !badgePending && (
+          <TouchableOpacity
+            activeOpacity={0.8}
+            onPress={() => startPayment("premium_blue_tick")}
+            disabled={initializePayment.isPending}
+            style={[styles.actionCard, { backgroundColor: "#2563EB12", borderColor: "#3B82F680" }]}
+          >
+            <View style={[styles.actionIconBox, { backgroundColor: "#2563EB20", borderColor: "#3B82F660" }]}>
+              <Feather name="star" size={16} color="#93C5FD" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.actionTitle, { color: "#BFDBFE" }]}>Premium Blue Tick · ₦5,000</Text>
+              <Text style={[styles.actionSub, { color: colors.mutedForeground }]}>Payment is reviewed by a campus admin before activation.</Text>
+            </View>
+            <Feather name="chevron-right" size={16} color="#93C5FD" />
           </TouchableOpacity>
         )}
 
@@ -331,6 +358,18 @@ export default function ProfileScreen() {
           </View>
         )}
 
+        {isPremium && (
+          <View style={[styles.actionCard, { backgroundColor: "#2563EB18", borderColor: "#60A5FA70" }]}>
+            <View style={[styles.actionIconBox, { backgroundColor: "#2563EB25", borderColor: "#60A5FA60" }]}>
+              <Feather name="star" size={16} color="#93C5FD" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.actionTitle, { color: "#BFDBFE" }]}>Premium Blue Tick ✓</Text>
+              <Text style={[styles.actionSub, { color: colors.mutedForeground }]}>Your premium verification badge is active.</Text>
+            </View>
+          </View>
+        )}
+
         {/* No matric banner */}
         {!hasMatric && (
           <View style={[styles.actionCard, { backgroundColor: colors.accent + "10", borderColor: colors.accent + "30" }]}>
@@ -340,6 +379,41 @@ export default function ProfileScreen() {
             </Text>
           </View>
         )}
+
+        {myServices.length > 0 && (
+          <TouchableOpacity
+            activeOpacity={0.8}
+            onPress={() => startPayment("marketplace_promotion")}
+            disabled={initializePayment.isPending}
+            style={[styles.actionCard, { backgroundColor: "#8B5CF612", borderColor: "#8B5CF650" }]}
+          >
+            <View style={[styles.actionIconBox, { backgroundColor: "#8B5CF620", borderColor: "#8B5CF650" }]}>
+              <Feather name="trending-up" size={16} color="#C4B5FD" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.actionTitle, { color: "#DDD6FE" }]}>Promote your Hustle · ₦1,500</Text>
+              <Text style={[styles.actionSub, { color: colors.mutedForeground }]}>Boost marketplace visibility for 30 days.</Text>
+            </View>
+            <Feather name="chevron-right" size={16} color="#C4B5FD" />
+          </TouchableOpacity>
+        )}
+
+        <View style={[styles.settingsCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <View style={styles.settingsHeader}>
+            <Feather name="settings" size={15} color={colors.mutedForeground} />
+            <Text style={[styles.actionTitle, { color: colors.foreground }]}>Settings & legal</Text>
+          </View>
+          <View style={styles.settingsButtons}>
+            <TouchableOpacity onPress={() => setLegalOpen("privacy")} style={[styles.legalButton, { borderColor: colors.border }]}>
+              <Feather name="shield" size={14} color={colors.primary} />
+              <Text style={[styles.legalButtonText, { color: colors.foreground }]}>Privacy Policy</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => setLegalOpen("terms")} style={[styles.legalButton, { borderColor: colors.border }]}>
+              <Feather name="file-text" size={14} color={colors.primary} />
+              <Text style={[styles.legalButtonText, { color: colors.foreground }]}>Terms of Service</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
 
         {/* ── Admin Control Panel ─────────────────── */}
         {isAdminOrCEO && (
@@ -484,6 +558,29 @@ export default function ProfileScreen() {
           </View>
         </Pressable>
       </Modal>
+
+      <Modal
+        visible={legalOpen !== null}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setLegalOpen(null)}
+      >
+        <View style={[styles.legalModal, { backgroundColor: colors.background }]}>
+          <View style={[styles.legalHeader, { borderBottomColor: colors.border }]}>
+            <Text style={[styles.legalTitle, { color: colors.foreground }]}>
+              {legalOpen === "privacy" ? "Privacy Policy" : "Terms of Service"}
+            </Text>
+            <TouchableOpacity onPress={() => setLegalOpen(null)} style={styles.legalClose}>
+              <Feather name="x" size={20} color={colors.mutedForeground} />
+            </TouchableOpacity>
+          </View>
+          <ScrollView contentContainerStyle={styles.legalContent}>
+            <Text style={[styles.legalBody, { color: colors.mutedForeground }]}>
+              {legalOpen === "privacy" ? PRIVACY_POLICY : TERMS_OF_SERVICE}
+            </Text>
+          </ScrollView>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -540,6 +637,17 @@ const styles = StyleSheet.create({
   onboardingText: { flex: 1, fontSize: 12, lineHeight: 16, marginLeft: 4 },
   pendingPill: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, borderWidth: 1 },
   pendingPillText: { fontSize: 11, fontWeight: "700" },
+  settingsCard: { marginHorizontal: 16, marginBottom: 10, borderRadius: 16, borderWidth: 1, padding: 14 },
+  settingsHeader: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 10 },
+  settingsButtons: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  legalButton: { flexDirection: "row", alignItems: "center", gap: 6, borderWidth: 1, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 8 },
+  legalButtonText: { fontSize: 12, fontWeight: "600" },
+  legalModal: { flex: 1 },
+  legalHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 18, paddingTop: 18, paddingBottom: 14, borderBottomWidth: 1 },
+  legalTitle: { fontSize: 20, fontWeight: "700" },
+  legalClose: { padding: 5 },
+  legalContent: { padding: 18, paddingBottom: 40 },
+  legalBody: { fontSize: 14, lineHeight: 22 },
 
   tabs: { flexDirection: "row", borderBottomWidth: 1, marginHorizontal: 16, marginTop: 8 },
   tab: { flex: 1, alignItems: "center", paddingVertical: 14 },

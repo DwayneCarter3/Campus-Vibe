@@ -1,7 +1,8 @@
 {
   "expo": {
     "name": "CampusX",
-    "slug": "campusx-mobile",
+    "owner": "CarterThe3rd",
+    "slug": "campusx",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -18,6 +19,16 @@
     },
     "android": {
       "backgroundColor": "#090912"
+    },
+    "updates": {
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "extra": {
+      "devDomain": "campus-vibe-carterthe3rd.replit.dev"
     },
     "web": {
       "favicon": "./assets/images/icon.png",

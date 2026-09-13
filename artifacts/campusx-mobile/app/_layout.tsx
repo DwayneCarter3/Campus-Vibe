@@ -23,8 +23,11 @@ import { setBaseUrl, setAuthTokenGetter } from "@workspace/api-client-react";
 SplashScreen.preventAutoHideAsync();
 
 const publishableKey: string =
-  Constants.expoConfig?.extra?.clerkPublishableKey || "";
+  process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY ||
+  Constants.expoConfig?.extra?.clerkPublishableKey ||
+  "";
 const devDomain: string =
+  process.env.EXPO_PUBLIC_DOMAIN ||
   Constants.expoConfig?.extra?.devDomain ||
   "campus-vibe-carterthe3rd.replit.dev";
 

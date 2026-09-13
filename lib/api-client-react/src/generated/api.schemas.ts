@@ -26,7 +26,6 @@ export interface HealthStatus {
 
 export interface UserProfile {
   id: number;
-  registrationRank: number;
   clerkUserId: string;
   fullName: string;
   email: string;
@@ -43,13 +42,14 @@ export interface UserProfile {
   avatarUrl: string | null;
   isAdmin: boolean;
   role: string;
-  campusTitle: string;
-  verificationStatus: string;
+  registrationRank: number;
   premiumBadgeDiscountPercent: number;
   /** @nullable */
-  promoExpiresAt?: string | null;
+  promoExpiresAt: string | null;
   /** @nullable */
-  hustlePromoExpiresAt?: string | null;
+  hustlePromoExpiresAt: string | null;
+  campusTitle: string;
+  verificationStatus: string;
   createdAt: string;
 }
 
@@ -358,6 +358,60 @@ export interface ApproveBadgeResponse {
   success: boolean;
 }
 
+export interface SetUserVerificationBody {
+  verified: boolean;
+}
+
+export interface SetUserVerificationResponse {
+  success: boolean;
+  verificationStatus: string;
+}
+
+export type PaymentPackage =
+  (typeof PaymentPackage)[keyof typeof PaymentPackage];
+
+export const PaymentPackage = {
+  student_verification: "student_verification",
+  premium_blue_tick: "premium_blue_tick",
+  marketplace_promotion: "marketplace_promotion",
+} as const;
+
+export interface InitializePaymentBody {
+  packageType: PaymentPackage;
+}
+
+export interface InitializePaymentResponse {
+  success: boolean;
+  requiresPayment: boolean;
+  claimRank?: number;
+  message?: string;
+  reference?: string;
+  authorizationUrl?: string;
+  /** @nullable */
+  accessCode?: string | null;
+  baseAmountKobo?: number;
+  amountKobo?: number;
+  label?: string;
+}
+
+export interface PaymentStatusResponse {
+  reference: string;
+  status: string;
+  packageType: PaymentPackage;
+}
+
+export interface PaymentHistoryItem {
+  reference: string;
+  packageType: PaymentPackage;
+  status: string;
+  amountKobo: number;
+  createdAt: string;
+}
+
+export interface ListPaymentsResponse {
+  payments: PaymentHistoryItem[];
+}
+
 export interface ConversationSummary {
   id: number;
   otherUserId: string;
@@ -449,6 +503,12 @@ export type ListAdminUsersParams = {
   search?: string;
   limit?: number;
   offset?: number;
+};
+
+export type ReceivePaystackWebhookBody = { [key: string]: unknown };
+
+export type ReceivePaystackWebhook200 = {
+  received: boolean;
 };
 
 export type ListMessagesParams = {

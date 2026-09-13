@@ -38,10 +38,11 @@ async function getPostCount(clerkUserId: string): Promise<number> {
 /** Strip expired promo badges (lazy check on any user read). Returns updated user. */
 async function expirePromoIfNeeded(user: typeof usersTable.$inferSelect): Promise<typeof usersTable.$inferSelect> {
   if (user.promoExpiresAt && user.promoExpiresAt < new Date()) {
+    const roleKeepsVerification = user.role === "ceo" || user.role === "admin";
     const [updated] = await db
       .update(usersTable)
       .set({
-        verificationStatus: "none",
+        verificationStatus: roleKeepsVerification ? "Premium_Approved" : "none",
         premiumBadgeDiscountPercent: 0,
         promoExpiresAt: null,
         hustlePromoExpiresAt: null,
@@ -50,7 +51,7 @@ async function expirePromoIfNeeded(user: typeof usersTable.$inferSelect): Promis
       .returning();
     return updated ?? {
       ...user,
-      verificationStatus: "none",
+      verificationStatus: roleKeepsVerification ? "Premium_Approved" : "none",
       premiumBadgeDiscountPercent: 0,
       promoExpiresAt: null,
       hustlePromoExpiresAt: null,
@@ -87,8 +88,18 @@ router.get("/users/me", requireAuth, async (req, res): Promise<void> => {
   }
 
   if (user.email.trim().toLowerCase() === CEO_EMAIL && user.role !== "ceo") {
-    await db.update(usersTable).set({ role: "ceo", isAdmin: true }).where(eq(usersTable.clerkUserId, userId));
-    user = { ...user, role: "ceo", isAdmin: true };
+    await db.update(usersTable).set({
+      role: "ceo",
+      isAdmin: true,
+      verificationStatus: "Premium_Approved",
+    }).where(eq(usersTable.clerkUserId, userId));
+    user = { ...user, role: "ceo", isAdmin: true, verificationStatus: "Premium_Approved" };
+  } else if (
+    (user.role === "ceo" || user.role === "admin") &&
+    user.verificationStatus !== "Premium_Approved"
+  ) {
+    await db.update(usersTable).set({ verificationStatus: "Premium_Approved" }).where(eq(usersTable.clerkUserId, userId));
+    user = { ...user, verificationStatus: "Premium_Approved" };
   }
 
   // Lazy expiry: strip promo badge if 30-day window has closed
@@ -182,6 +193,7 @@ router.put("/users/me", requireAuth, async (req, res): Promise<void> => {
           avatarUrl: data.avatarUrl ?? null,
           role: roleVal,
           isAdmin: isAdminVal,
+          verificationStatus: isAdminVal ? "Premium_Approved" : "none",
         })
         .returning();
     } catch (err: any) {

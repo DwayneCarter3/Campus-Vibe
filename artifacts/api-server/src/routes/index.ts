@@ -9,6 +9,7 @@ import schoolVotesRouter from "./school-votes";
 import storageRouter from "./storage";
 import adminRouter from "./admin";
 import messagesRouter from "./messages";
+import paymentsRouter from "./payments";
 
 const router: IRouter = Router();
 
@@ -22,5 +23,6 @@ router.use(schoolVotesRouter);
 router.use(storageRouter);
 router.use(adminRouter);
 router.use(messagesRouter);
+router.use(paymentsRouter);
 
 export default router;

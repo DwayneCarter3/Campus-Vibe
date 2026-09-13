@@ -19,7 +19,6 @@ export const HealthCheckResponse = zod.object({
  */
 export const GetMyProfileResponse = zod.object({
   id: zod.number(),
-  registrationRank: zod.number(),
   clerkUserId: zod.string(),
   fullName: zod.string(),
   email: zod.string(),
@@ -34,11 +33,12 @@ export const GetMyProfileResponse = zod.object({
   avatarUrl: zod.string().nullable(),
   isAdmin: zod.boolean(),
   role: zod.string(),
+  registrationRank: zod.number(),
+  premiumBadgeDiscountPercent: zod.number(),
+  promoExpiresAt: zod.coerce.date().nullable(),
+  hustlePromoExpiresAt: zod.coerce.date().nullable(),
   campusTitle: zod.string(),
   verificationStatus: zod.string(),
-  premiumBadgeDiscountPercent: zod.number(),
-  promoExpiresAt: zod.coerce.date().nullable().optional(),
-  hustlePromoExpiresAt: zod.coerce.date().nullable().optional(),
   createdAt: zod.coerce.date(),
 });
 
@@ -60,7 +60,6 @@ export const UpdateMyProfileBody = zod.object({
 
 export const UpdateMyProfileResponse = zod.object({
   id: zod.number(),
-  registrationRank: zod.number(),
   clerkUserId: zod.string(),
   fullName: zod.string(),
   email: zod.string(),
@@ -75,11 +74,12 @@ export const UpdateMyProfileResponse = zod.object({
   avatarUrl: zod.string().nullable(),
   isAdmin: zod.boolean(),
   role: zod.string(),
+  registrationRank: zod.number(),
+  premiumBadgeDiscountPercent: zod.number(),
+  promoExpiresAt: zod.coerce.date().nullable(),
+  hustlePromoExpiresAt: zod.coerce.date().nullable(),
   campusTitle: zod.string(),
   verificationStatus: zod.string(),
-  premiumBadgeDiscountPercent: zod.number(),
-  promoExpiresAt: zod.coerce.date().nullable().optional(),
-  hustlePromoExpiresAt: zod.coerce.date().nullable().optional(),
   createdAt: zod.coerce.date(),
 });
 
@@ -680,6 +680,102 @@ export const ApproveBadgeParams = zod.object({
 
 export const ApproveBadgeResponse = zod.object({
   success: zod.boolean(),
+});
+
+/**
+ * @summary Reject a pending verification or revoke an existing badge
+ */
+export const RejectBadgeParams = zod.object({
+  userId: zod.coerce.string(),
+});
+
+export const RejectBadgeResponse = zod.object({
+  success: zod.boolean(),
+});
+
+/**
+ * @summary Approve or revoke any user's verification from the user list
+ */
+export const SetUserVerificationParams = zod.object({
+  userId: zod.coerce.string(),
+});
+
+export const SetUserVerificationBody = zod.object({
+  verified: zod.boolean(),
+});
+
+export const SetUserVerificationResponse = zod.object({
+  success: zod.boolean(),
+  verificationStatus: zod.string(),
+});
+
+/**
+ * @summary Initialize a Paystack payment or claim an eligible early-bird benefit
+ */
+export const InitializePaymentBody = zod.object({
+  packageType: zod.enum([
+    "student_verification",
+    "premium_blue_tick",
+    "marketplace_promotion",
+  ]),
+});
+
+export const InitializePaymentResponse = zod.object({
+  success: zod.boolean(),
+  requiresPayment: zod.boolean(),
+  claimRank: zod.number().optional(),
+  message: zod.string().optional(),
+  reference: zod.string().optional(),
+  authorizationUrl: zod.string().url().optional(),
+  accessCode: zod.string().nullish(),
+  baseAmountKobo: zod.number().optional(),
+  amountKobo: zod.number().optional(),
+  label: zod.string().optional(),
+});
+
+/**
+ * @summary Get the current status of one of the current user's payments
+ */
+export const GetPaymentStatusParams = zod.object({
+  reference: zod.coerce.string(),
+});
+
+export const GetPaymentStatusResponse = zod.object({
+  reference: zod.string(),
+  status: zod.string(),
+  packageType: zod.enum([
+    "student_verification",
+    "premium_blue_tick",
+    "marketplace_promotion",
+  ]),
+});
+
+/**
+ * @summary Receive a signed Paystack webhook
+ */
+export const ReceivePaystackWebhookBody = zod.object({}).passthrough();
+
+export const ReceivePaystackWebhookResponse = zod.object({
+  received: zod.boolean(),
+});
+
+/**
+ * @summary List the current user's payments
+ */
+export const ListPaymentsResponse = zod.object({
+  payments: zod.array(
+    zod.object({
+      reference: zod.string(),
+      packageType: zod.enum([
+        "student_verification",
+        "premium_blue_tick",
+        "marketplace_promotion",
+      ]),
+      status: zod.string(),
+      amountKobo: zod.number(),
+      createdAt: zod.coerce.date(),
+    }),
+  ),
 });
 
 /**

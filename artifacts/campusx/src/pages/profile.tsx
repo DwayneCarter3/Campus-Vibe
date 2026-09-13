@@ -9,8 +9,9 @@ import {
   getGetUserServicesQueryKey,
   useRequestUploadUrl,
   useClaimAdmin,
-  useRequestPremiumBadge,
+  useInitializePayment,
 } from "@workspace/api-client-react";
+import type { PaymentPackage } from "@workspace/api-client-react";
 import { useUser, useClerk } from "@clerk/react";
 import { useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
@@ -35,6 +36,9 @@ import {
   Loader2,
   Crown,
   Star,
+  Settings,
+  ScrollText,
+  TrendingUp,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { PostCard } from "@/components/post-card";
@@ -42,6 +46,7 @@ import { ServiceCard } from "@/components/service-card";
 import { CampusTitleBadge } from "@/components/campus-title-badge";
 import { AvatarModal } from "@/components/avatar-modal";
 import { cn } from "@/lib/utils";
+import { PRIVACY_POLICY, TERMS_OF_SERVICE } from "@/lib/legal";
 
 type Tab = "posts" | "hustles";
 
@@ -56,11 +61,12 @@ export default function MyProfilePage() {
   const [editBio, setEditBio] = useState("");
   const [editAvatarUrl, setEditAvatarUrl] = useState("");
   const [isAvatarUploading, setIsAvatarUploading] = useState(false);
+  const [legalOpen, setLegalOpen] = useState<"privacy" | "terms" | null>(null);
   const avatarFileRef = useRef<HTMLInputElement>(null);
 
   const requestUploadUrl = useRequestUploadUrl();
   const claimAdmin = useClaimAdmin();
-  const requestBadge = useRequestPremiumBadge();
+  const initializePayment = useInitializePayment();
 
   const { data: profile, isLoading } = useGetMyProfile({
     query: { queryKey: getGetMyProfileQueryKey() },
@@ -69,6 +75,25 @@ export default function MyProfilePage() {
   const updateProfile = useUpdateMyProfile();
 
   const userId = clerkUser?.id ?? "";
+
+  const startPayment = (packageType: PaymentPackage) => {
+    initializePayment.mutate(
+      { data: { packageType } },
+      {
+        onSuccess: (result) => {
+          queryClient.invalidateQueries({ queryKey: getGetMyProfileQueryKey() });
+          if (result.requiresPayment && result.authorizationUrl) {
+            window.location.assign(result.authorizationUrl);
+            return;
+          }
+          alert(result.message ?? "Your CampusX benefit is now active.");
+        },
+        onError: (error) => {
+          alert(error instanceof Error ? error.message : "Could not start payment.");
+        },
+      },
+    );
+  };
 
   const { data: postsData, isLoading: postsLoading } = useGetUserPosts(userId, undefined, {
     query: { queryKey: getGetUserPostsQueryKey(userId), enabled: !!userId && activeTab === "posts" },
@@ -185,9 +210,14 @@ export default function MyProfilePage() {
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap mb-1">
                 <h1 className="text-xl font-bold">{profile.fullName}</h1>
-                {hasMatric && profile.verificationStatus === "approved" && (
+                {hasMatric && ["approved", "Student_Verified", "Premium_Approved"].includes(profile.verificationStatus) && (
                   <Badge className="text-[10px] px-1.5 py-0 h-4 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-medium flex items-center gap-0.5">
-                    <ShieldCheck className="h-2.5 w-2.5" /> Verified
+                    <ShieldCheck className="h-2.5 w-2.5" /> Student Verified
+                  </Badge>
+                )}
+                {profile.verificationStatus === "Premium_Approved" && (
+                  <Badge className="text-[10px] px-1.5 py-0 h-4 bg-blue-500/20 text-blue-300 border border-blue-400/40 font-medium flex items-center gap-0.5 shadow-[0_0_12px_rgba(59,130,246,0.45)]">
+                    <Star className="h-2.5 w-2.5" /> Premium Blue Tick
                   </Badge>
                 )}
                 {profile.campusTitle && (
@@ -294,7 +324,7 @@ export default function MyProfilePage() {
         })()}
 
         {/* ── Badge Request Section ──────────────────────── */}
-        {hasMatric && profile.verificationStatus !== "approved" && (
+        {hasMatric && !["approved", "Student_Verified", "Premium_Approved"].includes(profile.verificationStatus) && (
           <div className="rounded-2xl border border-sky-500/20 bg-sky-500/5 p-4 flex items-center justify-between gap-4">
             <div className="flex items-center gap-3 min-w-0">
               <div className="h-8 w-8 rounded-full bg-sky-500/15 border border-sky-500/25 flex items-center justify-center shrink-0">
@@ -303,7 +333,7 @@ export default function MyProfilePage() {
               <div className="min-w-0">
                 <p className="text-sm font-medium text-sky-200">Verified Student Badge</p>
                  <p className="text-[11px] text-muted-foreground">
-                  {profile.verificationStatus === "pending_promo" || profile.verificationStatus === "pending_paid"
+                  {["pending_promo", "pending_paid", "Premium_Pending_Approval"].includes(profile.verificationStatus)
                     ? "Your badge request is pending admin review."
                      : profile.promoExpiresAt
                        ? "Request your free blue verification badge while your launch perk is active."
@@ -312,23 +342,61 @@ export default function MyProfilePage() {
               </div>
             </div>
             {profile.verificationStatus === "none" && (
-              <Button
-                size="sm"
-                className="shrink-0 text-xs bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/30"
-                onClick={() =>
-                  requestBadge.mutate(
-                     { data: { badgeType: profile.promoExpiresAt ? "promo" : "paid" } },
-                    { onSuccess: () => queryClient.invalidateQueries({ queryKey: getGetMyProfileQueryKey() }) }
-                  )
-                }
-                disabled={requestBadge.isPending}
-              >
-                 {requestBadge.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : profile.promoExpiresAt ? "Request Free Badge" : "Request Paid Badge"}
-              </Button>
+              <div className="flex shrink-0 gap-2">
+                <Button
+                  size="sm"
+                  className="text-xs bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/30"
+                  onClick={() => startPayment("student_verification")}
+                  disabled={initializePayment.isPending}
+                >
+                  {initializePayment.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : profile.promoExpiresAt ? "Claim Free" : "Verify · ₦1,500"}
+                </Button>
+                <Button
+                  size="sm"
+                  className="text-xs bg-blue-600/80 hover:bg-blue-600 text-white shadow-[0_0_14px_rgba(37,99,235,0.3)]"
+                  onClick={() => startPayment("premium_blue_tick")}
+                  disabled={initializePayment.isPending}
+                >
+                  Premium · ₦5,000
+                </Button>
+              </div>
             )}
-            {(profile.verificationStatus === "pending_promo" || profile.verificationStatus === "pending_paid") && (
+            {["pending_promo", "pending_paid", "Premium_Pending_Approval"].includes(profile.verificationStatus) && (
               <Badge className="shrink-0 text-[11px] bg-amber-500/15 text-amber-400 border border-amber-500/25">Pending</Badge>
             )}
+          </div>
+        )}
+
+        {hasMatric && profile.verificationStatus === "Premium_Pending_Approval" && (
+          <div className="rounded-2xl border border-blue-400/30 bg-blue-500/10 p-4 flex items-center gap-3 shadow-[0_0_20px_rgba(37,99,235,0.12)]">
+            <Star className="h-5 w-5 text-blue-300 shrink-0" />
+            <div>
+              <p className="text-sm font-semibold text-blue-200">Premium Blue Tick payment received</p>
+              <p className="text-[11px] text-blue-200/70 mt-0.5">An admin will review your student details before activating the glowing badge.</p>
+            </div>
+          </div>
+        )}
+
+        {servicesData?.services && servicesData.services.length > 0 && (
+          <div className="rounded-2xl border border-violet-500/25 bg-violet-500/5 p-4 flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="h-8 w-8 rounded-full bg-violet-500/15 border border-violet-500/25 flex items-center justify-center shrink-0">
+                <TrendingUp className="h-4 w-4 text-violet-300" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-violet-200">Promote your Hustle</p>
+                <p className="text-[11px] text-muted-foreground">Boost marketplace visibility for 30 days · ₦1,500</p>
+              </div>
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              className="shrink-0 border-violet-400/30 text-violet-200 hover:bg-violet-500/15 text-xs"
+              onClick={() => startPayment("marketplace_promotion")}
+              disabled={initializePayment.isPending}
+            >
+              Promote
+            </Button>
           </div>
         )}
 
@@ -379,6 +447,21 @@ export default function MyProfilePage() {
             </Button>
           </div>
         )}
+
+        <div className="rounded-2xl border border-white/10 bg-background/30 p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <Settings className="h-4 w-4 text-muted-foreground" />
+            <p className="text-sm font-semibold">Settings & legal</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" size="sm" className="border-white/10 text-xs" onClick={() => setLegalOpen("privacy")}>
+              <ShieldCheck className="h-3.5 w-3.5 mr-1.5" /> Privacy Policy
+            </Button>
+            <Button variant="outline" size="sm" className="border-white/10 text-xs" onClick={() => setLegalOpen("terms")}>
+              <ScrollText className="h-3.5 w-3.5 mr-1.5" /> Terms of Service
+            </Button>
+          </div>
+        </div>
 
         {/* ── Tabs ───────────────────────────────────────── */}
         <div className="flex gap-1 p-1 glass rounded-xl border border-white/5">
@@ -536,6 +619,19 @@ export default function MyProfilePage() {
         avatarUrl={profile.avatarUrl}
         name={profile.fullName}
       />
+
+      <Dialog open={legalOpen !== null} onOpenChange={(open) => !open && setLegalOpen(null)}>
+        <DialogContent className="max-w-2xl max-h-[85dvh] bg-card border-white/10">
+          <DialogHeader>
+            <DialogTitle>{legalOpen === "privacy" ? "Privacy Policy" : "Terms of Service"}</DialogTitle>
+          </DialogHeader>
+          <div className="max-h-[65dvh] overflow-y-auto rounded-xl bg-background/40 border border-white/5 p-4">
+            <pre className="whitespace-pre-wrap font-sans text-sm leading-6 text-muted-foreground">
+              {legalOpen === "privacy" ? PRIVACY_POLICY : TERMS_OF_SERVICE}
+            </pre>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

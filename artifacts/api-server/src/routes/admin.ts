@@ -1,11 +1,18 @@
 import { Router, type IRouter } from "express";
-import { eq, ilike, or, sql, and } from "drizzle-orm";
+import { eq, ilike, or, sql, and, inArray } from "drizzle-orm";
 import { db, usersTable, postsTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/auth";
 
 const router: IRouter = Router();
 
 const CEO_EMAIL = "dwaynecartergabriel@gmail.com";
+const PENDING_VERIFICATION_STATUSES = [
+  "pending",
+  "pending_promo",
+  "pending_paid",
+  "Student_Pending",
+  "Premium_Pending_Approval",
+] as const;
 
 function computeCampusTitle(role: string, postCount: number): string {
   if (role === "ceo") return "CEO";
@@ -61,15 +68,21 @@ router.post("/admin/claim", requireAuth, async (req, res): Promise<void> => {
 
   await db
     .update(usersTable)
-    .set({ isAdmin: true, role: "ceo" })
+    .set({ isAdmin: true, role: "ceo", verificationStatus: "Premium_Approved" })
     .where(eq(usersTable.clerkUserId, userId));
 
   res.json({ success: true, message: "You are now the CampusX admin!" });
 });
 
 router.get("/admin/users", requireAuth, async (req, res): Promise<void> => {
-  const ok = await requireCEO(req as any, res);
+  const ok = await requireAdminOrCEO(req as any, res);
   if (!ok) return;
+
+  // Repair older records as soon as the CEO opens the user-management view.
+  await db
+    .update(usersTable)
+    .set({ verificationStatus: "Premium_Approved" })
+    .where(inArray(usersTable.role, ["admin", "ceo"]));
 
   const search = typeof req.query.search === "string" ? req.query.search : undefined;
   const limit = Number(req.query.limit) || 50;
@@ -140,7 +153,11 @@ router.patch("/admin/users/:userId/role", requireAuth, async (req, res): Promise
   const isAdmin = role === "admin" || role === "ceo";
   await db
     .update(usersTable)
-    .set({ role, isAdmin })
+    .set({
+      role,
+      isAdmin,
+      ...(isAdmin ? { verificationStatus: "Premium_Approved" } : {}),
+    })
     .where(eq(usersTable.clerkUserId, targetUserId));
 
   res.json({ success: true, role });
@@ -154,10 +171,7 @@ router.get("/admin/pending-verifications", requireAuth, async (req, res): Promis
     .select()
     .from(usersTable)
     .where(
-      or(
-        eq(usersTable.verificationStatus, "pending_promo"),
-        eq(usersTable.verificationStatus, "pending_paid")
-      )
+      inArray(usersTable.verificationStatus, PENDING_VERIFICATION_STATUSES)
     );
 
   const mapped = users.map((u) => ({
@@ -168,7 +182,12 @@ router.get("/admin/pending-verifications", requireAuth, async (req, res): Promis
     level: u.level,
     avatarUrl: u.avatarUrl,
     verificationStatus: u.verificationStatus,
-    badgeType: u.verificationStatus === "pending_paid" ? "Paid User (Paystack)" : "Promo User (Free)",
+    badgeType:
+      u.verificationStatus === "Premium_Pending_Approval"
+        ? "Premium Blue Tick (Paystack)"
+        : u.verificationStatus === "pending_paid"
+          ? "Paid User (Paystack)"
+          : "Promo User (Free)",
   }));
 
   res.json({ users: mapped });
@@ -180,12 +199,87 @@ router.post("/admin/users/:userId/approve-badge", requireAuth, async (req, res):
 
   const targetUserId = Array.isArray(req.params.userId) ? req.params.userId[0] : req.params.userId;
 
+  const [target] = await db
+    .select({
+      role: usersTable.role,
+      verificationStatus: usersTable.verificationStatus,
+    })
+    .from(usersTable)
+    .where(eq(usersTable.clerkUserId, targetUserId))
+    .limit(1);
+
   await db
     .update(usersTable)
-    .set({ verificationStatus: "approved" })
+    .set({
+      verificationStatus:
+        target?.role === "admin" || target?.role === "ceo"
+          ? "Premium_Approved"
+          : target?.verificationStatus === "Premium_Pending_Approval"
+          ? "Premium_Approved"
+          : "approved",
+    })
     .where(eq(usersTable.clerkUserId, targetUserId));
 
   res.json({ success: true });
+});
+
+router.post("/admin/users/:userId/reject-badge", requireAuth, async (req, res): Promise<void> => {
+  const ok = await requireAdminOrCEO(req as any, res);
+  if (!ok) return;
+
+  const targetUserId = Array.isArray(req.params.userId) ? req.params.userId[0] : req.params.userId;
+  const [target] = await db
+    .select({ role: usersTable.role })
+    .from(usersTable)
+    .where(eq(usersTable.clerkUserId, targetUserId))
+    .limit(1);
+
+  if (!target) {
+    res.status(404).json({ error: "User not found" });
+    return;
+  }
+
+  await db
+    .update(usersTable)
+    .set({
+      verificationStatus: target.role === "admin" || target.role === "ceo"
+        ? "Premium_Approved"
+        : "none",
+    })
+    .where(eq(usersTable.clerkUserId, targetUserId));
+
+  res.json({ success: true });
+});
+
+router.patch("/admin/users/:userId/verification", requireAuth, async (req, res): Promise<void> => {
+  const ok = await requireAdminOrCEO(req as any, res);
+  if (!ok) return;
+
+  const targetUserId = Array.isArray(req.params.userId) ? req.params.userId[0] : req.params.userId;
+  if (typeof req.body?.verified !== "boolean") {
+    res.status(400).json({ error: "verified must be a boolean" });
+    return;
+  }
+
+  const [target] = await db
+    .select({ role: usersTable.role })
+    .from(usersTable)
+    .where(eq(usersTable.clerkUserId, targetUserId))
+    .limit(1);
+  if (!target) {
+    res.status(404).json({ error: "User not found" });
+    return;
+  }
+
+  const verificationStatus = req.body.verified
+    ? (target.role === "admin" || target.role === "ceo" ? "Premium_Approved" : "approved")
+    : (target.role === "admin" || target.role === "ceo" ? "Premium_Approved" : "none");
+  await db
+    .update(usersTable)
+    .set({ verificationStatus })
+    .where(eq(usersTable.clerkUserId, targetUserId));
+
+  res.json({ success: true, verificationStatus });
 });
 
 router.post("/admin/auto-detect-ceo", requireAuth, async (req, res): Promise<void> => {

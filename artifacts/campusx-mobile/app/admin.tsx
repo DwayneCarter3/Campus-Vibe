@@ -22,6 +22,8 @@ import {
   useListPendingVerifications,
   getListPendingVerificationsQueryKey,
   useApproveBadge,
+  useRejectBadge,
+  useSetUserVerification,
 } from "@workspace/api-client-react";
 import type { AdminUserItem, PendingVerificationItem } from "@workspace/api-client-react";
 import { useColors } from "@/hooks/useColors";
@@ -77,6 +79,8 @@ export default function AdminScreen() {
 
   const updateRole = useUpdateUserRole();
   const approveBadge = useApproveBadge();
+  const rejectBadge = useRejectBadge();
+  const setUserVerification = useSetUserVerification();
 
   const handleRoleChange = (userId: string, currentRole: string) => {
     const currentIdx = ROLES.indexOf(currentRole as UserRole);
@@ -127,6 +131,51 @@ export default function AdminScreen() {
     );
   };
 
+  const handleVerificationToggle = (userId: string, name: string, verified: boolean) => {
+    Alert.alert(
+      verified ? "Revoke Verification" : "Approve Verification",
+      `${verified ? "Revoke" : "Approve"} verification for ${name}?`,
+      [
+        {
+          text: verified ? "Revoke" : "Approve",
+          onPress: () =>
+            setUserVerification.mutate(
+              { userId, data: { verified: !verified } },
+              {
+                onSuccess: () => {
+                  queryClient.invalidateQueries({ queryKey: getListAdminUsersQueryKey() });
+                  queryClient.invalidateQueries({ queryKey: getListPendingVerificationsQueryKey() });
+                },
+                onError: () => Alert.alert("Error", "Could not update verification."),
+              },
+            ),
+        },
+        { text: "Cancel", style: "cancel" },
+      ],
+    );
+  };
+
+  const handleReject = (userId: string, name: string) => {
+    Alert.alert("Reject Verification", `Reject verification for ${name}?`, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Reject",
+        style: "destructive",
+        onPress: () =>
+          rejectBadge.mutate(
+            { userId },
+            {
+              onSuccess: () => {
+                queryClient.invalidateQueries({ queryKey: getListPendingVerificationsQueryKey() });
+                queryClient.invalidateQueries({ queryKey: getListAdminUsersQueryKey() });
+              },
+              onError: () => Alert.alert("Error", "Could not reject verification."),
+            },
+          ),
+      },
+    ]);
+  };
+
   if (profileLoading) {
     return (
       <View style={[styles.centered, { backgroundColor: colors.background }]}>
@@ -157,7 +206,7 @@ export default function AdminScreen() {
 
   const tabs: { id: AdminTab; label: string; icon: string }[] = [
     { id: "verifications", label: "Pending Badges", icon: "shield" },
-    ...(isCEO ? [{ id: "users" as AdminTab, label: "All Users", icon: "users" }] : []),
+    ...(isAdminOrCEO ? [{ id: "users" as AdminTab, label: "All Users", icon: "users" }] : []),
   ];
 
   const pendingList = pendingData?.users ?? [];
@@ -267,6 +316,14 @@ export default function AdminScreen() {
                     <Feather name="check-circle" size={14} color="#10B981" />
                     <Text style={[styles.approveBtnText, { color: "#10B981" }]}>Approve</Text>
                   </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => handleReject(u.clerkUserId, u.fullName)}
+                    disabled={rejectBadge.isPending}
+                    style={[styles.approveBtn, { backgroundColor: "#EF444420", borderColor: "#EF444440" }]}
+                  >
+                    <Feather name="x-circle" size={14} color="#F87171" />
+                    <Text style={[styles.approveBtnText, { color: "#F87171" }]}>Reject</Text>
+                  </TouchableOpacity>
                 </View>
               ))
             )}
@@ -274,7 +331,7 @@ export default function AdminScreen() {
         )}
 
         {/* User Management (CEO only) */}
-        {activeTab === "users" && isCEO && (
+        {activeTab === "users" && isAdminOrCEO && (
           <>
             {/* Search */}
             <View style={[styles.searchRow, { backgroundColor: colors.surface, borderColor: colors.border }]}>
@@ -329,7 +386,7 @@ export default function AdminScreen() {
                   </View>
                   <TouchableOpacity
                     onPress={() => handleRoleChange(u.clerkUserId, u.role)}
-                    disabled={updateRole.isPending}
+                    disabled={updateRole.isPending || !isCEO}
                     style={[styles.roleBtn, {
                       backgroundColor: (ROLE_COLORS[u.role as UserRole] ?? "#6B7280") + "20",
                       borderColor: (ROLE_COLORS[u.role as UserRole] ?? "#6B7280") + "40",
@@ -340,6 +397,25 @@ export default function AdminScreen() {
                     </Text>
                     <Feather name="chevron-down" size={11} color={ROLE_COLORS[u.role as UserRole] ?? "#6B7280"} />
                   </TouchableOpacity>
+                  {(() => {
+                    const verified = ["approved", "Student_Verified", "Premium_Approved"].includes(u.verificationStatus);
+                    const protectedAccount = u.role === "admin" || u.role === "ceo";
+                    return (
+                      <TouchableOpacity
+                        onPress={() => handleVerificationToggle(u.clerkUserId, u.fullName, verified)}
+                        disabled={setUserVerification.isPending || protectedAccount}
+                        style={[styles.verifyBtn, {
+                          backgroundColor: protectedAccount ? "#F59E0B20" : verified ? "#EF444420" : "#10B98120",
+                          borderColor: protectedAccount ? "#F59E0B40" : verified ? "#EF444440" : "#10B98140",
+                        }]}
+                      >
+                        <Feather name={protectedAccount ? "shield" : verified ? "x-circle" : "check-circle"} size={12} color={protectedAccount ? "#FBBF24" : verified ? "#F87171" : "#34D399"} />
+                        <Text style={[styles.verifyBtnText, { color: protectedAccount ? "#FBBF24" : verified ? "#F87171" : "#34D399" }]}>
+                          {protectedAccount ? "Always Verified" : verified ? "Revoke Verification" : "Approve Verification"}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })()}
                 </View>
               ))
             )}
@@ -373,6 +449,8 @@ const styles = StyleSheet.create({
   badgeTypePillText: { fontSize: 10, fontWeight: "700" },
   approveBtn: { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, borderWidth: 1, flexShrink: 0 },
   approveBtnText: { fontSize: 12, fontWeight: "700" },
+  verifyBtn: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 8, paddingVertical: 7, borderRadius: 10, borderWidth: 1, flexShrink: 0 },
+  verifyBtnText: { fontSize: 10, fontWeight: "700" },
   roleBtn: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 10, paddingVertical: 7, borderRadius: 10, borderWidth: 1, flexShrink: 0 },
   roleBtnText: { fontSize: 12, fontWeight: "700" },
   searchRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 12, borderWidth: 1, marginBottom: 4 },

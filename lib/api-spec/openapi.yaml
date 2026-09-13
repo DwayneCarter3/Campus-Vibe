@@ -23,6 +23,8 @@ tags:
     description: Direct messaging between users
   - name: admin
     description: Admin dashboard operations
+  - name: payments
+    description: Paystack payments and early-bird benefit claims
 
 paths:
   /healthz:
@@ -739,6 +741,142 @@ paths:
         '401':
           description: Unauthorized.
 
+  /admin/users/{userId}/reject-badge:
+    post:
+      tags: [admin]
+      operationId: rejectBadge
+      summary: Reject a pending verification or revoke an existing badge
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Badge rejected or revoked.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApproveBadgeResponse'
+        '403':
+          description: Admin/CEO only.
+        '401':
+          description: Unauthorized.
+
+  /admin/users/{userId}/verification:
+    patch:
+      tags: [admin]
+      operationId: setUserVerification
+      summary: Approve or revoke any user's verification from the user list
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetUserVerificationBody'
+      responses:
+        '200':
+          description: Verification status updated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SetUserVerificationResponse'
+        '403':
+          description: Admin/CEO only.
+        '401':
+          description: Unauthorized.
+
+  /payments/initialize:
+    post:
+      tags: [payments]
+      operationId: initializePayment
+      summary: Initialize a Paystack payment or claim an eligible early-bird benefit
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InitializePaymentBody'
+      responses:
+        '200':
+          description: Payment initialized or early-bird benefit activated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InitializePaymentResponse'
+        '400':
+          description: Invalid package.
+        '404':
+          description: Profile not found.
+        '503':
+          description: Payment provider is not configured.
+
+  /payments/{reference}:
+    get:
+      tags: [payments]
+      operationId: getPaymentStatus
+      summary: Get the current status of one of the current user's payments
+      parameters:
+        - name: reference
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Payment status.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentStatusResponse'
+        '404':
+          description: Payment not found.
+
+  /payments/webhook/paystack:
+    post:
+      tags: [payments]
+      operationId: receivePaystackWebhook
+      summary: Receive a signed Paystack webhook
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Webhook accepted.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [received]
+                properties:
+                  received:
+                    type: boolean
+        '401':
+          description: Invalid signature.
+
+  /payments:
+    get:
+      tags: [payments]
+      operationId: listPayments
+      summary: List the current user's payments
+      responses:
+        '200':
+          description: Payment history.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListPaymentsResponse'
+
   /messages/conversations:
     get:
       tags: [messages]
@@ -969,6 +1107,16 @@ components:
           type: boolean
         role:
           type: string
+        registrationRank:
+          type: integer
+        premiumBadgeDiscountPercent:
+          type: integer
+        promoExpiresAt:
+          type: ["string", "null"]
+          format: date-time
+        hustlePromoExpiresAt:
+          type: ["string", "null"]
+          format: date-time
         campusTitle:
           type: string
         verificationStatus:
@@ -992,6 +1140,10 @@ components:
         - avatarUrl
         - isAdmin
         - role
+        - registrationRank
+        - premiumBadgeDiscountPercent
+        - promoExpiresAt
+        - hustlePromoExpiresAt
         - campusTitle
         - verificationStatus
         - createdAt
@@ -1595,6 +1747,95 @@ components:
       properties:
         success:
           type: boolean
+
+    SetUserVerificationBody:
+      type: object
+      required: [verified]
+      properties:
+        verified:
+          type: boolean
+
+    SetUserVerificationResponse:
+      type: object
+      required: [success, verificationStatus]
+      properties:
+        success:
+          type: boolean
+        verificationStatus:
+          type: string
+
+    PaymentPackage:
+      type: string
+      enum: [student_verification, premium_blue_tick, marketplace_promotion]
+
+    InitializePaymentBody:
+      type: object
+      required: [packageType]
+      properties:
+        packageType:
+          $ref: '#/components/schemas/PaymentPackage'
+
+    InitializePaymentResponse:
+      type: object
+      required: [success, requiresPayment]
+      properties:
+        success:
+          type: boolean
+        requiresPayment:
+          type: boolean
+        claimRank:
+          type: integer
+        message:
+          type: string
+        reference:
+          type: string
+        authorizationUrl:
+          type: string
+          format: uri
+        accessCode:
+          type: ["string", "null"]
+        baseAmountKobo:
+          type: integer
+        amountKobo:
+          type: integer
+        label:
+          type: string
+
+    PaymentStatusResponse:
+      type: object
+      required: [reference, status, packageType]
+      properties:
+        reference:
+          type: string
+        status:
+          type: string
+        packageType:
+          $ref: '#/components/schemas/PaymentPackage'
+
+    PaymentHistoryItem:
+      type: object
+      required: [reference, packageType, status, amountKobo, createdAt]
+      properties:
+        reference:
+          type: string
+        packageType:
+          $ref: '#/components/schemas/PaymentPackage'
+        status:
+          type: string
+        amountKobo:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+
+    ListPaymentsResponse:
+      type: object
+      required: [payments]
+      properties:
+        payments:
+          type: array
+          items:
+            $ref: '#/components/schemas/PaymentHistoryItem'
 
     ConversationSummary:
       type: object

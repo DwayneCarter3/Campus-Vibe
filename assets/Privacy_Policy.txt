@@ -1,0 +1,25 @@
+CampusX Privacy Policy
+Last updated: September 12, 2026
+
+CampusX is a LASU Ojo campus community platform. This Privacy Policy explains what information we collect, why we use it, and how we protect it.
+
+Information we collect
+- Email address and phone number, when provided during account setup or profile updates.
+- Matriculation number, faculty, level, enrollment status, and campus information for student verification and campus safety.
+- Profile information, avatar, posts, messages, marketplace listings, and other content you choose to submit.
+- Payment references and payment status for verification or marketplace promotion purchases.
+
+How we use information
+We use account and student information to provide campus access, verify student identity, reduce duplicate or fraudulent accounts, support marketplace safety, operate direct messaging, and improve CampusX. We may use your matriculation number internally to grant or review a verification badge; it is not shown publicly as part of your profile.
+
+Paystack payments
+Payments are processed by Paystack. CampusX does not receive or store your full card number, PIN, CVV, bank login, or other raw card details. CampusX stores only the payment reference, selected product, amount, and status needed to confirm your purchase and provide support. Paystack's own privacy terms also apply to payment processing.
+
+Sharing and retention
+We share information with service providers only when needed to run CampusX, including authentication, object storage, and payment processing. We may disclose information when required by law or to investigate fraud, abuse, threats, or illegal activity. We retain information for as long as needed to operate the service, meet legal obligations, resolve disputes, and protect the community.
+
+Your choices
+You may update profile information from your account controls. You may contact the CampusX team to request correction or deletion, subject to records we must keep for safety, payment reconciliation, or legal compliance.
+
+Contact
+For privacy questions, contact the CampusX administration through the in-app support or administration channels.

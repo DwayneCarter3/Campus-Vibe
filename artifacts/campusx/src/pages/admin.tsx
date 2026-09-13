@@ -6,6 +6,8 @@ import {
   useListPendingVerifications,
   getListPendingVerificationsQueryKey,
   useApproveBadge,
+  useRejectBadge,
+  useSetUserVerification,
   useGetMyProfile,
   getGetMyProfileQueryKey,
 } from "@workspace/api-client-react";
@@ -68,6 +70,8 @@ export default function AdminPage() {
 
   const updateRole = useUpdateUserRole();
   const approveBadge = useApproveBadge();
+  const rejectBadge = useRejectBadge();
+  const setUserVerification = useSetUserVerification();
 
   if (profileLoading) {
     return (
@@ -110,6 +114,30 @@ export default function AdminPage() {
     );
   };
 
+  const handleVerificationToggle = (userId: string, verified: boolean) => {
+    setUserVerification.mutate(
+      { userId, data: { verified: !verified } },
+      {
+        onSuccess: () => {
+          queryClient.invalidateQueries({ queryKey: getListAdminUsersQueryKey() });
+          queryClient.invalidateQueries({ queryKey: getListPendingVerificationsQueryKey() });
+        },
+      },
+    );
+  };
+
+  const handleReject = (userId: string) => {
+    rejectBadge.mutate(
+      { userId },
+      {
+        onSuccess: () => {
+          queryClient.invalidateQueries({ queryKey: getListAdminUsersQueryKey() });
+          queryClient.invalidateQueries({ queryKey: getListPendingVerificationsQueryKey() });
+        },
+      },
+    );
+  };
+
   const ROLE_COLORS: Record<string, string> = {
     ceo: "bg-yellow-500/20 text-yellow-300 border-yellow-500/30",
     admin: "bg-purple-500/20 text-purple-300 border-purple-500/30",
@@ -118,7 +146,7 @@ export default function AdminPage() {
   };
 
   const tabs: { id: AdminTab; label: string; icon: React.ReactNode }[] = [
-    ...(isCEO ? [{ id: "users" as AdminTab, label: "All Users", icon: <Users className="h-4 w-4" /> }] : []),
+    ...(isAdminOrCEO ? [{ id: "users" as AdminTab, label: "All Users", icon: <Users className="h-4 w-4" /> }] : []),
     { id: "verifications", label: "Pending Verifications", icon: <CheckCircle className="h-4 w-4" /> },
   ];
 
@@ -164,7 +192,7 @@ export default function AdminPage() {
       </div>
 
       {/* Users Tab */}
-      {activeTab === "users" && isCEO && (
+      {activeTab === "users" && isAdminOrCEO && (
         <div>
           {/* Search */}
           <div className="relative mb-4 max-w-xs">
@@ -215,7 +243,7 @@ export default function AdminPage() {
                     <Select
                       value={u.role}
                       onValueChange={(val) => handleRoleChange(u.clerkUserId, val)}
-                      disabled={updateRole.isPending}
+                      disabled={updateRole.isPending || !isCEO}
                     >
                       <SelectTrigger className={cn("h-8 text-xs w-32 border", ROLE_COLORS[u.role] ?? "border-white/10")}>
                         <SelectValue />
@@ -228,6 +256,29 @@ export default function AdminPage() {
                       </SelectContent>
                     </Select>
                   </div>
+                  {(() => {
+                    const verified = ["approved", "Student_Verified", "Premium_Approved"].includes(u.verificationStatus);
+                    const protectedAccount = u.role === "admin" || u.role === "ceo";
+                    return (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className={cn(
+                          "h-8 text-[11px] shrink-0",
+                          protectedAccount
+                            ? "border-amber-500/30 text-amber-300"
+                            : verified
+                            ? "border-rose-500/30 text-rose-300 hover:bg-rose-500/10"
+                            : "border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/10",
+                        )}
+                        onClick={() => handleVerificationToggle(u.clerkUserId, verified)}
+                        disabled={setUserVerification.isPending || protectedAccount}
+                      >
+                        <ShieldCheck className="h-3.5 w-3.5 mr-1" />
+                        {protectedAccount ? "Always Verified" : verified ? "Revoke Verification" : "Approve Verification"}
+                      </Button>
+                    );
+                  })()}
                 </motion.div>
               ))}
 
@@ -299,6 +350,14 @@ export default function AdminPage() {
                   >
                     <ShieldCheck className="h-3.5 w-3.5" />
                     Approve Badge
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="shrink-0 h-9 px-3 border-rose-500/30 text-rose-300 hover:bg-rose-500/10 text-xs font-bold"
+                    onClick={() => handleReject(u.clerkUserId)}
+                    disabled={rejectBadge.isPending}
+                  >
+                    Revoke / Reject
                   </Button>
                 </motion.div>
               ))}
