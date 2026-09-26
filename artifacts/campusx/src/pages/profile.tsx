@@ -49,6 +49,7 @@ import { ServiceCard } from "@/components/service-card";
 import { UserVerificationMarks } from "@/components/user-verification-marks";
 import { VerificationBadge } from "@/components/verification-badge";
 import { AvatarModal } from "@/components/avatar-modal";
+import { InstallAppButton } from "@/components/install-app-button";
 import { cn } from "@/lib/utils";
 
 const SettingsLegalPanel = lazy(() => import("@/components/settings-legal-panel"));
@@ -351,6 +352,7 @@ export default function MyProfilePage() {
 
             {/* Action buttons */}
             <div className="flex flex-col gap-2 shrink-0">
+              <InstallAppButton />
               <Button
                 variant="outline"
                 size="sm"
