@@ -1,5 +1,4 @@
 import { cn } from "@/lib/utils";
-import { Crown } from "lucide-react";
 
 interface CampusTitleBadgeProps {
   title: string;
@@ -7,11 +6,7 @@ interface CampusTitleBadgeProps {
   className?: string;
 }
 
-const ROLE_STYLES: Record<string, string> = {
-  ceo: "bg-gradient-to-r from-yellow-500/25 to-amber-500/25 text-yellow-300 border-yellow-500/40",
-  admin: "bg-purple-500/20 text-purple-300 border-purple-500/30",
-  moderator: "bg-blue-500/20 text-blue-300 border-blue-500/30",
-};
+const STAFF_ROLES = new Set(["ceo", "admin", "moderator"]);
 
 const TITLE_STYLES: Record<string, string> = {
   "Campus Daddy": "bg-gradient-to-r from-pink-500/20 to-orange-500/20 text-orange-300 border-orange-500/30",
@@ -22,11 +17,9 @@ const TITLE_STYLES: Record<string, string> = {
 };
 
 export function CampusTitleBadge({ title, role, className }: CampusTitleBadgeProps) {
-  if (!title) return null;
+  if (!title || STAFF_ROLES.has(title.trim().toLowerCase()) || STAFF_ROLES.has(role?.trim().toLowerCase() ?? "")) return null;
 
-  const isCEO = role === "ceo";
   const styleClass =
-    (role && ROLE_STYLES[role]) ??
     TITLE_STYLES[title] ??
     "bg-white/10 text-foreground/70 border-white/15";
 
@@ -38,7 +31,6 @@ export function CampusTitleBadge({ title, role, className }: CampusTitleBadgePro
         className
       )}
     >
-      {isCEO && <Crown className="h-2.5 w-2.5" />}
       {title}
     </span>
   );

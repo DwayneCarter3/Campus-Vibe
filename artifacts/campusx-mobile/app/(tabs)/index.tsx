@@ -242,16 +242,9 @@ export function PostCard({ post, onHide }: { post: Post; onHide?: () => void }) 
               <Text style={[styles.badgeText, { color: colors.primary }]}>{post.authorFaculty}</Text>
             </View>
             {!post.isAnonymous && (
-              <>
-                <View style={[styles.badge, { backgroundColor: colors.surface }]}>
-                  <Text style={[styles.badgeText, { color: colors.mutedForeground }]}>{post.authorLevel}</Text>
-                </View>
-                <View style={[styles.badge, { backgroundColor: colors.primary + "18" }]}>
-                  <Text style={[styles.badgeText, { color: colors.primary }]}>
-                    {post.authorRole === "ceo" ? "CEO" : post.authorRole.charAt(0).toUpperCase() + post.authorRole.slice(1)}
-                  </Text>
-                </View>
-              </>
+              <View style={[styles.badge, { backgroundColor: colors.surface }]}>
+                <Text style={[styles.badgeText, { color: colors.mutedForeground }]}>{post.authorLevel}</Text>
+              </View>
             )}
             <Text style={[styles.timeText, { color: colors.mutedForeground }]}>{timeAgo}</Text>
           </View>

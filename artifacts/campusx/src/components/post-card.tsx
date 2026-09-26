@@ -305,14 +305,9 @@ export function PostCard({ post, isAdmin, isModerator, moderationMode = false, o
                       {!isAnon && <UserVerificationMarks status={post.authorVerificationStatus} />}
                     </span>
                     {!isAnon && (
-                      <>
-                        <Badge variant="outline" className="h-5 px-1.5 text-[10px] border-white/15 text-muted-foreground">
-                          {post.authorLevel}
-                        </Badge>
-                        <Badge variant="outline" className="h-5 px-1.5 text-[10px] border-primary/25 text-primary">
-                          {post.authorRole === "ceo" ? "CEO" : post.authorRole.charAt(0).toUpperCase() + post.authorRole.slice(1)}
-                        </Badge>
-                      </>
+                      <Badge variant="outline" className="h-5 px-1.5 text-[10px] border-white/15 text-muted-foreground">
+                        {post.authorLevel}
+                      </Badge>
                     )}
                     {isAnon && (
                       <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 border-white/20 text-muted-foreground shrink-0 flex items-center gap-0.5">
