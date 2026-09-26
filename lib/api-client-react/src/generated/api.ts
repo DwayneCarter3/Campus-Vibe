@@ -87,6 +87,10 @@ import type {
   UploadUrlRequest,
   UploadUrlResponse,
   UserProfile,
+  WazobiaChatInput,
+  WazobiaChatResponse,
+  WazobiaLanguageInput,
+  WazobiaLanguageResponse,
 } from "./api.schemas";
 
 import { customFetch } from "../custom-fetch";
@@ -5137,6 +5141,253 @@ export const useSendMessage = <
   TContext
 > => {
   return useMutation(getSendMessageMutationOptions(options));
+};
+
+/**
+ * @summary Get the current user's WAZOBIA response language
+ */
+export const getGetWazobiaLanguageUrl = () => {
+  return `/api/wazobia/language`;
+};
+
+export const getWazobiaLanguage = async (
+  options?: RequestInit,
+): Promise<WazobiaLanguageResponse> => {
+  return customFetch<WazobiaLanguageResponse>(getGetWazobiaLanguageUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetWazobiaLanguageQueryKey = () => {
+  return [`/api/wazobia/language`] as const;
+};
+
+export const getGetWazobiaLanguageQueryOptions = <
+  TData = Awaited<ReturnType<typeof getWazobiaLanguage>>,
+  TError = ErrorType<void>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getWazobiaLanguage>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetWazobiaLanguageQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getWazobiaLanguage>>
+  > = ({ signal }) => getWazobiaLanguage({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getWazobiaLanguage>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetWazobiaLanguageQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getWazobiaLanguage>>
+>;
+export type GetWazobiaLanguageQueryError = ErrorType<void>;
+
+/**
+ * @summary Get the current user's WAZOBIA response language
+ */
+
+export function useGetWazobiaLanguage<
+  TData = Awaited<ReturnType<typeof getWazobiaLanguage>>,
+  TError = ErrorType<void>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getWazobiaLanguage>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetWazobiaLanguageQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Set the current user's WAZOBIA response language
+ */
+export const getSetWazobiaLanguageUrl = () => {
+  return `/api/wazobia/language`;
+};
+
+export const setWazobiaLanguage = async (
+  wazobiaLanguageInput: WazobiaLanguageInput,
+  options?: RequestInit,
+): Promise<WazobiaLanguageResponse> => {
+  return customFetch<WazobiaLanguageResponse>(getSetWazobiaLanguageUrl(), {
+    ...options,
+    method: "PUT",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(wazobiaLanguageInput),
+  });
+};
+
+export const getSetWazobiaLanguageMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof setWazobiaLanguage>>,
+    TError,
+    { data: BodyType<WazobiaLanguageInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof setWazobiaLanguage>>,
+  TError,
+  { data: BodyType<WazobiaLanguageInput> },
+  TContext
+> => {
+  const mutationKey = ["setWazobiaLanguage"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof setWazobiaLanguage>>,
+    { data: BodyType<WazobiaLanguageInput> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return setWazobiaLanguage(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type SetWazobiaLanguageMutationResult = NonNullable<
+  Awaited<ReturnType<typeof setWazobiaLanguage>>
+>;
+export type SetWazobiaLanguageMutationBody = BodyType<WazobiaLanguageInput>;
+export type SetWazobiaLanguageMutationError = ErrorType<void>;
+
+/**
+ * @summary Set the current user's WAZOBIA response language
+ */
+export const useSetWazobiaLanguage = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof setWazobiaLanguage>>,
+    TError,
+    { data: BodyType<WazobiaLanguageInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof setWazobiaLanguage>>,
+  TError,
+  { data: BodyType<WazobiaLanguageInput> },
+  TContext
+> => {
+  return useMutation(getSetWazobiaLanguageMutationOptions(options));
+};
+
+/**
+ * @summary Send a message to WAZOBIA and receive an AI reply
+ */
+export const getChatWithWazobiaUrl = () => {
+  return `/api/wazobia/chat`;
+};
+
+export const chatWithWazobia = async (
+  wazobiaChatInput: WazobiaChatInput,
+  options?: RequestInit,
+): Promise<WazobiaChatResponse> => {
+  return customFetch<WazobiaChatResponse>(getChatWithWazobiaUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(wazobiaChatInput),
+  });
+};
+
+export const getChatWithWazobiaMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof chatWithWazobia>>,
+    TError,
+    { data: BodyType<WazobiaChatInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof chatWithWazobia>>,
+  TError,
+  { data: BodyType<WazobiaChatInput> },
+  TContext
+> => {
+  const mutationKey = ["chatWithWazobia"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof chatWithWazobia>>,
+    { data: BodyType<WazobiaChatInput> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return chatWithWazobia(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ChatWithWazobiaMutationResult = NonNullable<
+  Awaited<ReturnType<typeof chatWithWazobia>>
+>;
+export type ChatWithWazobiaMutationBody = BodyType<WazobiaChatInput>;
+export type ChatWithWazobiaMutationError = ErrorType<void>;
+
+/**
+ * @summary Send a message to WAZOBIA and receive an AI reply
+ */
+export const useChatWithWazobia = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof chatWithWazobia>>,
+    TError,
+    { data: BodyType<WazobiaChatInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof chatWithWazobia>>,
+  TError,
+  { data: BodyType<WazobiaChatInput> },
+  TContext
+> => {
+  return useMutation(getChatWithWazobiaMutationOptions(options));
 };
 
 /**

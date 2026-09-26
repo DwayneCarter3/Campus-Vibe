@@ -14,6 +14,7 @@ import paymentsRouter from "./payments";
 import reportsRouter from "./reports";
 import shuttleStatusRouter from "./shuttle-status";
 import cgpaPlanRouter from "./cgpa-plan";
+import wazobiaRouter from "./wazobia";
 
 const router: IRouter = Router();
 
@@ -32,5 +33,6 @@ router.use(paymentsRouter);
 router.use(reportsRouter);
 router.use(shuttleStatusRouter);
 router.use(cgpaPlanRouter);
+router.use(wazobiaRouter);
 
 export default router;

@@ -1496,6 +1496,45 @@ export const SendMessageBody = zod.object({
 });
 
 /**
+ * @summary Get the current user's WAZOBIA response language
+ */
+export const GetWazobiaLanguageResponse = zod.object({
+  language: zod.enum(["english", "pidgin", "yoruba", "hausa", "igbo"]),
+});
+
+/**
+ * @summary Set the current user's WAZOBIA response language
+ */
+export const SetWazobiaLanguageBody = zod.object({
+  language: zod.enum(["english", "pidgin", "yoruba", "hausa", "igbo"]),
+});
+
+export const SetWazobiaLanguageResponse = zod.object({
+  language: zod.enum(["english", "pidgin", "yoruba", "hausa", "igbo"]),
+});
+
+/**
+ * @summary Send a message to WAZOBIA and receive an AI reply
+ */
+export const chatWithWazobiaBodyContentMax = 2000;
+
+export const ChatWithWazobiaBody = zod.object({
+  content: zod.string().min(1).max(chatWithWazobiaBodyContentMax),
+});
+
+export const ChatWithWazobiaResponse = zod.object({
+  conversationId: zod.number(),
+  reply: zod.object({
+    id: zod.number(),
+    conversationId: zod.number(),
+    senderId: zod.string(),
+    content: zod.string(),
+    isRead: zod.boolean(),
+    createdAt: zod.coerce.date(),
+  }),
+});
+
+/**
  * @summary Request a presigned URL for file upload
  */
 

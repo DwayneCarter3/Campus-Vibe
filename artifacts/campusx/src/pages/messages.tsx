@@ -7,6 +7,10 @@ import {
   useListMessages,
   getListMessagesQueryKey,
   useSendMessage,
+  useGetWazobiaLanguage,
+  getGetWazobiaLanguageQueryKey,
+  useSetWazobiaLanguage,
+  useChatWithWazobia,
 } from "@workspace/api-client-react";
 import type { ConversationSummary, DirectMessage } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -15,10 +19,35 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Send, MessageCircle, ArrowLeft } from "lucide-react";
+import { Send, MessageCircle, ArrowLeft, BadgeCheck } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
+
+const WAZOBIA_ID = "system:wazobia";
+const languages = [
+  { value: "english", label: "English", flag: "🇬🇧" },
+  { value: "pidgin", label: "Pidgin", flag: "🇳🇬" },
+  { value: "yoruba", label: "Yoruba", flag: "🟢" },
+  { value: "hausa", label: "Hausa", flag: "🔴" },
+  { value: "igbo", label: "Igbo", flag: "🔵" },
+] as const;
+type WazobiaLanguage = (typeof languages)[number]["value"];
+
+function BotAvatar({ size = "h-10 w-10" }: { size?: string }) {
+  return (
+    <span aria-label="WAZOBIA AI bot avatar" role="img" className={cn("inline-flex shrink-0 items-center justify-center rounded-full border border-primary/30 bg-primary/10 text-lg", size)}>🤖</span>
+  );
+}
+
+function BotName() {
+  return (
+    <span className="inline-flex min-w-0 items-center gap-1.5">
+      <span className="truncate">WAZOBIA AI</span>
+      <BadgeCheck className="h-3.5 w-3.5 shrink-0 text-primary" aria-label="Verified AI bot" />
+    </span>
+  );
+}
 
 export default function MessagesPage() {
   const search = useSearch();
@@ -26,27 +55,86 @@ export default function MessagesPage() {
   const withUserId = params.get("with");
 
   const { user } = useUser();
+  const userId = user?.id;
   const queryClient = useQueryClient();
   const [activeConvId, setActiveConvId] = useState<number | null>(null);
   const [activeOtherUser, setActiveOtherUser] = useState<{ id: string; name: string; avatarUrl?: string | null } | null>(null);
   const [messageInput, setMessageInput] = useState("");
+  const [language, setLanguage] = useState<WazobiaLanguage>("english");
+  const [languageError, setLanguageError] = useState("");
+  const [sendError, setSendError] = useState("");
+  const [conversationError, setConversationError] = useState("");
   const [mobileView, setMobileView] = useState<"list" | "chat">("list");
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const languageTouchedRef = useRef(false);
+  const currentUserIdRef = useRef(userId);
+
+  useEffect(() => {
+    if (currentUserIdRef.current === userId) return;
+    currentUserIdRef.current = userId;
+    setActiveConvId(null);
+    setActiveOtherUser(null);
+    setMobileView("list");
+    setMessageInput("");
+    setLanguage("english");
+    languageTouchedRef.current = false;
+    setLanguageError("");
+    setSendError("");
+    setConversationError("");
+  }, [userId]);
 
   const startConversation = useStartConversation();
   const sendMessage = useSendMessage();
-
-  const { data: convsData, isLoading: convsLoading } = useListConversations({
-    query: { queryKey: getListConversationsQueryKey() },
+  const chatWithWazobia = useChatWithWazobia();
+  const setWazobiaLanguage = useSetWazobiaLanguage();
+  const isBotThread = activeOtherUser?.id === WAZOBIA_ID;
+  const { data: savedLanguage, isLoading: languageLoading, isError: languageLoadError, refetch: refetchLanguage } = useGetWazobiaLanguage({
+    query: { queryKey: [...getGetWazobiaLanguageQueryKey(), userId], enabled: !!userId && isBotThread, gcTime: 0 },
   });
 
-  const { data: messagesData, isLoading: msgsLoading } = useListMessages(
+  useEffect(() => {
+    if (!languageTouchedRef.current && savedLanguage?.language && languages.some((item) => item.value === savedLanguage.language)) {
+      setLanguage(savedLanguage.language as WazobiaLanguage);
+    }
+  }, [savedLanguage?.language]);
+
+  const chooseLanguage = (next: WazobiaLanguage) => {
+    if (!userId || next === language || setWazobiaLanguage.isPending) return;
+    const previous = language;
+    languageTouchedRef.current = true;
+    setLanguage(next);
+    setLanguageError("");
+    setWazobiaLanguage.mutate({ data: { language: next } }, {
+      onSuccess: (result) => {
+        if (currentUserIdRef.current !== userId) return;
+        queryClient.setQueryData([...getGetWazobiaLanguageQueryKey(), userId], result);
+        setLanguage(result.language as WazobiaLanguage);
+        languageTouchedRef.current = false;
+        queryClient.invalidateQueries({ queryKey: getListConversationsQueryKey() });
+        if (activeConvId !== null) queryClient.invalidateQueries({ queryKey: getListMessagesQueryKey(activeConvId) });
+        queryClient.invalidateQueries({ queryKey: getGetWazobiaLanguageQueryKey() });
+      },
+      onError: () => {
+        if (currentUserIdRef.current !== userId) return;
+        setLanguage(previous);
+        languageTouchedRef.current = false;
+        setLanguageError("Couldn't save your language. Please try again.");
+      },
+    });
+  };
+
+  const { data: convsData, isLoading: convsLoading, isError: convsError, refetch: refetchConversations } = useListConversations({
+    query: { queryKey: [...getListConversationsQueryKey(), userId], enabled: !!userId, gcTime: 0 },
+  });
+
+  const { data: messagesData, isLoading: msgsLoading, isError: msgsError, refetch: refetchMessages } = useListMessages(
     activeConvId ?? 0,
     undefined,
     {
       query: {
-        queryKey: getListMessagesQueryKey(activeConvId ?? 0),
-        enabled: activeConvId !== null,
+        queryKey: [...getListMessagesQueryKey(activeConvId ?? 0), userId],
+        enabled: !!userId && activeConvId !== null,
+        gcTime: 0,
         refetchInterval: 10000, // SSE handles instant updates; this is a safety fallback
       },
     }
@@ -56,41 +144,64 @@ export default function MessagesPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messagesData?.messages]);
 
+  const openWithUser = (targetUserId: string) => {
+    if (!userId) return;
+    setConversationError("");
+    startConversation.mutate(
+      { data: { targetUserId } },
+      {
+        onSuccess: (conv) => {
+          if (currentUserIdRef.current !== userId) return;
+          setActiveConvId(conv.id);
+          setActiveOtherUser({ id: conv.otherUserId, name: conv.otherUserId === WAZOBIA_ID ? "WAZOBIA AI" : conv.otherUserName, avatarUrl: conv.otherUserAvatarUrl });
+          setMobileView("chat");
+          queryClient.invalidateQueries({ queryKey: getListConversationsQueryKey() });
+        },
+        onError: () => {
+          if (currentUserIdRef.current === userId) setConversationError("Couldn't open this conversation. Try again.");
+        },
+      }
+    );
+  };
+
   useEffect(() => {
-    if (withUserId && !startConversation.isPending) {
-      startConversation.mutate(
-        { data: { targetUserId: withUserId } },
-        {
-          onSuccess: (conv) => {
-            setActiveConvId(conv.id);
-            setActiveOtherUser({ id: conv.otherUserId, name: conv.otherUserName, avatarUrl: conv.otherUserAvatarUrl });
-            setMobileView("chat");
-            queryClient.invalidateQueries({ queryKey: getListConversationsQueryKey() });
-          },
-        }
-      );
-    }
-  }, [withUserId]);
+    if (withUserId && userId) openWithUser(withUserId);
+  }, [withUserId, userId]);
 
   const openConversation = (conv: ConversationSummary) => {
     setActiveConvId(conv.id);
-    setActiveOtherUser({ id: conv.otherUserId, name: conv.otherUserName, avatarUrl: conv.otherUserAvatarUrl });
+    setActiveOtherUser({ id: conv.otherUserId, name: conv.otherUserId === WAZOBIA_ID ? "WAZOBIA AI" : conv.otherUserName, avatarUrl: conv.otherUserAvatarUrl });
+    setSendError("");
     setMobileView("chat");
     queryClient.invalidateQueries({ queryKey: getListMessagesQueryKey(conv.id) });
   };
 
   const handleSend = () => {
-    if (!messageInput.trim() || !activeConvId) return;
-    sendMessage.mutate(
-      { conversationId: activeConvId, data: { content: messageInput.trim() } },
-      {
-        onSuccess: () => {
-          setMessageInput("");
-          queryClient.invalidateQueries({ queryKey: getListMessagesQueryKey(activeConvId) });
-          queryClient.invalidateQueries({ queryKey: getListConversationsQueryKey() });
+    if (!userId || !messageInput.trim() || !activeConvId || sendMessage.isPending || chatWithWazobia.isPending) return;
+    const content = messageInput.trim();
+    const conversationId = activeConvId;
+    setSendError("");
+    const onSuccess = () => {
+      if (currentUserIdRef.current !== userId) return;
+      setMessageInput((current) => current.trim() === content ? "" : current);
+      queryClient.invalidateQueries({ queryKey: getListMessagesQueryKey(conversationId) });
+      queryClient.invalidateQueries({ queryKey: getListConversationsQueryKey() });
+    };
+    const onError = () => {
+      if (currentUserIdRef.current === userId) setSendError("Message not sent. Check your connection and try again.");
+    };
+    if (isBotThread) {
+      chatWithWazobia.mutate({ data: { content } }, {
+        onSuccess: (result) => {
+          if (currentUserIdRef.current !== userId) return;
+          queryClient.invalidateQueries({ queryKey: getListMessagesQueryKey(result.conversationId) });
+          onSuccess();
         },
-      }
-    );
+        onError,
+      });
+    } else {
+      sendMessage.mutate({ conversationId, data: { content } }, { onSuccess, onError });
+    }
   };
 
   const conversations = convsData?.conversations ?? [];
@@ -128,7 +239,14 @@ export default function MessagesPage() {
                 </div>
               )}
 
-              {!convsLoading && conversations.length === 0 && (
+              {convsError && (
+                <div role="alert" data-testid="status-conversations-error" className="p-6 text-center text-sm text-muted-foreground">
+                  Couldn't load conversations.
+                  <button data-testid="button-retry-conversations" onClick={() => refetchConversations()} className="block mx-auto mt-2 text-primary underline">Try again</button>
+                </div>
+              )}
+
+              {!convsLoading && !convsError && conversations.length === 0 && (
                 <div className="p-8 text-center text-muted-foreground">
                   <MessageCircle className="h-10 w-10 mx-auto mb-3 opacity-30" />
                   <p className="text-sm">No conversations yet.</p>
@@ -150,12 +268,12 @@ export default function MessagesPage() {
                   )}
                 >
                   <div className="relative shrink-0">
-                    <Avatar className="h-10 w-10 border border-white/10">
+                      {conv.otherUserId === WAZOBIA_ID ? <BotAvatar /> : <Avatar className="h-10 w-10 border border-white/10">
                       <AvatarImage src={conv.otherUserAvatarUrl ?? undefined} />
                       <AvatarFallback className="text-xs gradient-text font-bold">
                         {conv.otherUserName.charAt(0)}
                       </AvatarFallback>
-                    </Avatar>
+                      </Avatar>}
                     {conv.unreadCount > 0 && (
                       <span className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-primary text-[9px] font-bold text-white flex items-center justify-center">
                         {conv.unreadCount}
@@ -164,7 +282,7 @@ export default function MessagesPage() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between gap-1">
-                      <span className="font-semibold text-sm truncate">{conv.otherUserName}</span>
+                      <span className="font-semibold text-sm truncate">{conv.otherUserId === WAZOBIA_ID ? <BotName /> : conv.otherUserName}</span>
                       <span className="text-[10px] text-muted-foreground shrink-0">
                         {formatDistanceToNow(new Date(conv.lastMessageAt), { addSuffix: false })}
                       </span>
@@ -187,8 +305,8 @@ export default function MessagesPage() {
               <div className="flex-1 flex items-center justify-center text-center p-8 text-muted-foreground">
                 <div>
                   <MessageCircle className="h-16 w-16 mx-auto mb-4 opacity-20" />
-                  <p className="text-base font-medium">Select a conversation</p>
-                  <p className="text-sm mt-1 opacity-70">or go to a hustle listing to start one</p>
+                  <p className="text-base font-medium">{startConversation.isPending ? "Opening conversation…" : conversationError || "Select a conversation"}</p>
+                  {conversationError ? <button data-testid="button-retry-conversation" className="text-sm text-primary mt-3 underline" onClick={() => { if (withUserId) openWithUser(withUserId); }}>Try again</button> : <p className="text-sm mt-1 opacity-70">or go to a hustle listing to start one</p>}
                 </div>
               </div>
             ) : (
@@ -201,17 +319,39 @@ export default function MessagesPage() {
                   >
                     <ArrowLeft className="h-5 w-5" />
                   </button>
-                  <Avatar className="h-9 w-9 border border-white/10 shrink-0">
+                  {isBotThread ? <BotAvatar size="h-9 w-9" /> : <Avatar className="h-9 w-9 border border-white/10 shrink-0">
                     <AvatarImage src={activeOtherUser?.avatarUrl ?? undefined} />
                     <AvatarFallback className="text-xs gradient-text font-bold">
                       {(activeOtherUser?.name ?? "?").charAt(0)}
                     </AvatarFallback>
-                  </Avatar>
+                  </Avatar>}
                   <div>
-                    <div className="font-semibold text-sm">{activeOtherUser?.name}</div>
-                    <div className="text-xs text-muted-foreground">Direct message</div>
+                    <div className="font-semibold text-sm">{isBotThread ? <BotName /> : activeOtherUser?.name}</div>
+                    <div className="text-xs text-muted-foreground">{isBotThread ? "Your campus AI assistant" : "Direct message"}</div>
                   </div>
                 </div>
+
+                {isBotThread && (
+                  <div className="border-b border-white/5 px-4 py-3" data-testid="wazobia-language-bar">
+                    <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:flex-wrap sm:overflow-visible" role="group" aria-label="WAZOBIA reply language">
+                      {languages.map(({ value, label, flag }) => (
+                        <button
+                          key={value}
+                          type="button"
+                          data-testid={`button-language-${value}`}
+                          aria-pressed={language === value}
+                          onClick={() => chooseLanguage(value)}
+                          disabled={setWazobiaLanguage.isPending}
+                          className={cn("shrink-0 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary", language === value ? "border-primary/60 bg-primary/20 text-foreground" : "border-white/10 bg-white/5 text-muted-foreground hover:bg-white/10 hover:text-foreground")}
+                        >
+                          <span aria-hidden="true">{flag}</span> {label}
+                        </button>
+                      ))}
+                    </div>
+                    {languageLoading && <Skeleton className="mt-2 h-1 w-24 rounded-full" />}
+                    {(languageError || languageLoadError) && <p data-testid="status-language-error" role="alert" className="mt-2 text-xs text-destructive">{languageError || "Couldn't load your language preference."} {languageLoadError && <button data-testid="button-retry-language" className="underline" onClick={() => refetchLanguage()}>Retry</button>}</p>}
+                  </div>
+                )}
 
                 {/* Messages */}
                 <div className="flex-1 overflow-y-auto p-4 space-y-3">
@@ -225,7 +365,14 @@ export default function MessagesPage() {
                     </div>
                   )}
 
-                  {!msgsLoading && (messagesData?.messages ?? []).length === 0 && (
+                  {msgsError && (
+                    <div role="alert" data-testid="status-messages-error" className="py-8 text-center text-sm text-muted-foreground">
+                      Couldn't load messages.
+                      <button data-testid="button-retry-messages" onClick={() => refetchMessages()} className="block mx-auto mt-2 text-primary underline">Try again</button>
+                    </div>
+                  )}
+
+                  {!msgsLoading && !msgsError && (messagesData?.messages ?? []).length === 0 && (
                     <div className="text-center text-muted-foreground py-8 text-sm">
                       No messages yet — say hello! 👋
                     </div>
@@ -258,31 +405,43 @@ export default function MessagesPage() {
                       );
                     })}
                   </AnimatePresence>
+                  {isBotThread && chatWithWazobia.isPending && (
+                    <div role="status" data-testid="status-wazobia-reply" className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <BotAvatar size="h-7 w-7" />
+                      <div className="rounded-2xl rounded-bl-md bg-white/10 px-4 py-2.5">WAZOBIA is thinking…</div>
+                    </div>
+                  )}
                   <div ref={messagesEndRef} />
                 </div>
 
                 {/* Input */}
-                <div className="p-4 border-t border-white/5 flex gap-2">
-                  <Input
-                    value={messageInput}
-                    onChange={(e) => setMessageInput(e.target.value)}
-                    placeholder="Type a message..."
-                    className="bg-background/40 border-white/10 focus:border-primary/40 flex-1"
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && !e.shiftKey) {
-                        e.preventDefault();
-                        handleSend();
-                      }
-                    }}
-                  />
-                  <Button
-                    size="icon"
-                    className="gradient-btn h-10 w-10 shrink-0"
-                    disabled={!messageInput.trim() || sendMessage.isPending}
-                    onClick={handleSend}
-                  >
-                    <Send className="h-4 w-4" />
-                  </Button>
+                <div className="p-4 border-t border-white/5">
+                  {sendError && <p data-testid="status-send-error" role="alert" className="mb-2 text-xs text-destructive">{sendError}</p>}
+                  <div className="flex gap-2">
+                    <Input
+                      data-testid="input-message"
+                      value={messageInput}
+                      onChange={(e) => setMessageInput(e.target.value)}
+                      placeholder={isBotThread ? "Ask WAZOBIA anything..." : "Type a message..."}
+                      className="bg-background/40 border-white/10 focus:border-primary/40 flex-1"
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !e.shiftKey) {
+                          e.preventDefault();
+                          handleSend();
+                        }
+                      }}
+                    />
+                    <Button
+                      size="icon"
+                      className="gradient-btn h-10 w-10 shrink-0"
+                      disabled={!messageInput.trim() || sendMessage.isPending || chatWithWazobia.isPending}
+                      aria-label="Send message"
+                      data-testid="button-send-message"
+                      onClick={handleSend}
+                    >
+                      <Send className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
               </>
             )}

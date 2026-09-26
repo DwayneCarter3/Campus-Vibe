@@ -784,6 +784,49 @@ export interface DirectMessage {
   createdAt: string;
 }
 
+export type WazobiaLanguageResponseLanguage =
+  (typeof WazobiaLanguageResponseLanguage)[keyof typeof WazobiaLanguageResponseLanguage];
+
+export const WazobiaLanguageResponseLanguage = {
+  english: "english",
+  pidgin: "pidgin",
+  yoruba: "yoruba",
+  hausa: "hausa",
+  igbo: "igbo",
+} as const;
+
+export interface WazobiaLanguageResponse {
+  language: WazobiaLanguageResponseLanguage;
+}
+
+export type WazobiaLanguageInputLanguage =
+  (typeof WazobiaLanguageInputLanguage)[keyof typeof WazobiaLanguageInputLanguage];
+
+export const WazobiaLanguageInputLanguage = {
+  english: "english",
+  pidgin: "pidgin",
+  yoruba: "yoruba",
+  hausa: "hausa",
+  igbo: "igbo",
+} as const;
+
+export interface WazobiaLanguageInput {
+  language: WazobiaLanguageInputLanguage;
+}
+
+export interface WazobiaChatInput {
+  /**
+   * @minLength 1
+   * @maxLength 2000
+   */
+  content: string;
+}
+
+export interface WazobiaChatResponse {
+  conversationId: number;
+  reply: DirectMessage;
+}
+
 export interface SendMessageBody {
   /**
    * @minLength 1

@@ -23,10 +23,24 @@ import {
   useListMessages,
   getListMessagesQueryKey,
   useSendMessage,
+  useGetWazobiaLanguage,
+  getGetWazobiaLanguageQueryKey,
+  useSetWazobiaLanguage,
+  useChatWithWazobia,
 } from "@workspace/api-client-react";
 import type { ConversationSummary, DirectMessage } from "@workspace/api-client-react";
 import { useColors } from "@/hooks/useColors";
 import * as Haptics from "expo-haptics";
+
+const WAZOBIA_ID = "system:wazobia";
+const WAZOBIA_LANGUAGES = [
+  { value: "english", label: "🇬🇧 English", color: "#4567C9" },
+  { value: "pidgin", label: "🇳🇬 Pidgin", color: "#218A55" },
+  { value: "yoruba", label: "🟢 Yoruba", color: "#28945A" },
+  { value: "hausa", label: "🔴 Hausa", color: "#D94B4B" },
+  { value: "igbo", label: "🔵 Igbo", color: "#4778D0" },
+] as const;
+type WazobiaLanguage = (typeof WAZOBIA_LANGUAGES)[number]["value"];
 
 function timeAgo(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
@@ -43,6 +57,7 @@ export default function MessagesScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { user } = useUser();
+  const userId = user?.id;
   const queryClient = useQueryClient();
   const params = useLocalSearchParams<{ with?: string }>();
   const withUserId = params.with;
@@ -51,14 +66,36 @@ export default function MessagesScreen() {
   const [activeConvId, setActiveConvId] = useState<number | null>(null);
   const [activeOther, setActiveOther] = useState<{ id: string; name: string } | null>(null);
   const [input, setInput] = useState("");
+  const [sendError, setSendError] = useState<string | null>(null);
+  const [languageOverride, setLanguageOverride] = useState<WazobiaLanguage | null>(null);
   const flatRef = useRef<FlatList>(null);
   const autoStarted = useRef(false);
+  const currentUserIdRef = useRef(userId);
+  currentUserIdRef.current = userId;
+  const [screenUserId, setScreenUserId] = useState<string | undefined>(userId);
+  const accountReady = Boolean(userId) && screenUserId === userId;
 
   const startConv = useStartConversation();
   const sendMessage = useSendMessage();
+  const chatWithWazobia = useChatWithWazobia();
+  const setWazobiaLanguage = useSetWazobiaLanguage();
+  const { data: wazobiaLanguageData } = useGetWazobiaLanguage({
+    query: {
+      queryKey: [...getGetWazobiaLanguageQueryKey(), userId],
+      enabled: accountReady,
+    },
+  });
+  const selectedLanguage =
+    languageOverride ?? wazobiaLanguageData?.language ?? "english";
+  const isWazobia = activeOther?.id === WAZOBIA_ID;
+  const isSending = isWazobia ? chatWithWazobia.isPending : sendMessage.isPending;
 
   const { data: convsData, isLoading: convsLoading } = useListConversations({
-    query: { queryKey: getListConversationsQueryKey(), refetchInterval: 3000 },
+    query: {
+      queryKey: [...getListConversationsQueryKey(), userId],
+      enabled: accountReady,
+      refetchInterval: 3000,
+    },
   });
 
   const { data: msgsData, isLoading: msgsLoading } = useListMessages(
@@ -66,8 +103,8 @@ export default function MessagesScreen() {
     undefined,
     {
       query: {
-        queryKey: getListMessagesQueryKey(activeConvId ?? 0),
-        enabled: activeConvId !== null,
+        queryKey: [...getListMessagesQueryKey(activeConvId ?? 0), userId],
+        enabled: accountReady && activeConvId !== null,
         refetchInterval: 1500,
       },
     }
@@ -76,22 +113,40 @@ export default function MessagesScreen() {
   const conversations = convsData?.conversations ?? [];
   const messages = msgsData?.messages ?? [];
 
+  useEffect(() => {
+    if (screenUserId === userId) return;
+    setScreenUserId(userId);
+    setView("list");
+    setActiveConvId(null);
+    setActiveOther(null);
+    setInput("");
+    setSendError(null);
+    setLanguageOverride(null);
+    autoStarted.current = false;
+  }, [screenUserId, userId]);
+
   // Auto-open conversation when navigated with ?with=userId
   useEffect(() => {
-    if (!withUserId || autoStarted.current || startConv.isPending) return;
+    if (!accountReady || !userId || !withUserId || autoStarted.current || startConv.isPending) return;
     autoStarted.current = true;
     startConv.mutate(
       { data: { targetUserId: withUserId } },
       {
         onSuccess: (conv) => {
+          if (currentUserIdRef.current !== userId) return;
           setActiveConvId(conv.id);
-          setActiveOther({ id: conv.otherUserId, name: conv.otherUserName });
+          setActiveOther({
+            id: conv.otherUserId,
+            name: conv.otherUserId === WAZOBIA_ID ? "WAZOBIA AI" : conv.otherUserName,
+          });
           setView("chat");
-          queryClient.invalidateQueries({ queryKey: getListConversationsQueryKey() });
+          queryClient.invalidateQueries({
+            queryKey: [...getListConversationsQueryKey(), userId],
+          });
         },
       }
     );
-  }, [withUserId]);
+  }, [accountReady, userId, withUserId, startConv.isPending, queryClient]);
 
   // Scroll to bottom when messages arrive
   useEffect(() => {
@@ -102,22 +157,89 @@ export default function MessagesScreen() {
 
   const openConv = useCallback((conv: ConversationSummary) => {
     setActiveConvId(conv.id);
-    setActiveOther({ id: conv.otherUserId, name: conv.otherUserName });
+    setActiveOther({
+      id: conv.otherUserId,
+      name: conv.otherUserId === WAZOBIA_ID ? "WAZOBIA AI" : conv.otherUserName,
+    });
     setView("chat");
-    queryClient.invalidateQueries({ queryKey: getListMessagesQueryKey(conv.id) });
-  }, [queryClient]);
+    queryClient.invalidateQueries({
+      queryKey: [...getListMessagesQueryKey(conv.id), userId],
+    });
+  }, [queryClient, userId]);
 
   const handleSend = () => {
     if (!input.trim() || !activeConvId) return;
     const content = input.trim();
-    setInput("");
+    setSendError(null);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (isWazobia) {
+      chatWithWazobia.mutate(
+        { data: { content } },
+        {
+          onSuccess: (result) => {
+            if (currentUserIdRef.current !== userId) return;
+            setInput((current) => (current.trim() === content ? "" : current));
+            queryClient.invalidateQueries({
+              queryKey: [...getListMessagesQueryKey(result.conversationId), userId],
+            });
+            queryClient.invalidateQueries({
+              queryKey: [...getListConversationsQueryKey(), userId],
+            });
+          },
+          onError: (error) => {
+            if (currentUserIdRef.current !== userId) return;
+            setSendError(
+              error instanceof Error
+                ? error.message
+                : "WAZOBIA couldn't reply. Your message is still here—please try again."
+            );
+          },
+        }
+      );
+      return;
+    }
+    setInput("");
     sendMessage.mutate(
       { conversationId: activeConvId, data: { content } },
       {
         onSuccess: () => {
-          queryClient.invalidateQueries({ queryKey: getListMessagesQueryKey(activeConvId) });
-          queryClient.invalidateQueries({ queryKey: getListConversationsQueryKey() });
+          if (currentUserIdRef.current !== userId) return;
+          queryClient.invalidateQueries({
+            queryKey: [...getListMessagesQueryKey(activeConvId), userId],
+          });
+          queryClient.invalidateQueries({
+            queryKey: [...getListConversationsQueryKey(), userId],
+          });
+        },
+      }
+    );
+  };
+
+  const handleLanguageSelect = (language: WazobiaLanguage) => {
+    if (language === selectedLanguage || setWazobiaLanguage.isPending) return;
+    const previousLanguage = selectedLanguage;
+    setLanguageOverride(language);
+    setWazobiaLanguage.mutate(
+      { data: { language } },
+      {
+        onSuccess: () => {
+          if (currentUserIdRef.current !== userId) return;
+          queryClient.invalidateQueries({
+            queryKey: [...getGetWazobiaLanguageQueryKey(), userId],
+          });
+          queryClient.invalidateQueries({
+            queryKey: [...getListConversationsQueryKey(), userId],
+          });
+          if (activeConvId !== null) {
+            queryClient.invalidateQueries({
+              queryKey: [...getListMessagesQueryKey(activeConvId), userId],
+            });
+          }
+        },
+        onError: () => {
+          if (currentUserIdRef.current === userId) {
+            setLanguageOverride(previousLanguage);
+          }
         },
       }
     );
@@ -125,6 +247,16 @@ export default function MessagesScreen() {
 
   const topPad = Platform.OS === "web" ? 67 : insets.top;
   const bottomPad = Platform.OS === "web" ? 0 : insets.bottom;
+
+  if (!accountReady) {
+    return (
+      <View style={[s.container, { backgroundColor: colors.background }]}>
+        <View style={s.centered}>
+          <ActivityIndicator color={colors.primary} />
+        </View>
+      </View>
+    );
+  }
 
   // ── Conversation List ──────────────────────────────────────────────
   if (view === "list") {
@@ -168,9 +300,14 @@ export default function MessagesScreen() {
               ]}
             >
               <View style={[s.convAvatar, { backgroundColor: colors.primary + "25" }]}>
-                <Text style={[s.convAvatarText, { color: colors.primary }]}>
-                  {conv.otherUserName.charAt(0).toUpperCase()}
+                <Text style={[s.convAvatarText, { color: conv.otherUserId === WAZOBIA_ID ? "#4567C9" : colors.primary }]}>
+                  {conv.otherUserId === WAZOBIA_ID ? "🤖" : conv.otherUserName.charAt(0).toUpperCase()}
                 </Text>
+                {conv.otherUserId === WAZOBIA_ID && (
+                  <View style={s.convVerified}>
+                    <Feather name="check" size={9} color="#fff" />
+                  </View>
+                )}
                 {conv.unreadCount > 0 && (
                   <View style={[s.unreadDot, { backgroundColor: colors.primary }]}>
                     <Text style={s.unreadCount}>{conv.unreadCount > 9 ? "9+" : conv.unreadCount}</Text>
@@ -180,8 +317,11 @@ export default function MessagesScreen() {
               <View style={s.convInfo}>
                 <View style={s.convTopRow}>
                   <Text style={[s.convName, { color: colors.foreground }]} numberOfLines={1}>
-                    {conv.otherUserName}
+                    {conv.otherUserId === WAZOBIA_ID ? "WAZOBIA AI" : conv.otherUserName}
                   </Text>
+                  {conv.otherUserId === WAZOBIA_ID && (
+                    <Feather name="check-circle" size={14} color="#4778D0" style={{ marginRight: 8 }} />
+                  )}
                   <Text style={[s.convTime, { color: colors.mutedForeground }]}>
                     {timeAgo(conv.lastMessageAt)}
                   </Text>
@@ -212,18 +352,57 @@ export default function MessagesScreen() {
           <Feather name="arrow-left" size={20} color={colors.foreground} />
         </TouchableOpacity>
         <View style={s.chatHeaderInfo}>
-          <View style={[s.chatAvatar, { backgroundColor: colors.primary + "25" }]}>
-            <Text style={[s.chatAvatarText, { color: colors.primary }]}>
-              {(activeOther?.name ?? "?").charAt(0).toUpperCase()}
+          <View style={[s.chatAvatar, { backgroundColor: isWazobia ? "#E9F1FF" : colors.primary + "25" }]}>
+            <Text style={[s.chatAvatarText, { color: isWazobia ? "#4567C9" : colors.primary }]}>
+              {isWazobia ? "🤖" : (activeOther?.name ?? "?").charAt(0).toUpperCase()}
             </Text>
           </View>
           <View>
-            <Text style={[s.chatName, { color: colors.foreground }]}>{activeOther?.name}</Text>
-            <Text style={[s.chatSub, { color: colors.mutedForeground }]}>Direct message</Text>
+            <View style={s.chatNameRow}>
+              <Text style={[s.chatName, { color: colors.foreground }]}>
+                {isWazobia ? "WAZOBIA AI" : activeOther?.name}
+              </Text>
+              {isWazobia && <Feather name="check-circle" size={15} color="#4778D0" />}
+            </View>
+            <Text style={[s.chatSub, { color: colors.mutedForeground }]}>
+              {isWazobia ? "Official assistant" : "Direct message"}
+            </Text>
           </View>
         </View>
         <View style={{ width: 32 }} />
       </View>
+
+      {isWazobia && (
+        <FlatList
+          horizontal
+          data={WAZOBIA_LANGUAGES}
+          keyExtractor={(item) => item.value}
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={s.languageBar}
+          renderItem={({ item }) => {
+            const selected = selectedLanguage === item.value;
+            return (
+              <TouchableOpacity
+                accessibilityRole="button"
+                accessibilityState={{ selected, disabled: setWazobiaLanguage.isPending }}
+                onPress={() => handleLanguageSelect(item.value)}
+                disabled={setWazobiaLanguage.isPending}
+                style={[
+                  s.languagePill,
+                  {
+                    borderColor: selected ? item.color : colors.border,
+                    backgroundColor: selected ? `${item.color}18` : colors.surface,
+                  },
+                ]}
+              >
+                <Text style={[s.languageText, { color: selected ? item.color : colors.foreground }]}>
+                  {item.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          }}
+        />
+      )}
 
       {/* Messages */}
       <FlatList
@@ -267,10 +446,19 @@ export default function MessagesScreen() {
       />
 
       {/* Input */}
+      {sendError && (
+        <Text accessibilityRole="alert" style={[s.sendError, { color: "#D94B4B" }]}>
+          {sendError}
+        </Text>
+      )}
       <View style={[s.inputRow, { borderTopColor: colors.border, paddingBottom: bottomPad + 12, backgroundColor: colors.background }]}>
         <TextInput
           value={input}
-          onChangeText={setInput}
+          onChangeText={(text) => {
+            setInput(text);
+            if (sendError) setSendError(null);
+          }}
+          editable={!(isWazobia && chatWithWazobia.isPending)}
           placeholder="Type a message…"
           placeholderTextColor={colors.mutedForeground}
           style={[s.input, { backgroundColor: colors.surface, borderColor: colors.border, color: colors.foreground }]}
@@ -281,11 +469,15 @@ export default function MessagesScreen() {
         />
         <TouchableOpacity
           onPress={handleSend}
-          disabled={!input.trim() || sendMessage.isPending}
+          disabled={!input.trim() || isSending}
           activeOpacity={0.8}
-          style={[s.sendBtn, { backgroundColor: input.trim() ? colors.primary : colors.surface }]}
+          style={[s.sendBtn, { backgroundColor: input.trim() && !isSending ? colors.primary : colors.surface }]}
         >
-          <Feather name="send" size={18} color={input.trim() ? "#fff" : colors.mutedForeground} />
+          {isSending ? (
+            <ActivityIndicator size="small" color={colors.mutedForeground} />
+          ) : (
+            <Feather name="send" size={18} color={input.trim() ? "#fff" : colors.mutedForeground} />
+          )}
         </TouchableOpacity>
       </View>
     </KeyboardAvoidingView>
@@ -309,11 +501,16 @@ const s = StyleSheet.create({
   chatAvatar: { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center" },
   chatAvatarText: { fontSize: 16, fontWeight: "700" },
   chatName: { fontSize: 15, fontWeight: "700" },
+  chatNameRow: { flexDirection: "row", alignItems: "center", gap: 5 },
   chatSub: { fontSize: 11 },
+  languageBar: { paddingHorizontal: 14, paddingVertical: 10, gap: 8 },
+  languagePill: { borderWidth: 1, borderRadius: 18, paddingHorizontal: 12, paddingVertical: 7 },
+  languageText: { fontSize: 12, fontWeight: "600" },
 
   convRow: { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingVertical: 14, gap: 12, borderBottomWidth: 1 },
   convAvatar: { width: 46, height: 46, borderRadius: 23, alignItems: "center", justifyContent: "center", position: "relative" },
   convAvatarText: { fontSize: 20, fontWeight: "700" },
+  convVerified: { position: "absolute", right: -2, bottom: -1, width: 15, height: 15, borderRadius: 8, backgroundColor: "#4778D0", alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "#fff" },
   unreadDot: { position: "absolute", top: -2, right: -2, minWidth: 18, height: 18, borderRadius: 9, alignItems: "center", justifyContent: "center", paddingHorizontal: 3 },
   unreadCount: { color: "#fff", fontSize: 10, fontWeight: "700" },
   convInfo: { flex: 1 },
@@ -334,6 +531,7 @@ const s = StyleSheet.create({
   bubbleTime: { fontSize: 10, marginTop: 3 },
 
   inputRow: { flexDirection: "row", alignItems: "flex-end", gap: 10, paddingHorizontal: 16, paddingTop: 12, borderTopWidth: 1 },
+  sendError: { paddingHorizontal: 16, paddingTop: 8, fontSize: 12 },
   input: { flex: 1, borderRadius: 22, borderWidth: 1, paddingHorizontal: 16, paddingVertical: 10, fontSize: 15, maxHeight: 120 },
   sendBtn: { width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center", marginBottom: 2 },
 });

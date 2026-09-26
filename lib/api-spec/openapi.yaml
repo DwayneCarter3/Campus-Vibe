@@ -1340,6 +1340,80 @@ paths:
         '403':
           description: Not a participant.
 
+  /wazobia/language:
+    get:
+      tags: [messages]
+      operationId: getWazobiaLanguage
+      summary: Get the current user's WAZOBIA response language
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Current preference (English by default)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WazobiaLanguageResponse'
+        '401':
+          description: Unauthorized.
+    put:
+      tags: [messages]
+      operationId: setWazobiaLanguage
+      summary: Set the current user's WAZOBIA response language
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WazobiaLanguageInput'
+      responses:
+        '200':
+          description: Saved language preference
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WazobiaLanguageResponse'
+        '400':
+          description: Unsupported language.
+        '401':
+          description: Unauthorized.
+
+  /wazobia/chat:
+    post:
+      tags: [messages]
+      operationId: chatWithWazobia
+      summary: Send a message to WAZOBIA and receive an AI reply
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WazobiaChatInput'
+      responses:
+        '200':
+          description: Persisted AI reply
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WazobiaChatResponse'
+        '400':
+          description: Invalid message.
+        '401':
+          description: Unauthorized.
+        '429':
+          description: Per-account chat rate limit exceeded.
+          headers:
+            Retry-After:
+              description: Seconds until the account can retry.
+              schema:
+                type: integer
+        '503':
+          description: No supported AI provider key is configured or in-memory limiter capacity is exhausted.
+
   /storage/uploads/request-url:
     post:
       tags: [Storage]
@@ -2639,6 +2713,40 @@ components:
         createdAt:
           type: string
           format: date-time
+
+    WazobiaLanguageResponse:
+      type: object
+      required: [language]
+      properties:
+        language:
+          type: string
+          enum: [english, pidgin, yoruba, hausa, igbo]
+
+    WazobiaLanguageInput:
+      type: object
+      required: [language]
+      properties:
+        language:
+          type: string
+          enum: [english, pidgin, yoruba, hausa, igbo]
+
+    WazobiaChatInput:
+      type: object
+      required: [content]
+      properties:
+        content:
+          type: string
+          minLength: 1
+          maxLength: 2000
+
+    WazobiaChatResponse:
+      type: object
+      required: [conversationId, reply]
+      properties:
+        conversationId:
+          type: integer
+        reply:
+          $ref: '#/components/schemas/DirectMessage'
 
     SendMessageBody:
       type: object

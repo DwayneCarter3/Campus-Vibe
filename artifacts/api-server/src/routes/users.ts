@@ -22,6 +22,7 @@ import {
 import { CEO_EMAIL, computeCampusTitle } from "./admin";
 import { isPrivilegedRole, isVerifiedAccount, publicVerificationStatus, PENDING_VERIFICATION_STATUSES } from "../lib/verification";
 import { decodeMatricEntryYear, getEffectiveLevel } from "../lib/academic-level";
+import { ensureWazobiaConversation } from "../lib/wazobia";
 
 const opAlias = alias(postsTable, "op");
 const ouAlias = alias(usersTable, "ou");
@@ -205,6 +206,7 @@ router.put("/users/me", requireAuth, async (req, res): Promise<void> => {
     .where(eq(usersTable.clerkUserId, userId));
 
   let user;
+  let createdNewAccount = false;
   if (existing.length === 0) {
     // ── New registration ─────────────────────────────────────────
     const data = parsed.data as any;
@@ -281,6 +283,7 @@ router.put("/users/me", requireAuth, async (req, res): Promise<void> => {
           verificationStatus: isAdminVal ? "Premium_Approved" : "none",
         })
         .returning();
+      createdNewAccount = true;
     } catch (err: any) {
       // Catch any DB-level unique violations that slipped the pre-checks (race condition)
       if (err?.code === "23505") {
@@ -368,6 +371,10 @@ router.put("/users/me", requireAuth, async (req, res): Promise<void> => {
     }
     // Lazy expiry check on update too
     user = await expirePromoIfNeeded(user);
+  }
+
+  if (createdNewAccount && user?.role === "student") {
+    await ensureWazobiaConversation(userId);
   }
 
   const postCount = await getPostCount(userId);

@@ -4,8 +4,7 @@
 - [Barrel split: api-zod vs api-client-react](codegen-barrel-fix.md) — api-zod generated dir has only `api.ts`; api-client-react has `api.ts` + `api.schemas.ts`. Never export `api.schemas` from api-zod barrel.
 - [Campus titles + role system](campus-roles.md) — computeCampusTitle in admin.ts, imported by users.ts and posts.ts; CEO_EMAIL env auto-upgrades on login; role values: ceo/admin/moderator/student.
 - [CEO access guard pattern](ceo-access-guard.md) — DB email may be empty if not sent during onboarding; use Clerk email as frontend bypass + sync email via clerkClient in GET /users/me.
-- [SSE DM real-time pattern](sse-dm.md) — broadcastDm() in sse-manager.ts emits "dm" event; notifications.tsx listens and invalidates conversation+message queries; web poll reduced to 10s fallback.
-- [Mobile messages screen](mobile-messages.md) — artifacts/campusx-mobile/app/messages.tsx is a full DM screen; hustle ServiceCard navigates to /messages?with=providerId; expo-router useLocalSearchParams for ?with= param.
+- [System DM actors](system-dm-actors.md) — automation in DMs should use a reserved actor, never a fabricated student/Clerk account.
 - [Mobile avatar upload flow](mobile-avatar-upload.md) — expo-image-picker already installed; signed URL flow matches web (requestUploadUrl → PUT → /api/storage+objectPath); Change Photo button in avatar modal.
 - [Early-bird launch eligibility](early-bird-launch.md) — use the database registration sequence/rank, case-insensitive non-empty email uniqueness, explicit promo expiry fields, and paid-tier fallback after expiry.
 - [Role verification invariant](role-verification.md) — CEO/admin accounts stay Premium_Approved and display both trust badges across reads, role changes, and expiry paths.
