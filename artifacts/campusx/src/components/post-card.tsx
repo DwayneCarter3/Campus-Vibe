@@ -41,7 +41,6 @@ import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { AvatarModal } from "@/components/avatar-modal";
 import { UserVerificationMarks } from "@/components/user-verification-marks";
-import { VerificationBadge } from "@/components/verification-badge";
 import { getPostCategoryMeta } from "@/components/post-categories";
 import { PollCard } from "@/components/poll-card";
 import { useToast } from "@/hooks/use-toast";
@@ -301,9 +300,6 @@ export function PostCard({ post, isAdmin, isModerator, moderationMode = false, o
                       {authorName.charAt(0)}
                     </AvatarFallback>
                   </Avatar>
-                  {post.authorVerificationStatus === "Student_Verified" && (
-                    <VerificationBadge type="green-circle" className="absolute -right-0.5 -bottom-0.5 bg-background rounded-full ring-2 ring-background text-[11px]" />
-                  )}
                 </span>
               )}
             </AvatarWrapper>

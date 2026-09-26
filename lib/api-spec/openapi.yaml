@@ -2923,6 +2923,10 @@ components:
       properties:
         verified:
           type: boolean
+        badgeTier:
+          type: string
+          enum: [student, gold, premium]
+          description: Explicitly grant an active public badge for 30 days; omitted verified=true is baseline approval only.
 
     SetUserVerificationResponse:
       type: object
@@ -2939,6 +2943,7 @@ components:
       enum:
         - student_verification
         - premium_blue_tick
+        - gold_yellow_tick
         - marketplace_promotion_3_day
         - marketplace_promotion_7_day
         - marketplace_promotion_30_day

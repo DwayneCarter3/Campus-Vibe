@@ -10,10 +10,10 @@
 - [LASU official news pages](lasu-news-pages.md) — LASU listing and article pages are JavaScript shells; official AJAX responses carry the news content.
 - [Mobile avatar upload flow](mobile-avatar-upload.md) — expo-image-picker already installed; signed URL flow matches web (requestUploadUrl → PUT → /api/storage+objectPath); Change Photo button in avatar modal.
 - [Early-bird launch eligibility](early-bird-launch.md) — use registration rank and verified email; school-scoped matric uniqueness and independent benefit expiry.
-- [Role verification invariant](role-verification.md) — CEO/admin accounts stay Premium_Approved and display both trust badges across reads, role changes, and expiry paths.
+- [Role verification invariant](role-verification.md) — privileged role status is internal; it must never create a public tick without separate approval and expiry.
 - [Pending verification and promo expiry](pending-verification-expiry.md) — expiring launch perks must not erase a submitted pending review; manual admin overrides must outlive a promo timer.
 - [Academic level session anchor](academic-level-session.md) — matric-based level uses the 2025/26 session (start year 2025), not the 2026 calendar year.
-- [Verification badge tiers](verification-badge-tiers.md) — free Student Verified pill, approved paid ticks, and premium role tags from real API roles.
+- [Verification badge tiers](verification-badge-tiers.md) — only active approved Green, Gold, or Blue ticks appear publicly; never render staff roles or default pills.
 - [Paystack customer fees](paystack-customer-fees.md) — local checkout gross-up and dashboard auto-pass-through are alternatives; enabling both double-charges buyers.
 - [Drizzle serial push mismatch](drizzle-serial-push.md) — Drizzle push can emit invalid SQL for an existing serial-backed rank; avoid force or sequence drops.
 - [Feed category semantics](feed-category-semantics.md) — “All Gist” is only a view, not a stored post category; default untagged and older posts to Amebo Hot.

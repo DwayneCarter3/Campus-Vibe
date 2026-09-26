@@ -33,7 +33,13 @@ import {
 } from "@workspace/api-zod";
 import { computeCampusTitle } from "./admin";
 import { CEO_EMAIL, hasAdminPrivileges } from "../lib/privilege";
-import { isPrivilegedRole, isVerifiedAccount, publicVerificationStatus, PENDING_VERIFICATION_STATUSES } from "../lib/verification";
+import {
+  isPrivilegedRole,
+  isVerifiedAccount,
+  publicDisplayRole,
+  publicVerificationStatus,
+  PENDING_VERIFICATION_STATUSES,
+} from "../lib/verification";
 import { expirePaidBadgeEntitlement } from "./payments";
 import { decodeMatricEntryYear, getEffectiveLevel } from "../lib/academic-level";
 import { ensureWazobiaConversation } from "../lib/wazobia";
@@ -54,6 +60,21 @@ const OTHER_DEPARTMENT = "Other department";
 const CAMPUSX_DISPATCH_USER_ID = "system:campusx-dispatch";
 
 const router: IRouter = Router();
+
+// The owner may see a pending request, but an internal role-granted status
+// must never become a public-looking tick on their own profile.
+function selfVerificationStatus(user: typeof usersTable.$inferSelect): string {
+  const publicStatus = publicVerificationStatus(
+    user.verificationStatus, user.role, user.publicBadgeTier, user.publicBadgeExpiresAt,
+  );
+  return publicStatus !== "none"
+    ? publicStatus
+    : PENDING_VERIFICATION_STATUSES.includes(
+        user.verificationStatus as typeof PENDING_VERIFICATION_STATUSES[number],
+      )
+      ? user.verificationStatus
+      : "none";
+}
 
 function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
@@ -105,7 +126,10 @@ async function reconcileClerkIdentity(
     if (user.role !== "admin") {
       if (user.role !== "ceo") roleChanges.role = "ceo";
       if (!user.isAdmin) roleChanges.isAdmin = true;
-      if (user.verificationStatus !== "Premium_Approved") {
+      if (
+        user.verificationStatus !== "Premium_Approved" &&
+        !PENDING_VERIFICATION_STATUSES.includes(user.verificationStatus as typeof PENDING_VERIFICATION_STATUSES[number])
+      ) {
         roleChanges.verificationStatus = "Premium_Approved";
       }
     }
@@ -299,6 +323,8 @@ router.get("/users/search", requireAuth, async (req, res): Promise<void> => {
     department: usersTable.department,
     avatarUrl: usersTable.avatarUrl,
     verificationStatus: usersTable.verificationStatus,
+    publicBadgeTier: usersTable.publicBadgeTier,
+    publicBadgeExpiresAt: usersTable.publicBadgeExpiresAt,
     role: usersTable.role,
   }).from(usersTable).where(and(
     eq(usersTable.school, currentUser.school),
@@ -309,9 +335,16 @@ router.get("/users/search", requireAuth, async (req, res): Promise<void> => {
       OR strpos(lower(coalesce(${usersTable.department}, '')), ${query}) > 0)`,
   )).orderBy(usersTable.fullName).limit(8);
 
-  res.json(SearchStudentsResponse.parse({ students: matches.map(({ role, ...student }) => ({
+  res.json(SearchStudentsResponse.parse({ students: matches.map(({
+    role, publicBadgeTier, publicBadgeExpiresAt, ...student
+  }) => ({
     ...student,
-    verificationStatus: publicVerificationStatus(student.verificationStatus, role),
+    verificationStatus: publicVerificationStatus(
+      student.verificationStatus,
+      role,
+      publicBadgeTier,
+      publicBadgeExpiresAt,
+    ),
   })) }));
 });
 
@@ -331,7 +364,8 @@ async function getPostCount(clerkUserId: string): Promise<number> {
 /** Strip expired promo badges (lazy check on any user read). Returns updated user. */
 async function expirePromoIfNeeded(user: typeof usersTable.$inferSelect): Promise<typeof usersTable.$inferSelect> {
   if (user.promoExpiresAt && user.promoExpiresAt < new Date()) {
-    let status = user.role === "ceo" || user.role === "admin"
+    let status = (user.role === "ceo" || user.role === "admin") &&
+      !PENDING_VERIFICATION_STATUSES.includes(user.verificationStatus as typeof PENDING_VERIFICATION_STATUSES[number])
       ? "Premium_Approved"
       : user.verificationStatus;
 
@@ -434,7 +468,11 @@ router.get("/users/me", requireAuth, async (req, res): Promise<void> => {
     }
   }
 
-  if (isPrivilegedRole(user.role) && user.verificationStatus !== "Premium_Approved") {
+  if (
+    isPrivilegedRole(user.role) &&
+    user.verificationStatus !== "Premium_Approved" &&
+    !PENDING_VERIFICATION_STATUSES.includes(user.verificationStatus as typeof PENDING_VERIFICATION_STATUSES[number])
+  ) {
     [user] = await db
       .update(usersTable)
       .set({ verificationStatus: "Premium_Approved" })
@@ -449,10 +487,14 @@ router.get("/users/me", requireAuth, async (req, res): Promise<void> => {
   user = await expirePromoIfNeeded(user);
 
   const postCount = await getPostCount(userId);
-  const campusTitle = computeCampusTitle(user.role, postCount);
+  const campusTitle = computeCampusTitle(publicDisplayRole(user.role), postCount);
 
   res.json(GetMyProfileResponse.parse({
-    ...user, manualLevel: user.level, level: getEffectiveLevel(user.level, user.matricNumber), campusTitle,
+    ...user,
+    verificationStatus: selfVerificationStatus(user),
+    manualLevel: user.level,
+    level: getEffectiveLevel(user.level, user.matricNumber),
+    campusTitle,
   }));
 });
 
@@ -797,7 +839,11 @@ router.put("/users/me", requireAuth, async (req, res): Promise<void> => {
       throw error;
     }
 
-    if (isPrivilegedRole(user.role) && user.verificationStatus !== "Premium_Approved") {
+    if (
+      isPrivilegedRole(user.role) &&
+      user.verificationStatus !== "Premium_Approved" &&
+      !PENDING_VERIFICATION_STATUSES.includes(user.verificationStatus as typeof PENDING_VERIFICATION_STATUSES[number])
+    ) {
       [user] = await db.update(usersTable)
         .set({ verificationStatus: "Premium_Approved" })
         .where(eq(usersTable.clerkUserId, userId)).returning();
@@ -811,10 +857,14 @@ router.put("/users/me", requireAuth, async (req, res): Promise<void> => {
   }
 
   const postCount = await getPostCount(userId);
-  const campusTitle = computeCampusTitle(user.role, postCount);
+  const campusTitle = computeCampusTitle(publicDisplayRole(user.role), postCount);
 
   res.json(UpdateMyProfileResponse.parse({
-    ...user, manualLevel: user.level, level: getEffectiveLevel(user.level, user.matricNumber), campusTitle,
+    ...user,
+    verificationStatus: selfVerificationStatus(user),
+    manualLevel: user.level,
+    level: getEffectiveLevel(user.level, user.matricNumber),
+    campusTitle,
   }));
 });
 
@@ -881,6 +931,8 @@ router.get("/users/:userId/posts", requireAuth, async (req, res): Promise<void> 
       authorAvatarUrl: usersTable.avatarUrl,
       authorRole: usersTable.role,
       authorVerificationStatus: usersTable.verificationStatus,
+      authorPublicBadgeTier: usersTable.publicBadgeTier,
+      authorPublicBadgeExpiresAt: usersTable.publicBadgeExpiresAt,
       opId: opAlias.id,
       opAuthorId: opAlias.authorId,
       opContent: opAlias.content,
@@ -890,6 +942,8 @@ router.get("/users/:userId/posts", requireAuth, async (req, res): Promise<void> 
       opAuthorAvatarUrl: ouAlias.avatarUrl,
       opAuthorVerificationStatus: ouAlias.verificationStatus,
       opAuthorRole: ouAlias.role,
+      opAuthorPublicBadgeTier: ouAlias.publicBadgeTier,
+      opAuthorPublicBadgeExpiresAt: ouAlias.publicBadgeExpiresAt,
       opIsAnonymous: opAlias.isAnonymous,
       opTargetInstitutionId: opAlias.targetInstitutionId,
       opAuthorInstitutionId: ouAlias.institutionId,
@@ -941,12 +995,17 @@ router.get("/users/:userId/posts", requireAuth, async (req, res): Promise<void> 
         .where(eq(postCommentsTable.postId, post.id));
 
       const role = post.authorRole ?? "student";
+      const publicRole = publicDisplayRole(role);
       const postCount = await getPostCount(post.authorId);
-      const campusTitle = computeCampusTitle(role, postCount);
+      const campusTitle = computeCampusTitle(publicRole, postCount);
       const {
         authorMatricNumber,
+        authorPublicBadgeTier,
+        authorPublicBadgeExpiresAt,
         opId, opAuthorId, opContent, opImageUrl, opCreatedAt,
         opAuthorName, opAuthorAvatarUrl, opAuthorVerificationStatus,
+        opAuthorPublicBadgeTier,
+        opAuthorPublicBadgeExpiresAt,
         opAuthorRole, opIsAnonymous, opAuthorInstitutionId, opAuthorSchool,
         opAuthorCampusLocation, opTargetInstitutionId,
         ...publicFields
@@ -986,9 +1045,9 @@ router.get("/users/:userId/posts", requireAuth, async (req, res): Promise<void> 
         authorCampusLocation: post.authorCampusLocation ?? "Ojo",
         authorAvatarUrl: post.authorAvatarUrl ?? null,
         authorCampusTitle: campusTitle,
-        authorRole: role,
-        authorIsVerified: isVerifiedAccount(post.authorVerificationStatus, role),
-        authorVerificationStatus: publicVerificationStatus(post.authorVerificationStatus, role),
+        authorRole: publicRole,
+        authorIsVerified: isVerifiedAccount(post.authorVerificationStatus, role, authorPublicBadgeTier, authorPublicBadgeExpiresAt),
+        authorVerificationStatus: publicVerificationStatus(post.authorVerificationStatus, role, authorPublicBadgeTier, authorPublicBadgeExpiresAt),
         isAnonymous: post.isAnonymous ?? false,
         poll: post.originalPostId == null || canViewOriginal
           ? publicPolls.get(post.originalPostId ?? post.id) ?? null
@@ -1001,8 +1060,8 @@ router.get("/users/:userId/posts", requireAuth, async (req, res): Promise<void> 
           authorId: post.opAuthorId ?? "",
           authorName: post.opAuthorName ?? "Unknown",
           authorAvatarUrl: post.opAuthorAvatarUrl ?? null,
-          authorIsVerified: !post.opIsAnonymous && isVerifiedAccount(post.opAuthorVerificationStatus, post.opAuthorRole),
-          authorVerificationStatus: post.opIsAnonymous ? "none" : publicVerificationStatus(post.opAuthorVerificationStatus, post.opAuthorRole),
+          authorIsVerified: !post.opIsAnonymous && isVerifiedAccount(opAuthorVerificationStatus, opAuthorRole, opAuthorPublicBadgeTier, opAuthorPublicBadgeExpiresAt),
+          authorVerificationStatus: post.opIsAnonymous ? "none" : publicVerificationStatus(opAuthorVerificationStatus, opAuthorRole, opAuthorPublicBadgeTier, opAuthorPublicBadgeExpiresAt),
           isAnonymous: Boolean(post.opIsAnonymous),
           content: post.opContent ?? "",
           imageUrl: post.opImageUrl ?? null,
@@ -1072,6 +1131,8 @@ router.get("/users/:userId/services", requireAuth, async (req, res): Promise<voi
       providerAvatarUrl: usersTable.avatarUrl,
       providerVerificationStatus: usersTable.verificationStatus,
       providerRole: usersTable.role,
+      providerPublicBadgeTier: usersTable.publicBadgeTier,
+      providerPublicBadgeExpiresAt: usersTable.publicBadgeExpiresAt,
     })
     .from(servicesTable)
     .leftJoin(usersTable, eq(servicesTable.providerId, usersTable.clerkUserId))
@@ -1097,8 +1158,12 @@ router.get("/users/:userId/services", requireAuth, async (req, res): Promise<voi
     ));
 
   const enriched = await Promise.all(services.map(async (s) => {
-    const { providerVerificationStatus, providerRole, providerMatricNumber, ...rest } = s;
+    const {
+      providerVerificationStatus, providerRole, providerMatricNumber,
+      providerPublicBadgeTier, providerPublicBadgeExpiresAt, ...rest
+    } = s;
     const role = providerRole ?? "student";
+    const publicRole = publicDisplayRole(role);
     const postCount = await getPostCount(s.providerId);
     const isSavedByMe = clerkUserId
       ? (await db.select({ id: savedServicesTable.id }).from(savedServicesTable)
@@ -1113,10 +1178,10 @@ router.get("/users/:userId/services", requireAuth, async (req, res): Promise<voi
       providerLevel: getEffectiveLevel(s.providerLevel, providerMatricNumber),
       providerCampusLocation: s.providerCampusLocation ?? "Ojo",
       providerAvatarUrl: s.providerAvatarUrl ?? null,
-      providerIsVerified: isVerifiedAccount(providerVerificationStatus, role),
-      providerVerificationStatus: publicVerificationStatus(providerVerificationStatus, role),
-      providerCampusTitle: computeCampusTitle(role, postCount),
-      providerRole: role,
+      providerIsVerified: isVerifiedAccount(providerVerificationStatus, role, providerPublicBadgeTier, providerPublicBadgeExpiresAt),
+      providerVerificationStatus: publicVerificationStatus(providerVerificationStatus, role, providerPublicBadgeTier, providerPublicBadgeExpiresAt),
+      providerCampusTitle: computeCampusTitle(publicRole, postCount),
+      providerRole: publicRole,
     };
   }));
 
@@ -1178,14 +1243,14 @@ router.get("/users/:userId", async (req, res): Promise<void> => {
   };
   const { matricNumber, ...publicUser } = user;
   const postCount = await getPostCount(user.clerkUserId);
-  const campusTitle = computeCampusTitle(user.role ?? "student", postCount);
+  const campusTitle = computeCampusTitle(publicDisplayRole(user.role), postCount);
 
   res.json(GetUserProfileResponse.parse({
     ...publicUser,
     level: getEffectiveLevel(user.level, matricNumber),
-    verificationStatus: publicVerificationStatus(user.verificationStatus, user.role),
-    isVerified: isVerifiedAccount(user.verificationStatus, user.role),
-    role: user.role ?? "student",
+    verificationStatus: publicVerificationStatus(user.verificationStatus, user.role, profile.publicBadgeTier, profile.publicBadgeExpiresAt),
+    isVerified: isVerifiedAccount(user.verificationStatus, user.role, profile.publicBadgeTier, profile.publicBadgeExpiresAt),
+    role: publicDisplayRole(user.role),
     campusTitle,
   }));
 });

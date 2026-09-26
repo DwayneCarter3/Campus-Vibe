@@ -38,7 +38,6 @@ import { useColors } from "@/hooks/useColors";
 import * as ImagePicker from "expo-image-picker";
 import { PRIVACY_POLICY, TERMS_OF_SERVICE } from "@/constants/legal";
 import { UserVerificationMarks } from "@/components/UserVerificationMarks";
-import { VerificationBadge } from "@/components/VerificationBadge";
 
 const CEO_EMAIL = "dwaynecartergabriel@gmail.com";
 const ACADEMIC_LEVELS = ["100L", "200L", "300L", "400L", "500L", "Alumni/Postgrad"] as const;
@@ -101,11 +100,11 @@ export default function ProfileScreen() {
             await Linking.openURL(result.authorizationUrl);
             return;
           }
-          const isBadge = packageType === "student_verification" || packageType === "premium_blue_tick";
+          const isBadge = ["student_verification", "gold_yellow_tick", "premium_blue_tick"].includes(packageType as string);
           Alert.alert(
             isBadge ? "Verification request received" : "Benefit active",
             isBadge
-              ? "Badge activation requires campus admin review. No badge is granted by this screen."
+              ? `Your verification request is pending review. The tick appears after approval. ${result.message ?? ""}`
               : result.message ?? "Your CampusX benefit is now active.",
           );
         },
@@ -211,9 +210,8 @@ export default function ProfileScreen() {
   const campus = profile?.campus ?? "LASU Ojo";
   const hasMatric = !!(profile?.matricNumber && profile.matricNumber.trim());
   const verificationStatus = (profile as any)?.verificationStatus ?? "none";
-  const isVerified = verificationStatus === "approved" || verificationStatus === "Student_Verified";
-  const isPremium = verificationStatus === "Premium_Approved";
-  const badgePending = ["pending", "Student_Pending", "pending_promo", "pending_paid", "Premium_Pending_Approval"].includes(verificationStatus);
+  const isVerified = ["Student_Verified", "Gold_Approved", "Premium_Approved"].includes(verificationStatus);
+  const badgePending = ["pending", "Student_Pending", "Student_Pending_Approval", "Gold_Pending", "Gold_Pending_Approval", "pending_promo", "pending_paid", "Premium_Pending_Approval"].includes(verificationStatus);
   const clerkEmail = clerkUser?.primaryEmailAddress?.emailAddress ?? "";
   const isAdmin = profile?.isAdmin;
   const isCEO = (profile as any)?.role === "ceo" || clerkEmail === CEO_EMAIL;
@@ -253,9 +251,6 @@ export default function ProfileScreen() {
               <View style={[styles.cameraBadge, { backgroundColor: colors.surface, borderColor: colors.border }]}>
                 <Feather name="camera" size={9} color={colors.mutedForeground} />
               </View>
-            )}
-            {!isAvatarUploading && verificationStatus === "Student_Verified" && (
-              <VerificationBadge type="green-circle" fontSize={18} placement="avatar" />
             )}
           </TouchableOpacity>
 
@@ -330,7 +325,7 @@ export default function ProfileScreen() {
               <Text style={styles.promoEmoji}>🎉</Text>
               <View style={styles.promoInfo}>
                 <Text style={styles.promoTitle}>Early Bird Launch Perk</Text>
-                <Text style={styles.promoSub}>Free Blue Tick + Unlimited Hustle Promos</Text>
+                <Text style={styles.promoSub}>Early-bird benefits + Unlimited Hustle Promos</Text>
                 <Text style={styles.promoExpiry}>⏳ Expires in {daysLeft}d {hoursLeft}h</Text>
               </View>
               <View style={styles.promoRank}>
@@ -342,7 +337,7 @@ export default function ProfileScreen() {
         })()}
 
         {/* ── Verification status ─────────── */}
-        {hasMatric && !isVerified && !isPremium && (
+        {hasMatric && !isVerified && (
           <View
             style={[
               styles.actionCard,
@@ -356,11 +351,11 @@ export default function ProfileScreen() {
               <Feather name="star" size={16} color="#38BDF8" />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={[styles.actionTitle, { color: "#BAE6FD" }]}>Student verification</Text>
+              <Text style={[styles.actionTitle, { color: "#BAE6FD" }]}>Verification request</Text>
               <Text style={[styles.actionSub, { color: colors.mutedForeground }]}>
                 {badgePending
-                  ? "Your request is pending admin review ⏳"
-                  : "Choose a verification plan below. Paid and early-bird badge requests require admin review."}
+                ? "Your request is pending review ⏳"
+                  : "Choose a verification tier below. Requests require review."}
               </Text>
             </View>
             {badgePending ? (
@@ -380,22 +375,10 @@ export default function ProfileScreen() {
               <Feather name="shield" size={16} color="#10B981" />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={[styles.actionTitle, { color: "#6EE7B7" }]}>Verified Student ✓</Text>
+              <Text style={[styles.actionTitle, { color: "#6EE7B7" }]}>Verification active</Text>
               <Text style={[styles.actionSub, { color: colors.mutedForeground }]}>
-                Your blue verification badge is active on your profile.
+                Your {verificationStatus === "Student_Verified" ? "green" : verificationStatus === "Gold_Approved" ? "gold" : "blue"} tick is active on your profile.
               </Text>
-            </View>
-          </View>
-        )}
-
-        {isPremium && (
-          <View style={[styles.actionCard, { backgroundColor: "#2563EB18", borderColor: "#60A5FA70" }]}>
-            <View style={[styles.actionIconBox, { backgroundColor: "#2563EB25", borderColor: "#60A5FA60" }]}>
-              <Feather name="star" size={16} color="#93C5FD" />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.actionTitle, { color: "#BFDBFE" }]}>Premium Blue Tick ✓</Text>
-              <Text style={[styles.actionSub, { color: colors.mutedForeground }]}>Your premium verification badge is active.</Text>
             </View>
           </View>
         )}
@@ -405,7 +388,7 @@ export default function ProfileScreen() {
           <View style={[styles.actionCard, { backgroundColor: colors.accent + "10", borderColor: colors.accent + "30" }]}>
             <Feather name="alert-circle" size={16} color={colors.accent} />
             <Text style={[styles.onboardingText, { color: colors.accent }]}>
-              Add your matric number on the web app to unlock the Verified badge and post hustles.
+              Add your matric number on the web app to request verification and post hustles.
             </Text>
           </View>
         )}
@@ -424,37 +407,38 @@ export default function ProfileScreen() {
               </Text>
             )}
             {paymentCatalog?.products.map((product) => {
-              const isBadge = product.packageType === "student_verification" || product.packageType === "premium_blue_tick";
-              const eligibleFreeStudent =
-                product.packageType === "student_verification" &&
-                (profile?.registrationRank ?? 0) <= 100 &&
-                !!profile?.promoExpiresAt &&
-                new Date(profile.promoExpiresAt) > new Date();
+              const packageType = product.packageType as string;
+              const isBadge = ["student_verification", "gold_yellow_tick", "premium_blue_tick"].includes(packageType);
               const basePrice = (product.baseAmountKobo / 100).toLocaleString("en-NG", { maximumFractionDigits: 2 });
               const payablePrice = (product.amountKobo / 100).toLocaleString("en-NG", { maximumFractionDigits: 2 });
-              const planTitle = eligibleFreeStudent
-                ? `FREE Student Verified · ${product.durationDays} days`
-                : product.packageType === "student_verification"
-                  ? "Green Tick"
-                  : product.packageType === "premium_blue_tick"
-                    ? "Premium Blue Tick"
+              const planTitle = packageType === "student_verification"
+                ? "Green Tick"
+                : packageType === "gold_yellow_tick"
+                  ? "Gold Tick"
+                  : packageType === "premium_blue_tick"
+                    ? "Blue Tick"
                     : product.label;
+              const tierColor = packageType === "student_verification"
+                ? "#34D399"
+                : packageType === "gold_yellow_tick"
+                  ? "#FACC15"
+                  : packageType === "premium_blue_tick"
+                    ? "#60A5FA"
+                    : colors.foreground;
               return (
                 <TouchableOpacity
                   key={product.packageType}
                   activeOpacity={0.8}
-                  onPress={() => startPayment(product.packageType)}
+                  onPress={() => startPayment(product.packageType as PaymentPackage)}
                   disabled={initializePayment.isPending || (isBadge && !hasMatric)}
                   style={[styles.actionCard, { backgroundColor: colors.surface, borderColor: colors.border, marginHorizontal: -6, marginVertical: 4 }]}
                 >
                   <View style={{ flex: 1 }}>
                     <Text style={[styles.actionTitle, { color: colors.foreground }]}>
-                      {planTitle}{!eligibleFreeStudent ? ` · ₦${basePrice} / ${product.durationDays} days` : ""}
+                      <Text style={[styles.actionTitle, { color: tierColor }]}>{planTitle}</Text>{` · ₦${basePrice} / ${product.durationDays} days`}
                     </Text>
                     <Text style={[styles.actionSub, { color: colors.mutedForeground }]}>
-                      {eligibleFreeStudent
-                        ? `First-100 claim cap applies; if no free claim remains, customer total is ₦${payablePrice}. Badge requests need admin review.`
-                        : `Paystack customer total ₦${payablePrice}. ${isBadge ? "Admin review required. " : ""}Manual renewal only.`}
+                      {`Paystack customer total ₦${payablePrice}. ${isBadge ? `Review required; tick expires after ${product.durationDays} days. ` : ""}Manual renewal only.`}
                     </Text>
                     {isBadge && !hasMatric && (
                       <Text style={[styles.actionSub, { color: colors.accent }]}>
@@ -462,7 +446,7 @@ export default function ProfileScreen() {
                       </Text>
                     )}
                   </View>
-                  {initializePayment.isPending ? (
+                    {initializePayment.isPending ? (
                     <ActivityIndicator size="small" color={colors.primary} />
                   ) : (
                     <Feather name="chevron-right" size={16} color={colors.primary} />

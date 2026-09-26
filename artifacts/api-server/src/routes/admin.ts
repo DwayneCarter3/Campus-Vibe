@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, ilike, or, sql, and, inArray } from "drizzle-orm";
+import { eq, ilike, or, sql, and, inArray, notInArray } from "drizzle-orm";
 import {
   db,
   earlyBirdClaimsTable,
@@ -16,6 +16,13 @@ import { CEO_EMAIL, hasAdminPrivileges, isVerifiedCEO } from "../lib/privilege";
 const router: IRouter = Router();
 
 const EARLY_BIRD_LIMIT = 100;
+const PREMIUM_STATUS_PRESERVING_PENDING = sql`case
+  when ${usersTable.verificationStatus} in (
+    'pending', 'pending_promo', 'pending_paid', 'Student_Pending',
+    'Premium_Pending_Approval', 'Gold_Pending_Approval'
+  ) then ${usersTable.verificationStatus}
+  else 'Premium_Approved'
+end`;
 
 function paymentEntitlementIsActive(
   payment: {
@@ -69,7 +76,7 @@ router.post("/admin/claim", requireAuth, async (req, res): Promise<void> => {
 
   const [updated] = await db
     .update(usersTable)
-    .set({ isAdmin: true, role: "ceo", verificationStatus: "Premium_Approved" })
+    .set({ isAdmin: true, role: "ceo", verificationStatus: PREMIUM_STATUS_PRESERVING_PENDING })
     .where(eq(usersTable.clerkUserId, userId))
     .returning({ id: usersTable.id });
   if (!updated) {
@@ -87,8 +94,11 @@ router.get("/admin/users", requireAuth, async (req, res): Promise<void> => {
   // Repair older records as soon as an admin opens the user-management view.
   await db
     .update(usersTable)
-    .set({ verificationStatus: "Premium_Approved" })
-    .where(inArray(usersTable.role, ["admin", "ceo"]));
+    .set({ verificationStatus: PREMIUM_STATUS_PRESERVING_PENDING })
+    .where(and(
+      inArray(usersTable.role, ["admin", "ceo"]),
+      notInArray(usersTable.verificationStatus, [...PENDING_VERIFICATION_STATUSES]),
+    ));
 
   const search = typeof req.query.search === "string" ? req.query.search : undefined;
   const limit = Number(req.query.limit) || 50;
@@ -162,7 +172,7 @@ router.patch("/admin/users/:userId/role", requireAuth, async (req, res): Promise
     .set({
       role,
       isAdmin,
-      ...(isAdmin ? { verificationStatus: "Premium_Approved" } : {}),
+      ...(isAdmin ? { verificationStatus: PREMIUM_STATUS_PRESERVING_PENDING } : {}),
     })
     .where(eq(usersTable.clerkUserId, targetUserId));
 
@@ -185,12 +195,6 @@ router.get("/admin/pending-verifications", requireAuth, async (req, res): Promis
   const ok = await requireAdminOrCEO(req as any, res);
   if (!ok) return;
 
-  // Keep legacy privileged accounts out of the queue and persist their premium status.
-  await db.update(usersTable).set({ verificationStatus: "Premium_Approved" })
-    .where(and(
-      inArray(usersTable.role, ["admin", "ceo"]),
-      inArray(usersTable.verificationStatus, PENDING_VERIFICATION_STATUSES),
-    ));
   const users = await db
     .select()
     .from(usersTable)
@@ -205,7 +209,9 @@ router.get("/admin/pending-verifications", requireAuth, async (req, res): Promis
     avatarUrl: u.avatarUrl,
     verificationStatus: u.verificationStatus,
     badgeType:
-      u.verificationStatus === "Premium_Pending_Approval"
+      u.verificationStatus === "Gold_Pending_Approval"
+        ? "Gold / Yellow Tick (Paystack)"
+        : u.verificationStatus === "Premium_Pending_Approval"
         ? "Premium Blue Tick (Paystack)"
         : u.verificationStatus === "pending_paid"
           ? "Paid User (Paystack)"
@@ -243,6 +249,7 @@ router.post("/admin/users/:userId/approve-badge", requireAuth, async (req, res):
     const pendingStatuses = [
       "pending_paid",
       "Premium_Pending_Approval",
+      "Gold_Pending_Approval",
       "Student_Pending",
       "pending_promo",
     ];
@@ -255,9 +262,19 @@ router.post("/admin/users/:userId/approve-badge", requireAuth, async (req, res):
     }
 
     let eligible = false;
-    if (status === "pending_paid" || status === "Premium_Pending_Approval") {
+    let approvedTier: "student" | "gold" | "premium" | null = null;
+    let approvedExpiry: Date | null = null;
+    if (
+      status === "pending_paid" ||
+      status === "Premium_Pending_Approval" ||
+      status === "Gold_Pending_Approval"
+    ) {
       const packageType =
-        status === "pending_paid" ? "student_verification" : "premium_blue_tick";
+        status === "pending_paid"
+          ? "student_verification"
+          : status === "Gold_Pending_Approval"
+            ? "gold_yellow_tick"
+            : "premium_blue_tick";
       const payments = await tx
         .select({
           paidAt: paymentTransactionsTable.paidAt,
@@ -274,7 +291,17 @@ router.post("/admin/users/:userId/approve-badge", requireAuth, async (req, res):
           ),
         );
       eligible = payments.some((payment) => paymentEntitlementIsActive(payment, now));
+      if (eligible) {
+        approvedTier = status === "pending_paid" ? "student"
+          : status === "Gold_Pending_Approval" ? "gold" : "premium";
+        approvedExpiry = payments
+          .filter((payment) => paymentEntitlementIsActive(payment, now))
+          .map((payment) => payment.entitlementExpiresAt ??
+            new Date((payment.paidAt ?? payment.createdAt).getTime() + payment.durationDays * 86_400_000))
+          .sort((a, b) => b.getTime() - a.getTime())[0] ?? null;
+      }
 
+      // The launch claim covers the existing Premium plan, never a Gold purchase.
       if (status === "Premium_Pending_Approval" && !eligible) {
         const [claim] = await tx
           .select({
@@ -290,6 +317,10 @@ router.post("/admin/users/:userId/approve-badge", requireAuth, async (req, res):
           target.registrationRank <= EARLY_BIRD_LIMIT &&
           !!target.promoExpiresAt &&
           target.promoExpiresAt >= now;
+        if (eligible) {
+          approvedTier = "premium";
+          approvedExpiry = target.promoExpiresAt;
+        }
       }
     } else {
       const [claim] = await tx
@@ -306,6 +337,10 @@ router.post("/admin/users/:userId/approve-badge", requireAuth, async (req, res):
         target.registrationRank <= EARLY_BIRD_LIMIT &&
         !!target.promoExpiresAt &&
         target.promoExpiresAt >= now;
+      if (eligible) {
+        approvedTier = "student";
+        approvedExpiry = target.promoExpiresAt;
+      }
     }
 
     if (!eligible) {
@@ -318,13 +353,15 @@ router.post("/admin/users/:userId/approve-badge", requireAuth, async (req, res):
 
     const verificationStatus = isPrivilegedRole(target.role)
       ? "Premium_Approved"
-      : status === "Premium_Pending_Approval"
-        ? "Premium_Approved"
-        : "Student_Verified";
+      : approvedTier === "gold" ? "Gold_Approved"
+        : approvedTier === "premium" ? "Premium_Approved"
+          : "Student_Verified";
     await tx
       .update(usersTable)
       .set({
         verificationStatus,
+        publicBadgeTier: approvedTier,
+        publicBadgeExpiresAt: approvedExpiry,
         premiumBadgeDiscountPercent: 0,
       })
       .where(eq(usersTable.clerkUserId, targetUserId));
@@ -378,6 +415,8 @@ router.post("/admin/users/:userId/reject-badge", requireAuth, async (req, res): 
       verificationStatus: isPrivilegedRole(target.role)
         ? "Premium_Approved"
         : "none",
+      publicBadgeTier: null,
+      publicBadgeExpiresAt: null,
       promoExpiresAt: null,
       premiumBadgeDiscountPercent: 0,
     })
@@ -418,12 +457,32 @@ router.patch("/admin/users/:userId/verification", requireAuth, async (req, res):
     return;
   }
 
+  const requestedTier = req.body?.badgeTier;
+  if (requestedTier !== undefined && !["student", "gold", "premium"].includes(requestedTier)) {
+    res.status(400).json({ error: "badgeTier must be student, gold, or premium." });
+    return;
+  }
+  if (requestedTier && !req.body.verified) {
+    res.status(400).json({ error: "A public badge tier requires verified=true." });
+    return;
+  }
   const verificationStatus = req.body.verified
-    ? (isPrivilegedRole(target.role) ? "Premium_Approved" : "approved")
+    ? isPrivilegedRole(target.role) ? "Premium_Approved"
+      : requestedTier === "gold" ? "Gold_Approved"
+      : requestedTier === "premium" || isPrivilegedRole(target.role) ? "Premium_Approved"
+        : requestedTier === "student" ? "Student_Verified" : "approved"
     : (isPrivilegedRole(target.role) ? "Premium_Approved" : "none");
   await db
     .update(usersTable)
-    .set({ verificationStatus, promoExpiresAt: null, premiumBadgeDiscountPercent: 0 })
+    .set({
+      verificationStatus,
+      publicBadgeTier: req.body.verified ? (requestedTier ?? null) : null,
+      publicBadgeExpiresAt: req.body.verified && requestedTier
+        ? new Date(Date.now() + 30 * 86_400_000)
+        : null,
+      promoExpiresAt: null,
+      premiumBadgeDiscountPercent: 0,
+    })
     .where(eq(usersTable.clerkUserId, targetUserId));
 
   await createNotification({
@@ -459,7 +518,7 @@ router.post("/admin/auto-detect-ceo", requireAuth, async (req, res): Promise<voi
   if (user.role !== "ceo") {
     await db
       .update(usersTable)
-      .set({ role: "ceo", isAdmin: true, verificationStatus: "Premium_Approved" })
+      .set({ role: "ceo", isAdmin: true, verificationStatus: PREMIUM_STATUS_PRESERVING_PENDING })
       .where(eq(usersTable.clerkUserId, userId));
     res.json({ upgraded: true });
     return;

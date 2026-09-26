@@ -753,8 +753,22 @@ export interface ApproveBadgeResponse {
   success: boolean;
 }
 
+/**
+ * Explicitly grant an active public badge for 30 days; omitted verified=true is baseline approval only.
+ */
+export type SetUserVerificationBodyBadgeTier =
+  (typeof SetUserVerificationBodyBadgeTier)[keyof typeof SetUserVerificationBodyBadgeTier];
+
+export const SetUserVerificationBodyBadgeTier = {
+  student: "student",
+  gold: "gold",
+  premium: "premium",
+} as const;
+
 export interface SetUserVerificationBody {
   verified: boolean;
+  /** Explicitly grant an active public badge for 30 days; omitted verified=true is baseline approval only. */
+  badgeTier?: SetUserVerificationBodyBadgeTier;
 }
 
 export interface SetUserVerificationResponse {
@@ -771,6 +785,7 @@ export type PaymentPackage =
 export const PaymentPackage = {
   student_verification: "student_verification",
   premium_blue_tick: "premium_blue_tick",
+  gold_yellow_tick: "gold_yellow_tick",
   marketplace_promotion_3_day: "marketplace_promotion_3_day",
   marketplace_promotion_7_day: "marketplace_promotion_7_day",
   marketplace_promotion_30_day: "marketplace_promotion_30_day",

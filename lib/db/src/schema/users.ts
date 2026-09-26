@@ -26,6 +26,9 @@ export const usersTable = pgTable(
     isAdmin: boolean("is_admin").notNull().default(false),
     role: text("role").notNull().default("student"),
     verificationStatus: text("verification_status").notNull().default("none"),
+    // Public badge entitlement is deliberately separate from internal role/status grants.
+    publicBadgeTier: text("public_badge_tier"),
+    publicBadgeExpiresAt: timestamp("public_badge_expires_at", { withTimezone: true }),
     premiumBadgeDiscountPercent: integer("premium_badge_discount_percent").notNull().default(0),
     promoExpiresAt: timestamp("promo_expires_at", { withTimezone: true }),
     hustlePromoExpiresAt: timestamp("hustle_promo_expires_at", { withTimezone: true }),

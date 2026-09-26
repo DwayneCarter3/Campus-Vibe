@@ -52,7 +52,6 @@ import {
 } from "@workspace/api-client-react";
 import { useColors } from "@/hooks/useColors";
 import { UserVerificationMarks } from "@/components/UserVerificationMarks";
-import { VerificationBadge } from "@/components/VerificationBadge";
 import { uploadCampusImage } from "@/lib/mediaUpload";
 
 const FACULTIES = [
@@ -356,9 +355,6 @@ export function PostCard({ post, onHide }: { post: Post; onHide?: () => void }) 
             : post.authorAvatarUrl
               ? <Image source={{ uri: mediaUri(post.authorAvatarUrl) }} style={styles.avatarImage} />
               : <Text style={[styles.avatarText, { color: colors.primary }]}>{post.authorName.charAt(0)}</Text>}
-          {!post.isAnonymous && post.authorVerificationStatus === "Student_Verified" && (
-            <VerificationBadge type="green-circle" fontSize={15} placement="avatar" />
-          )}
         </View>
         <View style={styles.authorInfo}>
           <View style={{ flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 5 }}>

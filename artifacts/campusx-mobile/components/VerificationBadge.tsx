@@ -8,7 +8,7 @@ type BadgeKind = "student" | "business";
 interface VerificationBadgeProps {
   size?: "sm" | "md" | "lg";
   fontSize?: number;
-  type?: BadgeType;
+  type: BadgeType;
   kind?: BadgeKind;
   placement?: "inline" | "avatar";
   glow?: boolean;
@@ -19,7 +19,7 @@ const SCALLOPED_EDGE = "M12 1.5 14.2 3.2 17 2.6 18.3 5.2 21.1 6.1 21 9 22.5 12 2
 export function VerificationBadge({
   size = "sm",
   fontSize,
-  type = "blue",
+  type,
   kind = "student",
   placement = "inline",
   glow = false,
@@ -27,7 +27,15 @@ export function VerificationBadge({
   const anchor = useRef<View>(null);
   const [tip, setTip] = useState<{ left: number; top: number } | null>(null);
   const iconSize = Math.round((fontSize ?? { sm: 14, md: 17, lg: 22 }[size]) * (size === "lg" ? 1.1 : 1));
-  const label = type === "green" || type === "green-circle" ? "Green Tick verification" : type === "blue" ? "Premium Blue Tick" : kind === "business" ? "Verified LASU CampusX Business" : "Verified Student Account";
+  const label = type === "green" || type === "green-circle"
+    ? "Green verification tick"
+    : type === "gold"
+      ? "Gold verification tick"
+      : type === "blue"
+        ? "Blue verification tick"
+        : kind === "business"
+          ? "Verified LASU CampusX Business"
+          : "Verified account";
   const color = type === "green" || type === "green-circle" ? "#22C55E" : type === "gold" ? "#FFD700" : type === "rounded" ? "#0095F6" : "#1DA1F2";
 
   const showTip = () => {

@@ -25,6 +25,12 @@ const PAYMENT_PACKAGES = {
     label: "Premium Blue Tick (30 days)",
     entitlement: "badge",
   },
+  gold_yellow_tick: {
+    baseAmountKobo: 300_000,
+    durationDays: 30,
+    label: "Gold / Yellow Tick (30 days)",
+    entitlement: "badge",
+  },
   marketplace_promotion_3_day: {
     baseAmountKobo: 50_000,
     durationDays: 3,
@@ -115,19 +121,28 @@ export async function expirePaidBadgeEntitlement(clerkUserId: string): Promise<v
       .where(eq(usersTable.clerkUserId, clerkUserId))
       .for("update")
       .limit(1);
-    if (!user || user.role === "ceo" || user.role === "admin") return;
+    if (!user) return;
+    const now = new Date();
+    if (
+      user.publicBadgeTier &&
+      user.publicBadgeExpiresAt &&
+      user.publicBadgeExpiresAt > now
+    ) return;
 
     const packageType =
       user.verificationStatus === "Student_Verified" ||
       user.verificationStatus === "pending_paid"
         ? "student_verification"
+        : user.verificationStatus === "Gold_Approved" ||
+            user.verificationStatus === "Gold_Pending_Approval"
+          ? "gold_yellow_tick"
         : user.verificationStatus === "Premium_Approved" ||
             user.verificationStatus === "Premium_Pending_Approval"
-          ? "premium_blue_tick"
+            ? "premium_blue_tick"
           : null;
-    if (!packageType) return;
+    if (!packageType && !user.publicBadgeTier) return;
 
-    const paidBadgePayments = await tx
+    const paidBadgePayments = packageType ? await tx
       .select({
         paidAt: paymentTransactionsTable.paidAt,
         createdAt: paymentTransactionsTable.createdAt,
@@ -141,26 +156,79 @@ export async function expirePaidBadgeEntitlement(clerkUserId: string): Promise<v
           eq(paymentTransactionsTable.packageType, packageType),
           eq(paymentTransactionsTable.status, "paid"),
         ),
-      );
-    if (!paidBadgePayments.length) return;
-
-    const now = new Date();
+      ) : [];
     const hasActiveRenewal = paidBadgePayments.some((payment) => {
       const expiresAt =
         payment.entitlementExpiresAt ??
         expiresAfterDays(payment.paidAt ?? payment.createdAt, payment.durationDays);
       return expiresAt > now;
     });
-    if (hasActiveRenewal) return;
+    // A checkout that has not been confirmed by Paystack is still pending,
+    // not an expired entitlement. Do not erase its review state on /users/me.
+    if (
+      !hasActiveRenewal &&
+      !user.publicBadgeTier &&
+      ["pending_paid", "Gold_Pending_Approval", "Premium_Pending_Approval"].includes(user.verificationStatus)
+    ) return;
+    if (hasActiveRenewal) {
+      const activeExpiry = paidBadgePayments
+        .map((payment) => payment.entitlementExpiresAt ??
+          expiresAfterDays(payment.paidAt ?? payment.createdAt, payment.durationDays))
+        .filter((expiry) => expiry > now)
+        .sort((a, b) => b.getTime() - a.getTime())[0];
+      const approvedTier = user.role === "ceo" || user.role === "admin"
+        ? null
+        : user.verificationStatus === "Student_Verified" ? "student"
+          : user.verificationStatus === "Gold_Approved" ? "gold"
+            : user.verificationStatus === "Premium_Approved" ? "premium" : null;
+      if (
+        approvedTier &&
+        activeExpiry &&
+        (user.publicBadgeTier !== approvedTier ||
+          user.publicBadgeExpiresAt?.getTime() !== activeExpiry.getTime())
+      ) {
+        await tx.update(usersTable)
+          .set({ publicBadgeTier: approvedTier, publicBadgeExpiresAt: activeExpiry })
+          .where(eq(usersTable.clerkUserId, clerkUserId));
+      }
+      return;
+    }
+    if (user.promoExpiresAt && user.promoExpiresAt > now) {
+      const [claim] = await tx
+        .select({ badgeClaimedAt: earlyBirdClaimsTable.badgeClaimedAt })
+        .from(earlyBirdClaimsTable)
+        .where(eq(earlyBirdClaimsTable.clerkUserId, clerkUserId))
+        .limit(1);
+      if (claim?.badgeClaimedAt) {
+        const approvedTier = user.role === "ceo" || user.role === "admin"
+          ? null
+          : user.verificationStatus === "Student_Verified" ? "student"
+            : user.verificationStatus === "Gold_Approved" ? "gold"
+              : user.verificationStatus === "Premium_Approved" ? "premium" : null;
+        if (
+          approvedTier &&
+          (user.publicBadgeTier !== approvedTier ||
+            user.publicBadgeExpiresAt?.getTime() !== user.promoExpiresAt.getTime())
+        ) {
+          await tx.update(usersTable)
+            .set({ publicBadgeTier: approvedTier, publicBadgeExpiresAt: user.promoExpiresAt })
+            .where(eq(usersTable.clerkUserId, clerkUserId));
+        }
+        return;
+      }
+    }
 
     await tx
       .update(usersTable)
-      .set({ verificationStatus: "approved" })
+      .set({
+        verificationStatus: user.role === "ceo" || user.role === "admin" ? "Premium_Approved" : "approved",
+        publicBadgeTier: null,
+        publicBadgeExpiresAt: null,
+      })
       .where(
         and(
           eq(usersTable.clerkUserId, clerkUserId),
           eq(usersTable.verificationStatus, user.verificationStatus),
-          sql`${usersTable.role} not in ('ceo', 'admin')`,
         ),
       );
   });
@@ -233,9 +301,9 @@ async function grantEarlyBirdBenefit(
     await tx
       .update(usersTable)
       .set({
-        verificationStatus: sql`case when ${usersTable.role} in ('ceo', 'admin')
-          or ${usersTable.verificationStatus} = 'Premium_Approved'
-          then 'Premium_Approved' else ${badgeTier === "student" ? "Student_Pending" : "Premium_Pending_Approval"} end`,
+        verificationStatus: badgeTier === "student" ? "Student_Pending" : "Premium_Pending_Approval",
+        publicBadgeTier: null,
+        publicBadgeExpiresAt: null,
       })
       .where(eq(usersTable.clerkUserId, clerkUserId));
   } else {
@@ -349,13 +417,21 @@ async function applySuccessfulPayment(
       const requestedStatus =
         payment.packageType === "student_verification"
           ? "pending_paid"
+          : payment.packageType === "gold_yellow_tick"
+            ? "Gold_Pending_Approval"
           : "Premium_Pending_Approval";
       await tx
         .update(usersTable)
         .set({
-          verificationStatus: sql`case when ${usersTable.role} in ('ceo', 'admin')
-            or ${usersTable.verificationStatus} = 'Premium_Approved'
-            then 'Premium_Approved' else ${requestedStatus} end`,
+          verificationStatus: requestedStatus,
+          // A new purchase still needs review; it must not grant the new tier.
+          // Keep an already-approved, unexpired tick visible while renewal waits.
+          publicBadgeTier: user.publicBadgeExpiresAt && user.publicBadgeExpiresAt > paidAt
+            ? user.publicBadgeTier
+            : null,
+          publicBadgeExpiresAt: user.publicBadgeExpiresAt && user.publicBadgeExpiresAt > paidAt
+            ? user.publicBadgeExpiresAt
+            : null,
         })
         .where(eq(usersTable.clerkUserId, payment.clerkUserId));
     }
@@ -423,7 +499,7 @@ router.post("/payments/initialize", requireAuth, async (req, res): Promise<void>
 
   const product = PAYMENT_PACKAGES[packageType];
   const earlyBirdBenefit =
-    product.entitlement === "badge"
+    product.entitlement === "badge" && packageType !== "gold_yellow_tick"
       ? "badge"
       : product.entitlement === "marketplace"
         ? "promotion"

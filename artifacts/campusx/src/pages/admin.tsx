@@ -274,7 +274,7 @@ export default function AdminPage() {
 
   const handleVerificationToggle = (userId: string, verified: boolean) => {
     setUserVerification.mutate(
-      { userId, data: { verified: !verified } },
+      { userId, data: { verified: !verified, ...(!verified ? { badgeTier: "student" } : {}) } as any },
       {
         onSuccess: () => {
           queryClient.invalidateQueries({ queryKey: getListAdminUsersQueryKey() });
@@ -621,7 +621,7 @@ export default function AdminPage() {
                     </Select>
                   </div>
                   {(() => {
-                    const verified = ["approved", "Student_Verified", "Premium_Approved"].includes(u.verificationStatus);
+                    const verified = ["approved", "Student_Verified", "Gold_Approved", "Premium_Approved"].includes(u.verificationStatus);
                     const protectedAccount = u.role === "admin" || u.role === "ceo";
                     return (
                       <Button
@@ -713,7 +713,7 @@ export default function AdminPage() {
                     disabled={approveBadge.isPending}
                   >
                     <ShieldCheck className="h-3.5 w-3.5" />
-                    Approve Badge
+                    Approve purchased tier
                   </Button>
                   <Button
                     variant="outline"

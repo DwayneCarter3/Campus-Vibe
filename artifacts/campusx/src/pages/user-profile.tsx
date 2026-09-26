@@ -20,7 +20,6 @@ import { PostCard } from "@/components/post-card";
 import { ServiceCard } from "@/components/service-card";
 import { cn } from "@/lib/utils";
 import { UserVerificationMarks } from "@/components/user-verification-marks";
-import { VerificationBadge } from "@/components/verification-badge";
 
 type Tab = "posts" | "hustles";
 
@@ -99,17 +98,14 @@ export default function UserProfilePage() {
                   {profile.fullName.charAt(0)}
                 </AvatarFallback>
               </Avatar>
-              {profile.verificationStatus === "Student_Verified" && (
-                <VerificationBadge type="green-circle" className="absolute -right-0.5 -bottom-0.5 bg-background rounded-full ring-2 ring-background" />
-              )}
             </div>
 
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap mb-2">
                 <h1 className="text-xl font-bold inline-flex items-center gap-1.5">
                   {profile.fullName}
+                  <UserVerificationMarks status={profile.verificationStatus} role={profile.role} />
                 </h1>
-                <UserVerificationMarks status={profile.verificationStatus} role={profile.role} />
               </div>
               {(profile.username || profile.department) && (
                 <p className="text-xs text-muted-foreground mb-2">

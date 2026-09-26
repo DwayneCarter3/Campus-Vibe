@@ -5,7 +5,7 @@ import { db, servicesTable, usersTable, postsTable, notificationsTable, savedSer
 import { requireAuth } from "../middlewares/auth";
 import { hasAdminPrivileges } from "../lib/privilege";
 import { broadcastNotification } from "../sse-manager";
-import { isVerifiedAccount, publicVerificationStatus } from "../lib/verification";
+import { isVerifiedAccount, publicDisplayRole, publicVerificationStatus } from "../lib/verification";
 import { getEffectiveLevel } from "../lib/academic-level";
 import { computeCampusTitle } from "./admin";
 import { ObjectStorageService } from "../lib/objectStorage";
@@ -113,7 +113,7 @@ async function getProviderTitle(providerId: string, role: string) {
     .select({ count: sql<number>`count(*)::int` })
     .from(postsTable)
     .where(eq(postsTable.authorId, providerId));
-  return computeCampusTitle(role, count ?? 0);
+  return computeCampusTitle(publicDisplayRole(role), count ?? 0);
 }
 
 async function isServiceSaved(serviceId: number, userId?: string): Promise<boolean> {
@@ -153,6 +153,8 @@ async function buildServiceWithMeta(serviceId: number, viewerId?: string) {
       providerAvatarUrl: usersTable.avatarUrl,
       providerVerificationStatus: usersTable.verificationStatus,
       providerRole: usersTable.role,
+      providerPublicBadgeTier: usersTable.publicBadgeTier,
+      providerPublicBadgeExpiresAt: usersTable.publicBadgeExpiresAt,
     })
     .from(servicesTable)
     .leftJoin(usersTable, eq(servicesTable.providerId, usersTable.clerkUserId))
@@ -160,8 +162,12 @@ async function buildServiceWithMeta(serviceId: number, viewerId?: string) {
 
   if (!service) return null;
 
-  const { providerVerificationStatus, providerMatricNumber, ...rest } = service;
+  const {
+    providerVerificationStatus, providerMatricNumber,
+    providerPublicBadgeTier, providerPublicBadgeExpiresAt, ...rest
+  } = service;
   const role = service.providerRole ?? "student";
+  const publicRole = publicDisplayRole(role);
 
   return {
     ...rest,
@@ -171,9 +177,9 @@ async function buildServiceWithMeta(serviceId: number, viewerId?: string) {
     providerLevel: getEffectiveLevel(service.providerLevel, providerMatricNumber),
     providerCampusLocation: service.providerCampusLocation ?? "Ojo",
     providerAvatarUrl: service.providerAvatarUrl ?? null,
-    providerIsVerified: isVerifiedAccount(providerVerificationStatus, role),
-    providerVerificationStatus: publicVerificationStatus(providerVerificationStatus, role),
-    providerRole: role,
+    providerIsVerified: isVerifiedAccount(providerVerificationStatus, role, providerPublicBadgeTier, providerPublicBadgeExpiresAt),
+    providerVerificationStatus: publicVerificationStatus(providerVerificationStatus, role, providerPublicBadgeTier, providerPublicBadgeExpiresAt),
+    providerRole: publicRole,
     providerCampusTitle: await getProviderTitle(service.providerId, role),
     isSavedByMe: await isServiceSaved(serviceId, viewerId),
   };
@@ -285,6 +291,8 @@ router.get("/services", async (req, res): Promise<void> => {
       providerAvatarUrl: usersTable.avatarUrl,
       providerVerificationStatus: usersTable.verificationStatus,
       providerRole: usersTable.role,
+      providerPublicBadgeTier: usersTable.publicBadgeTier,
+      providerPublicBadgeExpiresAt: usersTable.publicBadgeExpiresAt,
     })
     .from(servicesTable)
     .leftJoin(usersTable, eq(servicesTable.providerId, usersTable.clerkUserId))
@@ -313,8 +321,12 @@ router.get("/services", async (req, res): Promise<void> => {
     .where(conditions.length === 1 ? conditions[0] : and(...conditions));
 
   const enriched = await Promise.all(services.map(async (s) => {
-    const { providerVerificationStatus, providerMatricNumber, cursorCreatedAt, ...rest } = s;
+    const {
+      providerVerificationStatus, providerMatricNumber, cursorCreatedAt,
+      providerPublicBadgeTier, providerPublicBadgeExpiresAt, ...rest
+    } = s;
     const role = s.providerRole ?? "student";
+    const publicRole = publicDisplayRole(role);
     return {
       ...rest,
       flashExpiresAt: s.flashExpiresAt?.toISOString() ?? null,
@@ -323,9 +335,9 @@ router.get("/services", async (req, res): Promise<void> => {
       providerLevel: getEffectiveLevel(s.providerLevel, providerMatricNumber),
       providerCampusLocation: s.providerCampusLocation ?? "Ojo",
       providerAvatarUrl: s.providerAvatarUrl ?? null,
-      providerIsVerified: isVerifiedAccount(providerVerificationStatus, role),
-      providerVerificationStatus: publicVerificationStatus(providerVerificationStatus, role),
-      providerRole: role,
+      providerIsVerified: isVerifiedAccount(providerVerificationStatus, role, providerPublicBadgeTier, providerPublicBadgeExpiresAt),
+      providerVerificationStatus: publicVerificationStatus(providerVerificationStatus, role, providerPublicBadgeTier, providerPublicBadgeExpiresAt),
+      providerRole: publicRole,
       providerCampusTitle: await getProviderTitle(s.providerId, role),
       isSavedByMe: await isServiceSaved(s.id, viewerId ?? undefined),
     };

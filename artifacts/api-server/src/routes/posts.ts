@@ -6,7 +6,7 @@ import { db, postsTable, postLikesTable, postNoCapsTable, postCommentsTable, use
 import { requireAuth } from "../middlewares/auth";
 import { hasAdminPrivileges } from "../lib/privilege";
 import { computeCampusTitle } from "./admin";
-import { isVerifiedAccount, publicVerificationStatus } from "../lib/verification";
+import { isVerifiedAccount, publicDisplayRole, publicVerificationStatus } from "../lib/verification";
 import { getEffectiveLevel } from "../lib/academic-level";
 import { createNotification } from "../lib/notifications";
 import { publicPost } from "../lib/post-privacy";
@@ -281,6 +281,8 @@ async function buildPostWithMeta(postId: number, clerkUserId?: string) {
       authorAvatarUrl: usersTable.avatarUrl,
       authorRole: usersTable.role,
       authorVerificationStatus: usersTable.verificationStatus,
+      authorPublicBadgeTier: usersTable.publicBadgeTier,
+      authorPublicBadgeExpiresAt: usersTable.publicBadgeExpiresAt,
       opId: originalPostAlias.id,
       opAuthorId: originalPostAlias.authorId,
       opContent: originalPostAlias.content,
@@ -290,6 +292,8 @@ async function buildPostWithMeta(postId: number, clerkUserId?: string) {
       opAuthorAvatarUrl: originalUserAlias.avatarUrl,
       opAuthorVerificationStatus: originalUserAlias.verificationStatus,
       opAuthorRole: originalUserAlias.role,
+      opAuthorPublicBadgeTier: originalUserAlias.publicBadgeTier,
+      opAuthorPublicBadgeExpiresAt: originalUserAlias.publicBadgeExpiresAt,
       opIsAnonymous: originalPostAlias.isAnonymous,
     })
     .from(postsTable)
@@ -320,13 +324,18 @@ async function buildPostWithMeta(postId: number, clerkUserId?: string) {
   }
 
   const role = post.authorRole ?? "student";
+  const publicRole = publicDisplayRole(role);
   const postCount = await getPostCount(post.authorId);
-  const campusTitle = computeCampusTitle(role, postCount);
+  const campusTitle = computeCampusTitle(publicRole, postCount);
 
   const {
     authorMatricNumber,
+    authorPublicBadgeTier,
+    authorPublicBadgeExpiresAt,
     opId, opAuthorId, opContent, opImageUrl, opCreatedAt,
     opAuthorName, opAuthorAvatarUrl, opAuthorVerificationStatus,
+    opAuthorPublicBadgeTier,
+    opAuthorPublicBadgeExpiresAt,
     opAuthorRole, opIsAnonymous,
     ...publicFields
   } = post;
@@ -338,9 +347,9 @@ async function buildPostWithMeta(postId: number, clerkUserId?: string) {
     authorCampusLocation: post.authorCampusLocation ?? "Ojo",
     authorAvatarUrl: post.authorAvatarUrl ?? null,
     authorCampusTitle: campusTitle,
-    authorRole: role,
-    authorIsVerified: isVerifiedAccount(post.authorVerificationStatus, role),
-    authorVerificationStatus: publicVerificationStatus(post.authorVerificationStatus, role),
+    authorRole: publicRole,
+    authorIsVerified: isVerifiedAccount(post.authorVerificationStatus, role, authorPublicBadgeTier, authorPublicBadgeExpiresAt),
+    authorVerificationStatus: publicVerificationStatus(post.authorVerificationStatus, role, authorPublicBadgeTier, authorPublicBadgeExpiresAt),
     isAnonymous: post.isAnonymous ?? false,
     commentsCount: commentsCount ?? 0,
     reshareCount: post.reshareCount ?? 0,
@@ -350,8 +359,8 @@ async function buildPostWithMeta(postId: number, clerkUserId?: string) {
       authorId: post.opAuthorId ?? "",
       authorName: post.opAuthorName ?? "Unknown",
       authorAvatarUrl: post.opAuthorAvatarUrl ?? null,
-      authorIsVerified: !post.opIsAnonymous && isVerifiedAccount(post.opAuthorVerificationStatus, post.opAuthorRole),
-      authorVerificationStatus: post.opIsAnonymous ? "none" : publicVerificationStatus(post.opAuthorVerificationStatus, post.opAuthorRole),
+      authorIsVerified: !post.opIsAnonymous && isVerifiedAccount(opAuthorVerificationStatus, opAuthorRole, opAuthorPublicBadgeTier, opAuthorPublicBadgeExpiresAt),
+      authorVerificationStatus: post.opIsAnonymous ? "none" : publicVerificationStatus(opAuthorVerificationStatus, opAuthorRole, opAuthorPublicBadgeTier, opAuthorPublicBadgeExpiresAt),
       isAnonymous: Boolean(post.opIsAnonymous),
       content: post.opContent ?? "",
       imageUrl: post.opImageUrl ?? null,
@@ -468,6 +477,8 @@ router.get("/posts", async (req, res): Promise<void> => {
       authorAvatarUrl: usersTable.avatarUrl,
       authorRole: usersTable.role,
       authorVerificationStatus: usersTable.verificationStatus,
+      authorPublicBadgeTier: usersTable.publicBadgeTier,
+      authorPublicBadgeExpiresAt: usersTable.publicBadgeExpiresAt,
       opId: originalPostAlias.id,
       opAuthorId: originalPostAlias.authorId,
       opContent: originalPostAlias.content,
@@ -477,6 +488,8 @@ router.get("/posts", async (req, res): Promise<void> => {
       opAuthorAvatarUrl: originalUserAlias.avatarUrl,
       opAuthorVerificationStatus: originalUserAlias.verificationStatus,
       opAuthorRole: originalUserAlias.role,
+      opAuthorPublicBadgeTier: originalUserAlias.publicBadgeTier,
+      opAuthorPublicBadgeExpiresAt: originalUserAlias.publicBadgeExpiresAt,
       opIsAnonymous: originalPostAlias.isAnonymous,
     })
     .from(postsTable)
@@ -540,14 +553,19 @@ router.get("/posts", async (req, res): Promise<void> => {
       }
 
       const role = post.authorRole ?? "student";
+      const publicRole = publicDisplayRole(role);
       const postCount = await getPostCount(post.authorId);
-      const campusTitle = computeCampusTitle(role, postCount);
+      const campusTitle = computeCampusTitle(publicRole, postCount);
 
       const {
         authorMatricNumber,
+        authorPublicBadgeTier,
+        authorPublicBadgeExpiresAt,
         cursorCreatedAt,
         opId, opAuthorId, opContent, opImageUrl, opCreatedAt,
         opAuthorName, opAuthorAvatarUrl, opAuthorVerificationStatus,
+        opAuthorPublicBadgeTier,
+        opAuthorPublicBadgeExpiresAt,
         opAuthorRole, opIsAnonymous,
         ...publicFields
       } = post;
@@ -559,9 +577,9 @@ router.get("/posts", async (req, res): Promise<void> => {
         authorCampusLocation: post.authorCampusLocation ?? "Ojo",
         authorAvatarUrl: post.authorAvatarUrl ?? null,
         authorCampusTitle: campusTitle,
-        authorRole: role,
-        authorIsVerified: isVerifiedAccount(post.authorVerificationStatus, role),
-        authorVerificationStatus: publicVerificationStatus(post.authorVerificationStatus, role),
+        authorRole: publicRole,
+        authorIsVerified: isVerifiedAccount(post.authorVerificationStatus, role, authorPublicBadgeTier, authorPublicBadgeExpiresAt),
+        authorVerificationStatus: publicVerificationStatus(post.authorVerificationStatus, role, authorPublicBadgeTier, authorPublicBadgeExpiresAt),
         isAnonymous: post.isAnonymous ?? false,
         commentsCount: commentsCount ?? 0,
         reshareCount: post.reshareCount ?? 0,
@@ -571,8 +589,8 @@ router.get("/posts", async (req, res): Promise<void> => {
           authorId: post.opAuthorId ?? "",
           authorName: post.opAuthorName ?? "Unknown",
           authorAvatarUrl: post.opAuthorAvatarUrl ?? null,
-          authorIsVerified: !post.opIsAnonymous && isVerifiedAccount(post.opAuthorVerificationStatus, post.opAuthorRole),
-          authorVerificationStatus: post.opIsAnonymous ? "none" : publicVerificationStatus(post.opAuthorVerificationStatus, post.opAuthorRole),
+          authorIsVerified: !post.opIsAnonymous && isVerifiedAccount(opAuthorVerificationStatus, opAuthorRole, opAuthorPublicBadgeTier, opAuthorPublicBadgeExpiresAt),
+          authorVerificationStatus: post.opIsAnonymous ? "none" : publicVerificationStatus(opAuthorVerificationStatus, opAuthorRole, opAuthorPublicBadgeTier, opAuthorPublicBadgeExpiresAt),
           isAnonymous: Boolean(post.opIsAnonymous),
           content: post.opContent ?? "",
           imageUrl: post.opImageUrl ?? null,
@@ -1163,18 +1181,22 @@ router.get("/posts/:postId/comments", async (req, res): Promise<void> => {
       authorMatricNumber: usersTable.matricNumber,
       authorVerificationStatus: usersTable.verificationStatus,
       authorRole: usersTable.role,
+      authorPublicBadgeTier: usersTable.publicBadgeTier,
+      authorPublicBadgeExpiresAt: usersTable.publicBadgeExpiresAt,
     })
     .from(postCommentsTable)
     .leftJoin(usersTable, eq(postCommentsTable.authorId, usersTable.clerkUserId))
     .where(eq(postCommentsTable.postId, params.data.postId))
     .orderBy(postCommentsTable.createdAt);
 
-  const mapped = comments.map(({ authorMatricNumber, ...c }) => ({
+  const mapped = comments.map(({
+    authorMatricNumber, authorPublicBadgeTier, authorPublicBadgeExpiresAt, ...c
+  }) => ({
     ...c,
     authorName: c.authorName ?? "Unknown",
     authorLevel: getEffectiveLevel(c.authorLevel, authorMatricNumber),
-    authorIsVerified: isVerifiedAccount(c.authorVerificationStatus, c.authorRole),
-    authorVerificationStatus: publicVerificationStatus(c.authorVerificationStatus, c.authorRole),
+    authorIsVerified: isVerifiedAccount(c.authorVerificationStatus, c.authorRole, authorPublicBadgeTier, authorPublicBadgeExpiresAt),
+    authorVerificationStatus: publicVerificationStatus(c.authorVerificationStatus, c.authorRole, authorPublicBadgeTier, authorPublicBadgeExpiresAt),
   }));
 
   res.setHeader("Cache-Control", "private, no-store");
@@ -1232,6 +1254,8 @@ router.post("/posts/:postId/comments", requireAuth, async (req, res): Promise<vo
       matricNumber: usersTable.matricNumber,
       role: usersTable.role,
       verificationStatus: usersTable.verificationStatus,
+      publicBadgeTier: usersTable.publicBadgeTier,
+      publicBadgeExpiresAt: usersTable.publicBadgeExpiresAt,
     })
     .from(usersTable)
     .where(eq(usersTable.clerkUserId, userId));
@@ -1258,8 +1282,8 @@ router.post("/posts/:postId/comments", requireAuth, async (req, res): Promise<vo
     createdAt: inserted.createdAt,
     authorName: author?.fullName ?? "Unknown",
     authorLevel: getEffectiveLevel(author?.level, author?.matricNumber),
-    authorIsVerified: isVerifiedAccount(author?.verificationStatus, author?.role),
-    authorVerificationStatus: publicVerificationStatus(author?.verificationStatus, author?.role),
+    authorIsVerified: isVerifiedAccount(author?.verificationStatus, author?.role, author?.publicBadgeTier, author?.publicBadgeExpiresAt),
+    authorVerificationStatus: publicVerificationStatus(author?.verificationStatus, author?.role, author?.publicBadgeTier, author?.publicBadgeExpiresAt),
   });
 });
 

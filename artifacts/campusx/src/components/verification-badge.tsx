@@ -8,7 +8,7 @@ export type VerificationBadgeKind = "student" | "business";
 
 interface VerificationBadgeProps {
   size?: "sm" | "md" | "lg";
-  type?: VerificationBadgeType;
+  type: VerificationBadgeType;
   kind?: VerificationBadgeKind;
   className?: string;
 }
@@ -16,12 +16,20 @@ interface VerificationBadgeProps {
 /** Inline verification mark. Only render for accounts the API says are verified. */
 export function VerificationBadge({
   size = "sm",
-  type = "blue",
+  type,
   kind = "student",
   className,
 }: VerificationBadgeProps) {
   const [open, setOpen] = useState(false);
-  const label = type === "green" || type === "green-circle" ? "Green Tick verification" : type === "blue" ? "Premium Blue Tick" : kind === "business" ? "Verified LASU CampusX Business" : "Verified Student Account";
+  const label = type === "green" || type === "green-circle"
+    ? "Green verification tick"
+    : type === "gold"
+      ? "Gold verification tick"
+      : type === "blue"
+        ? "Blue verification tick"
+        : kind === "business"
+          ? "Verified LASU CampusX Business"
+          : "Verified account";
   const Icon = type === "rounded" || type === "green-circle" ? CheckCircle2 : BadgeCheck;
 
   return (

@@ -42,7 +42,6 @@ import { motion } from "framer-motion";
 import { PostCard } from "@/components/post-card";
 import { ServiceCard } from "@/components/service-card";
 import { UserVerificationMarks } from "@/components/user-verification-marks";
-import { VerificationBadge } from "@/components/verification-badge";
 import { AvatarModal } from "@/components/avatar-modal";
 import { cn } from "@/lib/utils";
 
@@ -119,7 +118,7 @@ export default function MyProfilePage() {
             window.location.assign(result.authorizationUrl);
             return;
           }
-          const isBadge = packageType === "student_verification" || packageType === "premium_blue_tick";
+          const isBadge = ["student_verification", "gold_yellow_tick", "premium_blue_tick"].includes(packageType as string);
           alert(isBadge
             ? `Verification request received. The badge remains subject to admin review. ${result.message ?? ""}`
             : result.message ?? "Your CampusX benefit is now active.");
@@ -280,17 +279,14 @@ export default function MyProfilePage() {
               <div className="absolute inset-0 rounded-full bg-black/0 group-hover/avatar:bg-black/20 transition-colors flex items-center justify-center">
                 <Camera className="h-5 w-5 text-white opacity-0 group-hover/avatar:opacity-80 transition-opacity" />
               </div>
-              {profile.verificationStatus === "Student_Verified" && (
-                <VerificationBadge type="green-circle" className="absolute -right-0.5 -bottom-0.5 bg-background rounded-full ring-2 ring-background" />
-              )}
             </div>
 
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap mb-1">
                 <h1 className="text-xl font-bold inline-flex items-center gap-1.5">
                   {profile.fullName}
+                  <UserVerificationMarks status={profile.verificationStatus} role={profile.role} />
                 </h1>
-                <UserVerificationMarks status={profile.verificationStatus} role={profile.role} />
               </div>
               {(profile.username || profile.department) && (
                 <p className="text-xs text-muted-foreground mb-2">
@@ -366,7 +362,7 @@ export default function MyProfilePage() {
             </div>
           </div>
           <p className="text-[11px] text-muted-foreground mt-3 leading-relaxed">
-            Your matric number is encrypted and never shared publicly. It is used only to grant your Verified Student badge.
+            Your matric number is encrypted and never shared publicly. It is used only for verification review.
           </p>
         </div>
 
@@ -381,7 +377,7 @@ export default function MyProfilePage() {
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-bold text-amber-300">Early Bird Launch Perk — Active</p>
                 <p className="text-[11px] text-amber-200/70 mt-0.5">
-                  Free Blue Tick + Unlimited Hustle Promotions
+                  Early-bird benefits + Hustle Promotions
                 </p>
                 <p className="text-[11px] text-amber-400 font-semibold mt-1">
                   ⏳ Expires in {daysLeft}d {hoursLeft}h
@@ -397,20 +393,18 @@ export default function MyProfilePage() {
         })()}
 
         {/* ── Badge Request Section ──────────────────────── */}
-        {hasMatric && !["approved", "Student_Verified", "Premium_Approved"].includes(profile.verificationStatus) && (
+        {hasMatric && !["Student_Verified", "Gold_Approved", "Premium_Approved"].includes(profile.verificationStatus) && (
           <div className="rounded-2xl border border-sky-500/20 bg-sky-500/5 p-4 flex items-center justify-between gap-4">
             <div className="flex items-center gap-3 min-w-0">
               <div className="h-8 w-8 rounded-full bg-sky-500/15 border border-sky-500/25 flex items-center justify-center shrink-0">
                 <Star className="h-4 w-4 text-sky-400" />
               </div>
               <div className="min-w-0">
-                <p className="text-sm font-medium text-sky-200">Verified Student Badge</p>
+                <p className="text-sm font-medium text-sky-200">Verification request</p>
                  <p className="text-[11px] text-muted-foreground">
-                   {["pending", "Student_Pending", "pending_promo", "pending_paid", "Premium_Pending_Approval"].includes(profile.verificationStatus)
-                    ? "Your badge request is pending admin review."
-                      : profile.promoExpiresAt && new Date(profile.promoExpiresAt) > new Date()
-                       ? "Request your free blue verification badge while your launch perk is active."
-                        : "Choose Student Verified, Green Tick, or Premium below. Paid badges require admin review."}
+                    {["pending", "Student_Pending", "Student_Pending_Approval", "Gold_Pending", "Gold_Pending_Approval", "pending_promo", "pending_paid", "Premium_Pending_Approval"].includes(profile.verificationStatus)
+                     ? "Your verification request is pending review."
+                       : "Choose a verification tier below. Requests require review."}
                 </p>
               </div>
             </div>
@@ -420,12 +414,12 @@ export default function MyProfilePage() {
           </div>
         )}
 
-        {hasMatric && profile.verificationStatus === "Premium_Pending_Approval" && (
+        {hasMatric && ["Gold_Pending", "Gold_Pending_Approval", "Premium_Pending_Approval"].includes(profile.verificationStatus) && (
           <div className="rounded-2xl border border-blue-400/30 bg-blue-500/10 p-4 flex items-center gap-3 shadow-[0_0_20px_rgba(37,99,235,0.12)]">
             <Star className="h-5 w-5 text-blue-300 shrink-0" />
             <div>
-              <p className="text-sm font-semibold text-blue-200">Premium Blue Tick payment received</p>
-              <p className="text-[11px] text-blue-200/70 mt-0.5">An admin will review your student details before activating the glowing badge.</p>
+              <p className="text-sm font-semibold text-blue-200">Verification payment received</p>
+              <p className="text-[11px] text-blue-200/70 mt-0.5">Your request is pending review. The tick appears only after approval.</p>
             </div>
           </div>
         )}
@@ -443,36 +437,35 @@ export default function MyProfilePage() {
             {paymentCatalog?.products && (
               <div className="grid gap-3 sm:grid-cols-2">
                 {paymentCatalog.products.map((product) => {
-                  const isBadge = product.packageType === "student_verification" || product.packageType === "premium_blue_tick";
+                  const packageType = product.packageType as string;
+                  const isBadge = ["student_verification", "gold_yellow_tick", "premium_blue_tick"].includes(packageType);
                   const basePrice = (product.baseAmountKobo / 100).toLocaleString("en-NG", { maximumFractionDigits: 2 });
                   const payablePrice = (product.amountKobo / 100).toLocaleString("en-NG", { maximumFractionDigits: 2 });
-                  const eligibleFreeStudent =
-                    product.packageType === "student_verification" &&
-                    profile.registrationRank <= 100 &&
-                    !!profile.promoExpiresAt &&
-                    new Date(profile.promoExpiresAt) > new Date();
-                  const planTitle = eligibleFreeStudent
-                    ? "FREE Student Verified"
-                    : product.packageType === "student_verification"
-                      ? "Green Tick"
-                      : product.packageType === "premium_blue_tick"
-                        ? "Premium Blue Tick"
+                  const planTitle = packageType === "student_verification"
+                    ? "Green Tick"
+                    : packageType === "gold_yellow_tick"
+                      ? "Gold Tick"
+                      : packageType === "premium_blue_tick"
+                        ? "Blue Tick"
                         : product.label;
+                  const tierColor = packageType === "student_verification"
+                    ? "text-emerald-300"
+                    : packageType === "gold_yellow_tick"
+                      ? "text-yellow-300"
+                      : packageType === "premium_blue_tick"
+                        ? "text-sky-300"
+                        : "";
                   return (
                     <div key={product.packageType} className="rounded-xl border border-white/10 bg-background/40 p-4 flex flex-col gap-3">
                       <div>
-                        <p className="text-sm font-semibold">{planTitle}</p>
+                        <p className={`text-sm font-semibold ${tierColor}`}>{planTitle}</p>
                         <p className="text-xs text-muted-foreground mt-1">
-                          {eligibleFreeStudent
-                            ? "First-100 early-bird claim may be free; otherwise this is the paid plan."
-                            : `₦${basePrice} · ${product.durationDays} days`}
+                          {`₦${basePrice} · ${product.durationDays} days`}
                         </p>
                         <p className="text-[11px] text-muted-foreground mt-1">
-                          {eligibleFreeStudent
-                            ? "Eligible claims are capped and remain pending admin approval."
-                            : `Paystack customer total: ₦${payablePrice}.`}
+                          {`Paystack customer total: ₦${payablePrice}.`}
                         </p>
-                        {isBadge && <p className="text-[11px] text-sky-300 mt-1">Badge activation requires admin review; no badge is applied by this screen.</p>}
+                        {isBadge && <p className="text-[11px] text-sky-300 mt-1">The tier tick is activated only after approval. It expires after {product.durationDays} days; renew manually.</p>}
                         {isBadge && !hasMatric && <p className="text-[11px] text-amber-300 mt-1">Add your matric number before requesting a verification badge.</p>}
                       </div>
                       <Button
@@ -480,9 +473,9 @@ export default function MyProfilePage() {
                         variant="outline"
                         className="mt-auto"
                         disabled={initializePayment.isPending || (isBadge && !hasMatric)}
-                        onClick={() => startPayment(product.packageType)}
+                        onClick={() => startPayment(product.packageType as PaymentPackage)}
                       >
-                        {eligibleFreeStudent ? "Claim Student Verified" : isBadge ? "Choose verification" : "Choose plan"}
+                        {initializePayment.isPending ? "Starting checkout…" : isBadge ? "Choose tier" : "Choose plan"}
                       </Button>
                     </div>
                   );

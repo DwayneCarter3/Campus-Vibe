@@ -1,10 +1,10 @@
 ---
 name: Role verification invariant
-description: Rules for keeping privileged CampusX accounts verified across admin actions and profile reads.
+description: Keep staff access separate from public verification entitlements.
 ---
 
-CEO and admin accounts must remain `Premium_Approved`, which drives both the Student Verified and Premium Blue Tick states. Admin list/profile reads repair older records, and role changes promote privileged accounts immediately.
+CEO and admin accounts can retain internal `Premium_Approved` status for existing admin workflows, but this status must not generate a public tick. Public verification needs its own explicitly approved tier and unexpired entitlement. Staff role names and role-derived titles are not public identity labels.
 
-**Why:** Privileged accounts need uninterrupted access and visible trust badges, including accounts created before the role system was added.
+**Why:** The user explicitly reversed the previous public role-badge policy. A CEO account with no paid transaction demonstrated that role-based status alone would create an unauthorized Blue Tick.
 
-**How to apply:** Any future verification mutation or expiry path must preserve this invariant for `ceo` and `admin`; ordinary users may be approved or revoked independently.
+**How to apply:** Preserve internal access checks when changing roles or expiry paths; gate all public ticks by a separate approved tier and expiry, including on one's own profile. Keep the designated Dispatch Official marker distinct from staff-role badges.

@@ -16,6 +16,7 @@ import { Feather } from "@expo/vector-icons";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useGetMyProfile,
+  getGetMyProfileQueryKey,
   useListAdminUsers,
   getListAdminUsersQueryKey,
   useUpdateUserRole,
@@ -135,16 +136,18 @@ export default function AdminScreen() {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: getListPendingVerificationsQueryKey() });
         queryClient.invalidateQueries({ queryKey: getListAdminUsersQueryKey() });
+        queryClient.invalidateQueries({ queryKey: getGetMyProfileQueryKey() });
       },
       onError: () => Alert.alert("Error", `Failed to approve ${name}'s badge.`),
     });
   };
 
   const handleVerificationToggle = (userId: string, name: string, verified: boolean) => {
-    setUserVerification.mutate({ userId, data: { verified: !verified } }, {
+    setUserVerification.mutate({ userId, data: { verified: !verified, ...(!verified ? { badgeTier: "student" } : {}) } as any }, {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: getListAdminUsersQueryKey() });
         queryClient.invalidateQueries({ queryKey: getListPendingVerificationsQueryKey() });
+        queryClient.invalidateQueries({ queryKey: getGetMyProfileQueryKey() });
       },
       onError: () => Alert.alert("Error", `Could not update ${name}'s verification.`),
     });
@@ -342,7 +345,7 @@ export default function AdminScreen() {
                     style={[styles.approveBtn, { backgroundColor: "#10B98120", borderColor: "#10B98140" }]}
                   >
                     <Feather name="check-circle" size={14} color="#10B981" />
-                    <Text style={[styles.approveBtnText, { color: "#10B981" }]}>Approve</Text>
+                    <Text style={[styles.approveBtnText, { color: "#10B981" }]}>Approve purchased tier</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     onPress={() => handleReject(u.clerkUserId, u.fullName)}
@@ -482,7 +485,7 @@ export default function AdminScreen() {
                       <Feather name="chevron-down" size={11} color={ROLE_COLORS[u.role as UserRole] ?? "#6B7280"} />
                     </TouchableOpacity>
                     {(() => {
-                      const verified = ["approved", "Student_Verified", "Premium_Approved"].includes(u.verificationStatus);
+                      const verified = ["approved", "Student_Verified", "Gold_Approved", "Premium_Approved"].includes(u.verificationStatus);
                       const protectedAccount = u.role === "admin" || u.role === "ceo";
                       return (
                         <TouchableOpacity

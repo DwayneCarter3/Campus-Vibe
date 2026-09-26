@@ -1530,6 +1530,12 @@ export const SetUserVerificationParams = zod.object({
 
 export const SetUserVerificationBody = zod.object({
   verified: zod.boolean(),
+  badgeTier: zod
+    .enum(["student", "gold", "premium"])
+    .optional()
+    .describe(
+      "Explicitly grant an active public badge for 30 days; omitted verified=true is baseline approval only.",
+    ),
 });
 
 export const SetUserVerificationResponse = zod.object({
@@ -1551,6 +1557,7 @@ export const ListPaymentProductsResponse = zod.object({
         .enum([
           "student_verification",
           "premium_blue_tick",
+          "gold_yellow_tick",
           "marketplace_promotion_3_day",
           "marketplace_promotion_7_day",
           "marketplace_promotion_30_day",
@@ -1582,6 +1589,7 @@ export const InitializePaymentBody = zod.object({
     .enum([
       "student_verification",
       "premium_blue_tick",
+      "gold_yellow_tick",
       "marketplace_promotion_3_day",
       "marketplace_promotion_7_day",
       "marketplace_promotion_30_day",
@@ -1608,6 +1616,7 @@ export const InitializePaymentResponse = zod.object({
     .enum([
       "student_verification",
       "premium_blue_tick",
+      "gold_yellow_tick",
       "marketplace_promotion_3_day",
       "marketplace_promotion_7_day",
       "marketplace_promotion_30_day",
@@ -1635,6 +1644,7 @@ export const GetPaymentStatusResponse = zod.object({
     .enum([
       "student_verification",
       "premium_blue_tick",
+      "gold_yellow_tick",
       "marketplace_promotion_3_day",
       "marketplace_promotion_7_day",
       "marketplace_promotion_30_day",
@@ -1676,6 +1686,7 @@ export const ListPaymentsResponse = zod.object({
         .enum([
           "student_verification",
           "premium_blue_tick",
+          "gold_yellow_tick",
           "marketplace_promotion_3_day",
           "marketplace_promotion_7_day",
           "marketplace_promotion_30_day",
@@ -1711,6 +1722,7 @@ export const ListActiveAdsResponse = zod.object({
         .enum([
           "student_verification",
           "premium_blue_tick",
+          "gold_yellow_tick",
           "marketplace_promotion_3_day",
           "marketplace_promotion_7_day",
           "marketplace_promotion_30_day",
@@ -1784,6 +1796,7 @@ export const ListPendingAdCampaignsResponse = zod.object({
           .enum([
             "student_verification",
             "premium_blue_tick",
+            "gold_yellow_tick",
             "marketplace_promotion_3_day",
             "marketplace_promotion_7_day",
             "marketplace_promotion_30_day",
