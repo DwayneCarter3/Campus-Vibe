@@ -824,6 +824,49 @@ export interface PaymentProductsResponse {
   products: PaymentProduct[];
 }
 
+export interface FreeTickPromoResponse {
+  claimed: number;
+  limit: number;
+  remaining: number;
+  hasClaimed: boolean;
+  eligible: boolean;
+  founder: boolean;
+}
+
+export interface ClaimFreeTickResponse {
+  success: boolean;
+  alreadyClaimed: boolean;
+  claimed: number;
+  remaining: number;
+}
+
+export type FounderBadgeSelectionTier =
+  (typeof FounderBadgeSelectionTier)[keyof typeof FounderBadgeSelectionTier];
+
+export const FounderBadgeSelectionTier = {
+  student: "student",
+  premium: "premium",
+  gold: "gold",
+} as const;
+
+export interface FounderBadgeSelection {
+  tier: FounderBadgeSelectionTier;
+}
+
+export type FounderBadgeResponseTier =
+  (typeof FounderBadgeResponseTier)[keyof typeof FounderBadgeResponseTier];
+
+export const FounderBadgeResponseTier = {
+  student: "student",
+  premium: "premium",
+  gold: "gold",
+} as const;
+
+export interface FounderBadgeResponse {
+  tier: FounderBadgeResponseTier;
+  lifetime: boolean;
+}
+
 export interface InitializePaymentBody {
   packageType: PaymentPackage;
 }

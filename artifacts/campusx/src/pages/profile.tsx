@@ -11,6 +11,10 @@ import {
   useInitializePayment,
   useListPaymentProducts,
   useListPayments,
+  useGetFreeTickPromo,
+  getGetFreeTickPromoQueryKey,
+  useClaimFreeTick,
+  useSetFounderBadgeTier,
 } from "@workspace/api-client-react";
 import type { PaymentPackage, UpdateProfileBodyLevel } from "@workspace/api-client-react";
 import { useUser, useClerk } from "@clerk/react";
@@ -87,6 +91,12 @@ export default function MyProfilePage() {
   const initializePayment = useInitializePayment();
   const { data: paymentCatalog, isLoading: paymentProductsLoading, isError: paymentProductsError } = useListPaymentProducts();
   const { data: paymentHistory, isLoading: paymentHistoryLoading, isError: paymentHistoryError } = useListPayments();
+  const { data: freeTickPromo, isError: freeTickPromoError } = useGetFreeTickPromo({
+    query: { queryKey: getGetFreeTickPromoQueryKey(), refetchInterval: 30_000 },
+  });
+  const claimFreeTick = useClaimFreeTick();
+  const setFounderBadgeTier = useSetFounderBadgeTier();
+  const [promoMessage, setPromoMessage] = useState("");
 
   const { data: profile, isLoading } = useGetMyProfile({
     query: { queryKey: getGetMyProfileQueryKey() },
@@ -128,6 +138,32 @@ export default function MyProfilePage() {
         },
       },
     );
+  };
+
+  const claimFreeVerification = () => {
+    setPromoMessage("");
+    claimFreeTick.mutate(undefined, {
+      onSuccess: () => {
+        setPromoMessage("Your free Green Tick claim is reserved. Your 30 days start when an admin approves it.");
+        queryClient.invalidateQueries({ queryKey: getGetFreeTickPromoQueryKey() });
+        queryClient.invalidateQueries({ queryKey: getGetMyProfileQueryKey() });
+      },
+      onError: (error) => {
+        setPromoMessage(error instanceof Error ? error.message : "Could not reserve a free tick.");
+        queryClient.invalidateQueries({ queryKey: getGetFreeTickPromoQueryKey() });
+      },
+    });
+  };
+
+  const chooseFounderTier = (tier: "student" | "premium" | "gold") => {
+    setPromoMessage("");
+    setFounderBadgeTier.mutate({ data: { tier } }, {
+      onSuccess: () => {
+        setPromoMessage("Your lifetime verification tick has been updated.");
+        queryClient.invalidateQueries();
+      },
+      onError: (error) => setPromoMessage(error instanceof Error ? error.message : "Could not update your tick."),
+    });
   };
 
   const eligibleAdPayments = (paymentHistory?.payments ?? []).filter((payment) =>
@@ -372,9 +408,9 @@ export default function MyProfilePage() {
             <div className="rounded-2xl border border-amber-500/30 bg-gradient-to-r from-amber-500/10 to-orange-500/10 p-4 flex items-center gap-3">
               <div className="text-2xl shrink-0">🎉</div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-bold text-amber-300">Early Bird Launch Perk — Active</p>
+                <p className="text-sm font-bold text-amber-300">Registration marketplace perk — Active</p>
                 <p className="text-[11px] text-amber-200/70 mt-0.5">
-                  Early-bird benefits + Hustle Promotions
+                  Your separate Hustle promotion benefit
                 </p>
                 <p className="text-[11px] text-amber-400 font-semibold mt-1">
                   ⏳ Expires in {daysLeft}d {hoursLeft}h
@@ -421,11 +457,54 @@ export default function MyProfilePage() {
           </div>
         )}
 
+        <section className="rounded-2xl border border-emerald-400/30 bg-emerald-500/[0.07] p-5 space-y-3">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-base font-bold text-emerald-200">Claim Free Verified Tick (First 100 Users)</h2>
+              <p className="text-xs text-muted-foreground mt-1">
+                Free Green Tick for the first 100 student claimants. Approval is required; your 30 days begin at activation.
+              </p>
+            </div>
+            {freeTickPromo && <span className="rounded-full border border-emerald-300/30 bg-emerald-400/10 px-3 py-1 text-xs font-bold text-emerald-200">
+              {freeTickPromo.claimed} of {freeTickPromo.limit} claimed · {freeTickPromo.remaining} left
+            </span>}
+          </div>
+          {freeTickPromoError && <p role="alert" className="text-xs text-destructive">Could not load live claim availability. Please refresh.</p>}
+          {freeTickPromo?.hasClaimed
+            ? <p className="text-xs text-emerald-200">You already claimed your free tick. It cannot be claimed twice.</p>
+            : freeTickPromo?.remaining === 0
+              ? <p className="text-xs text-amber-300">All free claims are taken. Choose a paid tier below.</p>
+              : !hasMatric && !freeTickPromo?.founder && <p className="text-xs text-amber-300">Add your matric number to claim your free tick.</p>}
+          {freeTickPromo && !freeTickPromo.eligible && !freeTickPromo.founder && !freeTickPromo.hasClaimed && freeTickPromo.remaining > 0 && hasMatric && (
+            <p className="text-xs text-muted-foreground">Free claims are for students without an active tick or pending paid request.</p>
+          )}
+          {freeTickPromo?.eligible && !freeTickPromo.hasClaimed && freeTickPromo.remaining > 0 && (
+            <Button onClick={claimFreeVerification} disabled={claimFreeTick.isPending || !hasMatric} className="bg-emerald-500 text-slate-950 hover:bg-emerald-400">
+              {claimFreeTick.isPending ? "Reserving…" : "Claim free Green Tick"}
+            </Button>
+          )}
+          {freeTickPromo?.founder && (
+            <div className="border-t border-emerald-300/20 pt-3">
+              <p className="text-sm font-semibold text-emerald-100">Founder lifetime verification</p>
+              <p className="text-xs text-muted-foreground mt-1 mb-3">Choose any tick for free. Your selection never needs renewal.</p>
+              <div className="flex flex-wrap gap-2">
+                {([["student", "Green"], ["premium", "Blue"], ["gold", "Gold"]] as const).map(([tier, label]) => (
+                  <Button key={tier} size="sm" variant="outline" disabled={setFounderBadgeTier.isPending}
+                    onClick={() => chooseFounderTier(tier)}>
+                    {label} Tick
+                  </Button>
+                ))}
+              </div>
+            </div>
+          )}
+          {promoMessage && <p role="status" className="text-xs text-emerald-200">{promoMessage}</p>}
+        </section>
+
         <section className="rounded-2xl border border-white/10 bg-background/30 p-5 space-y-4">
             <div>
               <h2 className="text-sm font-bold">Verification &amp; promotion plans</h2>
               <p className="text-xs text-muted-foreground mt-1">
-                All plans expire after their stated duration. Renew manually—there is no auto-billing.
+                {freeTickPromo?.founder ? "Your founder tick is free for life. Other listed plans retain their standard durations." : "All plans expire after their stated duration. Renew manually—there is no auto-billing."}
               </p>
               {paymentCatalog?.feeDisclosure && <p className="text-xs text-muted-foreground mt-1">{paymentCatalog.feeDisclosure}</p>}
             </div>
@@ -462,17 +541,19 @@ export default function MyProfilePage() {
                         <p className="text-[11px] text-muted-foreground mt-1">
                           {`Paystack customer total: ₦${payablePrice}.`}
                         </p>
-                        {isBadge && <p className="text-[11px] text-sky-300 mt-1">The tier tick is activated only after approval. It expires after {product.durationDays} days; renew manually.</p>}
-                        {isBadge && !hasMatric && <p className="text-[11px] text-amber-300 mt-1">Add your matric number before requesting a verification badge.</p>}
+                         {isBadge && <p className="text-[11px] text-sky-300 mt-1">{freeTickPromo?.founder ? "Free for the verified founder, for life." : `The tier tick is activated only after approval. It expires after ${product.durationDays} days; renew manually.`}</p>}
+                         {isBadge && !hasMatric && !freeTickPromo?.founder && <p className="text-[11px] text-amber-300 mt-1">Add your matric number before requesting a verification badge.</p>}
                       </div>
                       <Button
                         size="sm"
                         variant="outline"
                         className="mt-auto"
-                        disabled={initializePayment.isPending || (isBadge && !hasMatric)}
-                        onClick={() => startPayment(product.packageType as PaymentPackage)}
+                         disabled={initializePayment.isPending || setFounderBadgeTier.isPending || (isBadge && !hasMatric && !freeTickPromo?.founder)}
+                         onClick={() => freeTickPromo?.founder && isBadge
+                           ? chooseFounderTier(packageType === "student_verification" ? "student" : packageType === "gold_yellow_tick" ? "gold" : "premium")
+                           : startPayment(product.packageType as PaymentPackage)}
                       >
-                        {initializePayment.isPending ? "Starting checkout…" : isBadge ? "Choose tier" : "Choose plan"}
+                         {initializePayment.isPending || setFounderBadgeTier.isPending ? "Please wait…" : freeTickPromo?.founder && isBadge ? "Use free for life" : isBadge ? "Choose tier" : "Choose plan"}
                       </Button>
                     </div>
                   );

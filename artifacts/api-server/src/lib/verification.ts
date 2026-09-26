@@ -7,6 +7,10 @@ export const PENDING_VERIFICATION_STATUSES = [
   "Gold_Pending_Approval",
 ] as const;
 
+// PostgreSQL and JavaScript both support this timestamp. Founder badges use
+// the existing expiry column without introducing a paid renewal deadline.
+export const FOUNDER_BADGE_EXPIRES_AT = new Date("9999-12-31T00:00:00.000Z");
+
 export function isPrivilegedRole(role: string | null | undefined): boolean {
   return role === "ceo" || role === "admin";
 }
@@ -28,6 +32,7 @@ export function publicVerificationStatus(
   if (publicBadgeExpiresAt) {
     const expiresAt = new Date(publicBadgeExpiresAt);
     if (!Number.isFinite(expiresAt.getTime()) || expiresAt <= now) return "none";
+    if (expiresAt.getTime() === FOUNDER_BADGE_EXPIRES_AT.getTime() && role !== "ceo") return "none";
   }
   // Internal CEO/admin grants are never evidence of a public badge. Only an
   // explicitly approved, unexpired public badge entitlement can override them.

@@ -1591,7 +1591,41 @@ export const ListPaymentProductsResponse = zod.object({
 });
 
 /**
- * @summary Initialize a Paystack payment or claim an eligible early-bird benefit
+ * @summary See live first-100 student claim availability and personal eligibility
+ */
+export const GetFreeTickPromoResponse = zod.object({
+  claimed: zod.number(),
+  limit: zod.number(),
+  remaining: zod.number(),
+  hasClaimed: zod.boolean(),
+  eligible: zod.boolean(),
+  founder: zod.boolean(),
+});
+
+/**
+ * @summary Reserve one of the first 100 free Green ticks for admin review
+ */
+export const ClaimFreeTickResponse = zod.object({
+  success: zod.boolean(),
+  alreadyClaimed: zod.boolean(),
+  claimed: zod.number(),
+  remaining: zod.number(),
+});
+
+/**
+ * @summary Choose the verified founder's lifetime free Green, Blue, or Gold tick
+ */
+export const SetFounderBadgeTierBody = zod.object({
+  tier: zod.enum(["student", "premium", "gold"]),
+});
+
+export const SetFounderBadgeTierResponse = zod.object({
+  tier: zod.enum(["student", "premium", "gold"]),
+  lifetime: zod.boolean(),
+});
+
+/**
+ * @summary Initialize a Paystack payment or claim an eligible marketplace launch benefit
  */
 export const InitializePaymentBody = zod.object({
   packageType: zod

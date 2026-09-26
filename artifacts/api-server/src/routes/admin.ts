@@ -211,6 +211,8 @@ router.get("/admin/pending-verifications", requireAuth, async (req, res): Promis
     badgeType:
       u.verificationStatus === "Gold_Pending_Approval"
         ? "Gold / Yellow Tick (Paystack)"
+        : u.verificationStatus === "Student_Pending"
+          ? "Free Green Tick (First 100 · 30 days from approval)"
         : u.verificationStatus === "Premium_Pending_Approval"
         ? "Premium Blue Tick (Paystack)"
         : u.verificationStatus === "pending_paid"
@@ -302,7 +304,7 @@ router.post("/admin/users/:userId/approve-badge", requireAuth, async (req, res):
       }
 
       // The launch claim covers the existing Premium plan, never a Gold purchase.
-      if (status === "Premium_Pending_Approval" && !eligible) {
+      if (status === "Premium_Pending_Approval" && !eligible && payments.length === 0) {
         const [claim] = await tx
           .select({
             claimRank: earlyBirdClaimsTable.claimRank,
@@ -314,12 +316,10 @@ router.post("/admin/users/:userId/approve-badge", requireAuth, async (req, res):
         eligible =
           !!claim?.badgeClaimedAt &&
           claim.claimRank <= EARLY_BIRD_LIMIT &&
-          target.registrationRank <= EARLY_BIRD_LIMIT &&
-          !!target.promoExpiresAt &&
-          target.promoExpiresAt >= now;
+          target.registrationRank <= EARLY_BIRD_LIMIT;
         if (eligible) {
           approvedTier = "premium";
-          approvedExpiry = target.promoExpiresAt;
+          approvedExpiry = new Date(now.getTime() + 30 * 86_400_000);
         }
       }
     } else {
@@ -333,13 +333,10 @@ router.post("/admin/users/:userId/approve-badge", requireAuth, async (req, res):
         .limit(1);
       eligible =
         !!claim?.badgeClaimedAt &&
-        claim.claimRank <= EARLY_BIRD_LIMIT &&
-        target.registrationRank <= EARLY_BIRD_LIMIT &&
-        !!target.promoExpiresAt &&
-        target.promoExpiresAt >= now;
+        target.role === "student";
       if (eligible) {
         approvedTier = "student";
-        approvedExpiry = target.promoExpiresAt;
+        approvedExpiry = new Date(now.getTime() + 30 * 86_400_000);
       }
     }
 

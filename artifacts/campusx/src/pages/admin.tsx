@@ -713,7 +713,7 @@ export default function AdminPage() {
                     disabled={approveBadge.isPending}
                   >
                     <ShieldCheck className="h-3.5 w-3.5" />
-                    Approve purchased tier
+                    {u.verificationStatus === "Student_Pending" ? "Activate free Green Tick" : "Approve purchased tier"}
                   </Button>
                   <Button
                     variant="outline"

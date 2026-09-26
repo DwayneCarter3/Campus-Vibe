@@ -345,7 +345,9 @@ export default function AdminScreen() {
                     style={[styles.approveBtn, { backgroundColor: "#10B98120", borderColor: "#10B98140" }]}
                   >
                     <Feather name="check-circle" size={14} color="#10B981" />
-                    <Text style={[styles.approveBtnText, { color: "#10B981" }]}>Approve purchased tier</Text>
+                    <Text style={[styles.approveBtnText, { color: "#10B981" }]}>
+                      {u.verificationStatus === "Student_Pending" ? "Activate free Green Tick" : "Approve purchased tier"}
+                    </Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     onPress={() => handleReject(u.clerkUserId, u.fullName)}

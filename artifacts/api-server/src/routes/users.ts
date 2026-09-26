@@ -34,6 +34,7 @@ import {
 import { computeCampusTitle } from "./admin";
 import { CEO_EMAIL, hasAdminPrivileges } from "../lib/privilege";
 import {
+  FOUNDER_BADGE_EXPIRES_AT,
   isPrivilegedRole,
   isVerifiedAccount,
   publicDisplayRole,
@@ -123,19 +124,21 @@ async function reconcileClerkIdentity(
   }
 
   if (verifiedPrimaryEmail === CEO_EMAIL && !emailConflict) {
-    if (user.role !== "admin") {
-      if (user.role !== "ceo") roleChanges.role = "ceo";
-      if (!user.isAdmin) roleChanges.isAdmin = true;
-      if (
-        user.verificationStatus !== "Premium_Approved" &&
-        !PENDING_VERIFICATION_STATUSES.includes(user.verificationStatus as typeof PENDING_VERIFICATION_STATUSES[number])
-      ) {
-        roleChanges.verificationStatus = "Premium_Approved";
-      }
+    if (user.role !== "ceo") roleChanges.role = "ceo";
+    if (!user.isAdmin) roleChanges.isAdmin = true;
+    if (
+      user.verificationStatus !== "Premium_Approved" &&
+      !PENDING_VERIFICATION_STATUSES.includes(user.verificationStatus as typeof PENDING_VERIFICATION_STATUSES[number])
+    ) {
+      roleChanges.verificationStatus = "Premium_Approved";
     }
   } else if (user.role === "ceo") {
     roleChanges.role = "student";
     roleChanges.isAdmin = false;
+    if (user.publicBadgeExpiresAt?.getTime() === FOUNDER_BADGE_EXPIRES_AT.getTime()) {
+      roleChanges.publicBadgeTier = null;
+      roleChanges.publicBadgeExpiresAt = null;
+    }
   }
 
   Object.assign(changes, roleChanges);
@@ -411,7 +414,10 @@ async function expirePromoIfNeeded(user: typeof usersTable.$inferSelect): Promis
             );
           return expiresAt > now;
         });
-        if (!hasActivePaidBadge) status = "approved";
+        if (!hasActivePaidBadge &&
+            !(user.publicBadgeTier && user.publicBadgeExpiresAt && user.publicBadgeExpiresAt > now)) {
+          status = "approved";
+        }
       }
     }
 
@@ -466,6 +472,20 @@ router.get("/users/me", requireAuth, async (req, res): Promise<void> => {
       });
       return;
     }
+  }
+
+  // The designated, freshly verified founder receives a lifetime Blue tick
+  // by default. Once selected, Green/Gold/Blue remains their lifetime choice.
+  if (clerkIdentityFetched && verifiedPrimaryEmail === CEO_EMAIL && user.role === "ceo" &&
+      user.publicBadgeExpiresAt?.getTime() !== FOUNDER_BADGE_EXPIRES_AT.getTime()) {
+    [user] = await db.update(usersTable)
+      .set({
+        publicBadgeTier: ["student", "gold", "premium"].includes(user.publicBadgeTier ?? "")
+          ? user.publicBadgeTier : "premium",
+        publicBadgeExpiresAt: FOUNDER_BADGE_EXPIRES_AT,
+      })
+      .where(eq(usersTable.clerkUserId, userId))
+      .returning();
   }
 
   if (

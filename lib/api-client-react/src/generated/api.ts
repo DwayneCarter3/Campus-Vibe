@@ -28,6 +28,7 @@ import type {
   ApproveBadgeResponse,
   CgpaPlan,
   CgpaPlanInput,
+  ClaimFreeTickResponse,
   Comment,
   ConversationDetail,
   CreateCommentBody,
@@ -35,6 +36,9 @@ import type {
   DirectMessage,
   FeatureResponse,
   FeedStats,
+  FounderBadgeResponse,
+  FounderBadgeSelection,
+  FreeTickPromoResponse,
   GetUserPostsParams,
   GetUserServicesParams,
   HealthStatus,
@@ -4528,7 +4532,249 @@ export function useListPaymentProducts<
 }
 
 /**
- * @summary Initialize a Paystack payment or claim an eligible early-bird benefit
+ * @summary See live first-100 student claim availability and personal eligibility
+ */
+export const getGetFreeTickPromoUrl = () => {
+  return `/api/payments/free-tick-promo`;
+};
+
+export const getFreeTickPromo = async (
+  options?: RequestInit,
+): Promise<FreeTickPromoResponse> => {
+  return customFetch<FreeTickPromoResponse>(getGetFreeTickPromoUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetFreeTickPromoQueryKey = () => {
+  return [`/api/payments/free-tick-promo`] as const;
+};
+
+export const getGetFreeTickPromoQueryOptions = <
+  TData = Awaited<ReturnType<typeof getFreeTickPromo>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getFreeTickPromo>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetFreeTickPromoQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getFreeTickPromo>>
+  > = ({ signal }) => getFreeTickPromo({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getFreeTickPromo>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetFreeTickPromoQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getFreeTickPromo>>
+>;
+export type GetFreeTickPromoQueryError = ErrorType<unknown>;
+
+/**
+ * @summary See live first-100 student claim availability and personal eligibility
+ */
+
+export function useGetFreeTickPromo<
+  TData = Awaited<ReturnType<typeof getFreeTickPromo>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getFreeTickPromo>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetFreeTickPromoQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Reserve one of the first 100 free Green ticks for admin review
+ */
+export const getClaimFreeTickUrl = () => {
+  return `/api/payments/free-tick-promo/claim`;
+};
+
+export const claimFreeTick = async (
+  options?: RequestInit,
+): Promise<ClaimFreeTickResponse> => {
+  return customFetch<ClaimFreeTickResponse>(getClaimFreeTickUrl(), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getClaimFreeTickMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof claimFreeTick>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof claimFreeTick>>,
+  TError,
+  void,
+  TContext
+> => {
+  const mutationKey = ["claimFreeTick"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof claimFreeTick>>,
+    void
+  > = () => {
+    return claimFreeTick(requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ClaimFreeTickMutationResult = NonNullable<
+  Awaited<ReturnType<typeof claimFreeTick>>
+>;
+
+export type ClaimFreeTickMutationError = ErrorType<void>;
+
+/**
+ * @summary Reserve one of the first 100 free Green ticks for admin review
+ */
+export const useClaimFreeTick = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof claimFreeTick>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof claimFreeTick>>,
+  TError,
+  void,
+  TContext
+> => {
+  return useMutation(getClaimFreeTickMutationOptions(options));
+};
+
+/**
+ * @summary Choose the verified founder's lifetime free Green, Blue, or Gold tick
+ */
+export const getSetFounderBadgeTierUrl = () => {
+  return `/api/payments/founder-badge`;
+};
+
+export const setFounderBadgeTier = async (
+  founderBadgeSelection: FounderBadgeSelection,
+  options?: RequestInit,
+): Promise<FounderBadgeResponse> => {
+  return customFetch<FounderBadgeResponse>(getSetFounderBadgeTierUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(founderBadgeSelection),
+  });
+};
+
+export const getSetFounderBadgeTierMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof setFounderBadgeTier>>,
+    TError,
+    { data: BodyType<FounderBadgeSelection> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof setFounderBadgeTier>>,
+  TError,
+  { data: BodyType<FounderBadgeSelection> },
+  TContext
+> => {
+  const mutationKey = ["setFounderBadgeTier"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof setFounderBadgeTier>>,
+    { data: BodyType<FounderBadgeSelection> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return setFounderBadgeTier(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type SetFounderBadgeTierMutationResult = NonNullable<
+  Awaited<ReturnType<typeof setFounderBadgeTier>>
+>;
+export type SetFounderBadgeTierMutationBody = BodyType<FounderBadgeSelection>;
+export type SetFounderBadgeTierMutationError = ErrorType<void>;
+
+/**
+ * @summary Choose the verified founder's lifetime free Green, Blue, or Gold tick
+ */
+export const useSetFounderBadgeTier = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof setFounderBadgeTier>>,
+    TError,
+    { data: BodyType<FounderBadgeSelection> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof setFounderBadgeTier>>,
+  TError,
+  { data: BodyType<FounderBadgeSelection> },
+  TContext
+> => {
+  return useMutation(getSetFounderBadgeTierMutationOptions(options));
+};
+
+/**
+ * @summary Initialize a Paystack payment or claim an eligible marketplace launch benefit
  */
 export const getInitializePaymentUrl = () => {
   return `/api/payments/initialize`;
@@ -4591,7 +4837,7 @@ export type InitializePaymentMutationBody = BodyType<InitializePaymentBody>;
 export type InitializePaymentMutationError = ErrorType<void>;
 
 /**
- * @summary Initialize a Paystack payment or claim an eligible early-bird benefit
+ * @summary Initialize a Paystack payment or claim an eligible marketplace launch benefit
  */
 export const useInitializePayment = <
   TError = ErrorType<void>,

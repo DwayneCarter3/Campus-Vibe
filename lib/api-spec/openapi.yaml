@@ -1191,11 +1191,68 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaymentProductsResponse'
 
+  /payments/free-tick-promo:
+    get:
+      tags: [payments]
+      operationId: getFreeTickPromo
+      summary: See live first-100 student claim availability and personal eligibility
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Live claim count and eligibility
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FreeTickPromoResponse'
+
+  /payments/free-tick-promo/claim:
+    post:
+      tags: [payments]
+      operationId: claimFreeTick
+      summary: Reserve one of the first 100 free Green ticks for admin review
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Claim reserved or previously reserved by this student
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClaimFreeTickResponse'
+        '403':
+          description: Not a regular student
+        '409':
+          description: No matric number or all claims taken
+
+  /payments/founder-badge:
+    post:
+      tags: [payments]
+      operationId: setFounderBadgeTier
+      summary: Choose the verified founder's lifetime free Green, Blue, or Gold tick
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FounderBadgeSelection'
+      responses:
+        '200':
+          description: Lifetime tick selected
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FounderBadgeResponse'
+        '403':
+          description: Current verified Clerk primary email is not the designated founder
+
   /payments/initialize:
     post:
       tags: [payments]
       operationId: initializePayment
-      summary: Initialize a Paystack payment or claim an eligible early-bird benefit
+      summary: Initialize a Paystack payment or claim an eligible marketplace launch benefit
       security:
         - bearerAuth: []
       requestBody:
@@ -2988,6 +3045,54 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/PaymentProduct'
+
+    FreeTickPromoResponse:
+      type: object
+      required: [claimed, limit, remaining, hasClaimed, eligible, founder]
+      properties:
+        claimed:
+          type: integer
+        limit:
+          type: integer
+        remaining:
+          type: integer
+        hasClaimed:
+          type: boolean
+        eligible:
+          type: boolean
+        founder:
+          type: boolean
+
+    ClaimFreeTickResponse:
+      type: object
+      required: [success, alreadyClaimed, claimed, remaining]
+      properties:
+        success:
+          type: boolean
+        alreadyClaimed:
+          type: boolean
+        claimed:
+          type: integer
+        remaining:
+          type: integer
+
+    FounderBadgeSelection:
+      type: object
+      required: [tier]
+      properties:
+        tier:
+          type: string
+          enum: [student, premium, gold]
+
+    FounderBadgeResponse:
+      type: object
+      required: [tier, lifetime]
+      properties:
+        tier:
+          type: string
+          enum: [student, premium, gold]
+        lifetime:
+          type: boolean
 
     InitializePaymentBody:
       type: object

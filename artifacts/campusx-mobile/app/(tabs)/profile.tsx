@@ -32,6 +32,10 @@ import {
   useRequestUploadUrl,
   useInitializePayment,
   useListPaymentProducts,
+  useGetFreeTickPromo,
+  getGetFreeTickPromoQueryKey,
+  useClaimFreeTick,
+  useSetFounderBadgeTier,
 } from "@workspace/api-client-react";
 import type { PaymentPackage, UpdateProfileBodyLevel } from "@workspace/api-client-react";
 import { useColors } from "@/hooks/useColors";
@@ -64,6 +68,11 @@ export default function ProfileScreen() {
   });
   const initializePayment = useInitializePayment();
   const { data: paymentCatalog, isLoading: paymentProductsLoading, isError: paymentProductsError } = useListPaymentProducts();
+  const { data: freeTickPromo, isError: freeTickPromoError } = useGetFreeTickPromo({
+    query: { queryKey: getGetFreeTickPromoQueryKey(), refetchInterval: 30_000 },
+  });
+  const claimFreeTick = useClaimFreeTick();
+  const setFounderBadgeTier = useSetFounderBadgeTier();
   const updateProfile = useUpdateMyProfile();
   const requestUploadUrl = useRequestUploadUrl();
 
@@ -111,6 +120,30 @@ export default function ProfileScreen() {
         onError: () => Alert.alert("Error", "Could not start payment. Try again."),
       },
     );
+  };
+
+  const claimFreeVerification = () => {
+    claimFreeTick.mutate(undefined, {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getGetFreeTickPromoQueryKey() });
+        queryClient.invalidateQueries({ queryKey: getGetMyProfileQueryKey() });
+        Alert.alert("Free tick claimed", "Your Green Tick is pending review. Its 30 days begin when approved.");
+      },
+      onError: (error) => {
+        queryClient.invalidateQueries({ queryKey: getGetFreeTickPromoQueryKey() });
+        Alert.alert("Could not claim", error instanceof Error ? error.message : "Please try again.");
+      },
+    });
+  };
+
+  const chooseFounderTier = (tier: "student" | "premium" | "gold") => {
+    setFounderBadgeTier.mutate({ data: { tier } }, {
+      onSuccess: () => {
+        queryClient.invalidateQueries();
+        Alert.alert("Lifetime tick active", "Your selected verification tick is now visible beside your name.");
+      },
+      onError: (error) => Alert.alert("Could not select tick", error instanceof Error ? error.message : "Please try again."),
+    });
   };
 
   const handleAdminNav = () => {
@@ -325,8 +358,8 @@ export default function ProfileScreen() {
             <View style={[styles.promoBanner, { borderColor: "#F59E0B40", backgroundColor: "#F59E0B08" }]}>
               <Text style={styles.promoEmoji}>🎉</Text>
               <View style={styles.promoInfo}>
-                <Text style={styles.promoTitle}>Early Bird Launch Perk</Text>
-                <Text style={styles.promoSub}>Early-bird benefits + Unlimited Hustle Promos</Text>
+                <Text style={styles.promoTitle}>Registration marketplace perk</Text>
+                <Text style={styles.promoSub}>Separate Hustle promotion benefit</Text>
                 <Text style={styles.promoExpiry}>⏳ Expires in {daysLeft}d {hoursLeft}h</Text>
               </View>
               <View style={styles.promoRank}>
@@ -336,6 +369,49 @@ export default function ProfileScreen() {
             </View>
           );
         })()}
+
+        <View style={[styles.actionCard, { backgroundColor: "#10B98112", borderColor: "#10B98155", alignItems: "stretch", gap: 8 }]}>
+          <Text style={[styles.actionTitle, { color: "#6EE7B7" }]}>Claim Free Verified Tick (First 100 Users)</Text>
+          <Text style={[styles.actionSub, { color: colors.mutedForeground }]}>
+            Free Green Tick for the first 100 student claimants. Review required; 30 days start on approval.
+          </Text>
+          {freeTickPromo && (
+            <Text style={{ color: "#6EE7B7", fontSize: 13, fontWeight: "800" }}>
+              {freeTickPromo.claimed} of {freeTickPromo.limit} claimed · {freeTickPromo.remaining} left
+            </Text>
+          )}
+          {freeTickPromoError && <Text style={{ color: colors.accent, fontSize: 12 }}>Could not load live availability. Refresh to retry.</Text>}
+          {freeTickPromo?.hasClaimed
+            ? <Text style={{ color: "#6EE7B7", fontSize: 12 }}>Your free tick has already been claimed.</Text>
+            : freeTickPromo?.remaining === 0
+              ? <Text style={{ color: colors.mutedForeground, fontSize: 12 }}>All free claims are taken. Paid tiers remain available below.</Text>
+              : !hasMatric && !freeTickPromo?.founder && <Text style={{ color: colors.accent, fontSize: 12 }}>Add your matric number on the web app to claim.</Text>}
+          {freeTickPromo && !freeTickPromo.eligible && !freeTickPromo.founder && !freeTickPromo.hasClaimed && freeTickPromo.remaining > 0 && hasMatric && (
+            <Text style={{ color: colors.mutedForeground, fontSize: 12 }}>Free claims are for students without an active tick or pending paid request.</Text>
+          )}
+          {freeTickPromo?.eligible && !freeTickPromo.hasClaimed && freeTickPromo.remaining > 0 && (
+            <TouchableOpacity onPress={claimFreeVerification} disabled={!hasMatric || claimFreeTick.isPending}
+              style={{ alignSelf: "flex-start", backgroundColor: "#34D399", borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, opacity: !hasMatric || claimFreeTick.isPending ? 0.5 : 1 }}>
+              <Text style={{ color: "#052E25", fontWeight: "800", fontSize: 12 }}>
+                {claimFreeTick.isPending ? "Reserving…" : "Claim free Green Tick"}
+              </Text>
+            </TouchableOpacity>
+          )}
+          {freeTickPromo?.founder && (
+            <View style={{ borderTopWidth: 1, borderTopColor: "#10B98144", paddingTop: 10, gap: 7 }}>
+              <Text style={{ color: "#D1FAE5", fontWeight: "700" }}>Founder lifetime verification</Text>
+              <Text style={{ color: colors.mutedForeground, fontSize: 12 }}>Choose any tick for free, with no renewal.</Text>
+              <View style={{ flexDirection: "row", gap: 8, flexWrap: "wrap" }}>
+                {([["student", "Green"], ["premium", "Blue"], ["gold", "Gold"]] as const).map(([tier, label]) => (
+                  <TouchableOpacity key={tier} onPress={() => chooseFounderTier(tier)} disabled={setFounderBadgeTier.isPending}
+                    style={{ borderColor: "#10B98170", borderWidth: 1, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8 }}>
+                    <Text style={{ color: "#D1FAE5", fontSize: 12, fontWeight: "700" }}>{label} Tick</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+          )}
+        </View>
 
         {/* ── Verification status ─────────── */}
         {hasMatric && !isVerified && (
@@ -378,7 +454,7 @@ export default function ProfileScreen() {
             <View style={{ flex: 1 }}>
               <Text style={[styles.actionTitle, { color: "#6EE7B7" }]}>Verification active</Text>
               <Text style={[styles.actionSub, { color: colors.mutedForeground }]}>
-                Your {verificationStatus === "Student_Verified" ? "green" : verificationStatus === "Gold_Approved" ? "gold" : "blue"} tick is active on your profile.
+                 Your {verificationStatus === "Student_Verified" ? "green" : verificationStatus === "Gold_Approved" ? "gold" : "blue"} tick is active on your profile{freeTickPromo?.founder ? " for life" : ""}.
               </Text>
             </View>
           </View>
@@ -398,7 +474,7 @@ export default function ProfileScreen() {
             <View style={{ marginBottom: 4 }}>
               <Text style={[styles.actionTitle, { color: colors.foreground }]}>Verification, boosts &amp; ads</Text>
               <Text style={[styles.actionSub, { color: colors.mutedForeground }]}>
-                Fixed-duration plans. Renew manually after expiry; there is no auto-billing.
+                {freeTickPromo?.founder ? "Your founder tick is free for life; other plans keep their regular durations." : "Fixed-duration plans. Renew manually after expiry; there is no auto-billing."}
               </Text>
             </View>
             {paymentProductsLoading && <ActivityIndicator color={colors.primary} />}
@@ -430,8 +506,10 @@ export default function ProfileScreen() {
                 <TouchableOpacity
                   key={product.packageType}
                   activeOpacity={0.8}
-                  onPress={() => startPayment(product.packageType as PaymentPackage)}
-                  disabled={initializePayment.isPending || (isBadge && !hasMatric)}
+                  onPress={() => freeTickPromo?.founder && isBadge
+                    ? chooseFounderTier(packageType === "student_verification" ? "student" : packageType === "gold_yellow_tick" ? "gold" : "premium")
+                    : startPayment(product.packageType as PaymentPackage)}
+                  disabled={initializePayment.isPending || setFounderBadgeTier.isPending || (isBadge && !hasMatric && !freeTickPromo?.founder)}
                   style={[styles.actionCard, { backgroundColor: colors.surface, borderColor: colors.border, marginHorizontal: -6, marginVertical: 4 }]}
                 >
                   <View style={{ flex: 1 }}>
@@ -439,9 +517,11 @@ export default function ProfileScreen() {
                       <Text style={[styles.actionTitle, { color: tierColor }]}>{planTitle}</Text>{` · ₦${basePrice} / ${product.durationDays} days`}
                     </Text>
                     <Text style={[styles.actionSub, { color: colors.mutedForeground }]}>
-                      {`Paystack customer total ₦${payablePrice}. ${isBadge ? `Review required; tick expires after ${product.durationDays} days. ` : ""}Manual renewal only.`}
+                      {freeTickPromo?.founder && isBadge
+                        ? "Free for the verified founder, for life. No payment or renewal."
+                        : `Paystack customer total ₦${payablePrice}. ${isBadge ? `Review required; tick expires after ${product.durationDays} days. ` : ""}Manual renewal only.`}
                     </Text>
-                    {isBadge && !hasMatric && (
+                    {isBadge && !hasMatric && !freeTickPromo?.founder && (
                       <Text style={[styles.actionSub, { color: colors.accent }]}>
                         Add your matric number before requesting verification.
                       </Text>

@@ -9,11 +9,11 @@
 - [Dispatch actor and audience](dispatch-audience.md) — one reserved bot identity and explicit institution-wide targets keep news separate from student campus posts.
 - [LASU official news pages](lasu-news-pages.md) — LASU listing and article pages are JavaScript shells; official AJAX responses carry the news content.
 - [Mobile avatar upload flow](mobile-avatar-upload.md) — expo-image-picker already installed; signed URL flow matches web (requestUploadUrl → PUT → /api/storage+objectPath); Change Photo button in avatar modal.
-- [Early-bird launch eligibility](early-bird-launch.md) — use registration rank and verified email; school-scoped matric uniqueness and independent benefit expiry.
-- [Role verification invariant](role-verification.md) — privileged role status is internal; it must never create a public tick without separate approval and expiry.
+- [Launch benefit eligibility](early-bird-launch.md) — registration rank limits marketplace perks; free ticks count distinct claims, with 30 days beginning at approval.
+- [Role verification invariant](role-verification.md) — staff roles alone never create a public tick; the freshly verified designated founder has an explicit lifetime exception.
 - [Pending verification and promo expiry](pending-verification-expiry.md) — expiring launch perks must not erase a submitted pending review; manual admin overrides must outlive a promo timer.
 - [Academic level session anchor](academic-level-session.md) — matric-based level uses the 2025/26 session (start year 2025), not the 2026 calendar year.
-- [Verification badge tiers](verification-badge-tiers.md) — only active approved Green, Gold, or Blue ticks appear publicly; never render staff roles or default pills.
+- [Verification badge tiers](verification-badge-tiers.md) — show one active Green, Gold, or Blue tick; the verified founder may choose any color for life.
 - [Paystack customer fees](paystack-customer-fees.md) — local checkout gross-up and dashboard auto-pass-through are alternatives; enabling both double-charges buyers.
 - [Drizzle serial push mismatch](drizzle-serial-push.md) — Drizzle push can emit invalid SQL for an existing serial-backed rank; avoid force or sequence drops.
 - [Feed category semantics](feed-category-semantics.md) — “All Gist” is only a view, not a stored post category; default untagged and older posts to Amebo Hot.

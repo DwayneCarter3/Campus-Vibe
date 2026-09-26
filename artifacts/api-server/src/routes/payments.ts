@@ -1,6 +1,6 @@
 import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import { Router, type IRouter } from "express";
-import { and, desc, eq, gt, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, isNotNull, sql } from "drizzle-orm";
 import {
   db,
   earlyBirdClaimsTable,
@@ -8,6 +8,8 @@ import {
   usersTable,
 } from "@workspace/db";
 import { requireAuth } from "../middlewares/auth";
+import { isVerifiedCEO } from "../lib/privilege";
+import { FOUNDER_BADGE_EXPIRES_AT } from "../lib/verification";
 
 const router: IRouter = Router();
 
@@ -249,29 +251,34 @@ async function claimEarlyBirdBenefit(
       .where(eq(earlyBirdClaimsTable.clerkUserId, clerkUserId))
       .limit(1);
 
+    if (existing && (benefit === "badge" ? existing.badgeClaimedAt : existing.promotionClaimedAt)) {
+      return { claimRank: existing.claimRank, alreadyClaimed: true };
+    }
+
+    const [{ claimed }] = await tx.select({ claimed: sql<number>`count(*)::int` })
+      .from(earlyBirdClaimsTable)
+      .where(benefit === "badge"
+        ? isNotNull(earlyBirdClaimsTable.badgeClaimedAt)
+        : isNotNull(earlyBirdClaimsTable.promotionClaimedAt));
+    if (claimed >= EARLY_BIRD_LIMIT) return null;
+
     if (existing) {
-      if (existing.claimRank > EARLY_BIRD_LIMIT) return null;
-      const alreadyClaimed =
-        benefit === "badge" ? !!existing.badgeClaimedAt : !!existing.promotionClaimedAt;
-      if (!alreadyClaimed) {
-        await tx
-          .update(earlyBirdClaimsTable)
-          .set(
-            benefit === "badge"
-              ? { badgeClaimedAt: new Date() }
-              : { promotionClaimedAt: new Date() },
-          )
-          .where(eq(earlyBirdClaimsTable.id, existing.id));
-        await grantEarlyBirdBenefit(tx, clerkUserId, benefit, durationDays, badgeTier);
-      }
-      return { claimRank: existing.claimRank, alreadyClaimed };
+      await tx
+        .update(earlyBirdClaimsTable)
+        .set(
+          benefit === "badge"
+            ? { badgeClaimedAt: new Date() }
+            : { promotionClaimedAt: new Date() },
+        )
+        .where(eq(earlyBirdClaimsTable.id, existing.id));
+      await grantEarlyBirdBenefit(tx, clerkUserId, benefit, durationDays, badgeTier);
+      return { claimRank: existing.claimRank, alreadyClaimed: false };
     }
 
     const [{ maxRank }] = await tx
       .select({ maxRank: sql<number>`coalesce(max(${earlyBirdClaimsTable.claimRank}), 0)` })
       .from(earlyBirdClaimsTable);
     const claimRank = Number(maxRank) + 1;
-    if (claimRank > EARLY_BIRD_LIMIT) return null;
 
     await tx.insert(earlyBirdClaimsTable).values({
       clerkUserId,
@@ -298,12 +305,14 @@ async function grantEarlyBirdBenefit(
     .limit(1);
   if (!user) throw new Error("Profile not found while granting early-bird benefit");
   if (benefit === "badge") {
+    const keepActiveTier = !!user.publicBadgeTier &&
+      !!user.publicBadgeExpiresAt && user.publicBadgeExpiresAt > new Date();
     await tx
       .update(usersTable)
       .set({
         verificationStatus: badgeTier === "student" ? "Student_Pending" : "Premium_Pending_Approval",
-        publicBadgeTier: null,
-        publicBadgeExpiresAt: null,
+        publicBadgeTier: keepActiveTier ? user.publicBadgeTier : null,
+        publicBadgeExpiresAt: keepActiveTier ? user.publicBadgeExpiresAt : null,
       })
       .where(eq(usersTable.clerkUserId, clerkUserId));
   } else {
@@ -479,6 +488,94 @@ router.get("/payments/products", (_req, res): void => {
   });
 });
 
+async function freeTickClaimCount(): Promise<number> {
+  const [{ claimed }] = await db.select({ claimed: sql<number>`count(*)::int` })
+    .from(earlyBirdClaimsTable)
+    .where(isNotNull(earlyBirdClaimsTable.badgeClaimedAt));
+  return claimed;
+}
+
+router.get("/payments/free-tick-promo", requireAuth, async (req, res): Promise<void> => {
+  const userId = (req as any).userId as string;
+  const [user] = await db.select({
+    role: usersTable.role,
+    verificationStatus: usersTable.verificationStatus,
+    publicBadgeTier: usersTable.publicBadgeTier,
+    publicBadgeExpiresAt: usersTable.publicBadgeExpiresAt,
+  })
+    .from(usersTable).where(eq(usersTable.clerkUserId, userId)).limit(1);
+  if (!user) { res.status(404).json({ error: "Profile not found" }); return; }
+  const [claim] = await db.select({ badgeClaimedAt: earlyBirdClaimsTable.badgeClaimedAt })
+    .from(earlyBirdClaimsTable).where(eq(earlyBirdClaimsTable.clerkUserId, userId)).limit(1);
+  const claimed = await freeTickClaimCount();
+  const founder = await isVerifiedCEO(req);
+  const hasActiveTick = !!user.publicBadgeTier && !!user.publicBadgeExpiresAt &&
+    user.publicBadgeExpiresAt > new Date();
+  const hasPaidRequest = ["pending_paid", "Gold_Pending_Approval", "Premium_Pending_Approval"]
+    .includes(user.verificationStatus);
+  res.setHeader("Cache-Control", "private, no-store");
+  res.json({
+    claimed: Math.min(claimed, EARLY_BIRD_LIMIT),
+    limit: EARLY_BIRD_LIMIT,
+    remaining: Math.max(0, EARLY_BIRD_LIMIT - claimed),
+    hasClaimed: !!claim?.badgeClaimedAt,
+    eligible: user.role === "student" && !founder && !hasActiveTick && !hasPaidRequest,
+    founder,
+  });
+});
+
+router.post("/payments/free-tick-promo/claim", requireAuth, async (req, res): Promise<void> => {
+  const userId = (req as any).userId as string;
+  const [user] = await db.select().from(usersTable)
+    .where(eq(usersTable.clerkUserId, userId)).limit(1);
+  if (!user) { res.status(404).json({ error: "Profile not found" }); return; }
+  if (user.role !== "student" || await isVerifiedCEO(req)) {
+    res.status(403).json({ error: "This free claim is for regular students only." }); return;
+  }
+  if (!user.matricNumber) {
+    res.status(409).json({ error: "Add your matric number before claiming a verified tick." }); return;
+  }
+  if (
+    (user.publicBadgeTier && user.publicBadgeExpiresAt && user.publicBadgeExpiresAt > new Date()) ||
+    ["pending_paid", "Gold_Pending_Approval", "Premium_Pending_Approval"].includes(user.verificationStatus)
+  ) {
+    res.status(409).json({ error: "Finish your active tick or paid request before claiming a free tick." });
+    return;
+  }
+  const claim = await claimEarlyBirdBenefit(userId, "badge", 30, "student");
+  if (!claim) {
+    res.status(409).json({ error: "All 100 free verified ticks have been claimed." }); return;
+  }
+  const claimed = await freeTickClaimCount();
+  res.setHeader("Cache-Control", "private, no-store");
+  res.json({
+    success: true,
+    alreadyClaimed: claim.alreadyClaimed,
+    claimed: Math.min(claimed, EARLY_BIRD_LIMIT),
+    remaining: Math.max(0, EARLY_BIRD_LIMIT - claimed),
+  });
+});
+
+router.post("/payments/founder-badge", requireAuth, async (req, res): Promise<void> => {
+  if (!(await isVerifiedCEO(req))) {
+    res.status(403).json({ error: "Only the verified founder can choose a lifetime tick." }); return;
+  }
+  const tier = req.body?.tier;
+  if (tier !== "student" && tier !== "premium" && tier !== "gold") {
+    res.status(400).json({ error: "Choose Green, Blue, or Gold." }); return;
+  }
+  const userId = (req as any).userId as string;
+  const [founder] = await db.update(usersTable).set({
+    role: "ceo",
+    isAdmin: true,
+    verificationStatus: "Premium_Approved",
+    publicBadgeTier: tier,
+    publicBadgeExpiresAt: FOUNDER_BADGE_EXPIRES_AT,
+  }).where(eq(usersTable.clerkUserId, userId)).returning({ id: usersTable.id });
+  if (!founder) { res.status(404).json({ error: "Profile not found" }); return; }
+  res.json({ tier, lifetime: true });
+});
+
 router.post("/payments/initialize", requireAuth, async (req, res): Promise<void> => {
   const packageType = req.body?.packageType;
   if (!isPaymentPackage(packageType)) {
@@ -498,22 +595,21 @@ router.post("/payments/initialize", requireAuth, async (req, res): Promise<void>
   }
 
   const product = PAYMENT_PACKAGES[packageType];
+  if (product.entitlement === "badge" && await isVerifiedCEO(req)) {
+    res.status(403).json({ error: "Choose a founder lifetime tier on your profile instead of paying." });
+    return;
+  }
+  if (product.entitlement === "badge" && user.verificationStatus === "Student_Pending") {
+    res.status(409).json({ error: "Your free tick claim is awaiting approval. Finish that review before buying another tick." });
+    return;
+  }
   const earlyBirdBenefit =
-    product.entitlement === "badge" && packageType !== "gold_yellow_tick"
-      ? "badge"
-      : product.entitlement === "marketplace"
-        ? "promotion"
-        : null;
+    product.entitlement === "marketplace" ? "promotion" : null;
   if (earlyBirdBenefit && isEarlyBirdEligible(user)) {
     const claim = await claimEarlyBirdBenefit(
       userId,
       earlyBirdBenefit,
       product.durationDays,
-      packageType === "student_verification"
-        ? "student"
-        : packageType === "premium_blue_tick"
-          ? "premium"
-          : undefined,
     );
     if (claim) {
       res.json({
@@ -521,12 +617,8 @@ router.post("/payments/initialize", requireAuth, async (req, res): Promise<void>
         requiresPayment: false,
         claimRank: claim.claimRank,
         message: claim.alreadyClaimed
-          ? earlyBirdBenefit === "badge"
-            ? "Your early-bird verification claim has already been submitted for admin review."
-            : "Your early-bird marketplace boost claim has already been used."
-          : earlyBirdBenefit === "badge"
-            ? `Your ${packageType === "student_verification" ? "Student Verified" : "Premium Blue Tick"} claim is pending admin review.`
-            : "Your early-bird marketplace boost has been activated.",
+          ? "Your early-bird marketplace boost claim has already been used."
+          : "Your early-bird marketplace boost has been activated.",
       });
       return;
     }
