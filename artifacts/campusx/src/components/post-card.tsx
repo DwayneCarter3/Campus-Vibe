@@ -35,6 +35,7 @@ import { cn } from "@/lib/utils";
 import { AvatarModal } from "@/components/avatar-modal";
 import { UserVerificationMarks } from "@/components/user-verification-marks";
 import { getPostCategoryMeta } from "@/components/post-categories";
+import { PollCard } from "@/components/poll-card";
 
 interface PostCardProps {
   post: Post;
@@ -369,6 +370,7 @@ export function PostCard({ post, isAdmin, isModerator, moderationMode = false }:
                   {post.content}
                 </div>
               )}
+              {post.poll && <PollCard poll={post.poll} postId={post.id} authorId={post.authorId} />}
 
               {post.imageUrl && (
                 <div className="mt-3 rounded-xl overflow-hidden border border-white/10">

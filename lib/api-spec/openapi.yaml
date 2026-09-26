@@ -297,6 +297,39 @@ paths:
         "404":
           description: Not found
 
+  /polls/{pollId}/vote:
+    post:
+      operationId: votePoll
+      tags: [posts]
+      summary: Cast one vote on an active poll
+      parameters:
+        - name: pollId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PollVoteInput"
+      responses:
+        "200":
+          description: Updated poll with results visible to the voter
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Poll"
+        "400":
+          description: Invalid option
+        "401":
+          description: Sign-in required
+        "404":
+          description: Poll not found
+        "409":
+          description: Poll ended or student has already voted
+
   /posts/{postId}/like:
     post:
       operationId: likePost
@@ -1374,6 +1407,10 @@ components:
           type: string
         isAnonymous:
           type: boolean
+        poll:
+          oneOf:
+            - $ref: "#/components/schemas/Poll"
+            - type: "null"
         isOwnedByMe:
           type: boolean
         content:
@@ -1423,6 +1460,7 @@ components:
         - authorIsVerified
         - authorVerificationStatus
         - isAnonymous
+        - poll
         - isOwnedByMe
         - content
         - category
@@ -1467,8 +1505,70 @@ components:
           type: ["string", "null"]
         isAnonymous:
           type: boolean
+        poll:
+          $ref: "#/components/schemas/PollInput"
       required:
         - content
+
+    PollInput:
+      type: object
+      required: [question, options]
+      properties:
+        question:
+          type: string
+          minLength: 1
+          maxLength: 240
+        options:
+          type: array
+          minItems: 2
+          maxItems: 4
+          items:
+            type: string
+            minLength: 1
+            maxLength: 100
+
+    PollVoteInput:
+      type: object
+      required: [optionId]
+      properties:
+        optionId:
+          type: integer
+
+    PollOption:
+      type: object
+      required: [id, optionText, voteCount]
+      properties:
+        id:
+          type: integer
+        optionText:
+          type: string
+        voteCount:
+          type: ["integer", "null"]
+
+    Poll:
+      type: object
+      required: [id, question, createdAt, expiresAt, isExpired, selectedOptionId, totalVotes, options]
+      properties:
+        id:
+          type: integer
+        question:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+        isExpired:
+          type: boolean
+        selectedOptionId:
+          type: ["integer", "null"]
+        totalVotes:
+          type: ["integer", "null"]
+        options:
+          type: array
+          items:
+            $ref: "#/components/schemas/PollOption"
 
     LikeResponse:
       type: object

@@ -35,7 +35,7 @@ export default function UserProfilePage() {
   });
 
   const { data: postsData, isLoading: postsLoading } = useGetUserPosts(userId, undefined, {
-    query: { queryKey: getGetUserPostsQueryKey(userId), enabled: !!userId && activeTab === "posts" },
+    query: { queryKey: getGetUserPostsQueryKey(userId), enabled: !!userId && activeTab === "posts", refetchInterval: 10_000 },
   });
 
   const { data: servicesData, isLoading: servicesLoading } = useGetUserServices(userId, undefined, {

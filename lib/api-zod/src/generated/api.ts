@@ -207,6 +207,25 @@ export const GetUserPostsResponse = zod.object({
       authorIsVerified: zod.boolean(),
       authorVerificationStatus: zod.string(),
       isAnonymous: zod.boolean(),
+      poll: zod.union([
+        zod.object({
+          id: zod.number(),
+          question: zod.string(),
+          createdAt: zod.coerce.date(),
+          expiresAt: zod.coerce.date(),
+          isExpired: zod.boolean(),
+          selectedOptionId: zod.number().nullable(),
+          totalVotes: zod.number().nullable(),
+          options: zod.array(
+            zod.object({
+              id: zod.number(),
+              optionText: zod.string(),
+              voteCount: zod.number().nullable(),
+            }),
+          ),
+        }),
+        zod.null(),
+      ]),
       isOwnedByMe: zod.boolean(),
       content: zod.string(),
       category: zod.enum([
@@ -318,6 +337,25 @@ export const ListPostsResponse = zod.object({
       authorIsVerified: zod.boolean(),
       authorVerificationStatus: zod.string(),
       isAnonymous: zod.boolean(),
+      poll: zod.union([
+        zod.object({
+          id: zod.number(),
+          question: zod.string(),
+          createdAt: zod.coerce.date(),
+          expiresAt: zod.coerce.date(),
+          isExpired: zod.boolean(),
+          selectedOptionId: zod.number().nullable(),
+          totalVotes: zod.number().nullable(),
+          options: zod.array(
+            zod.object({
+              id: zod.number(),
+              optionText: zod.string(),
+              voteCount: zod.number().nullable(),
+            }),
+          ),
+        }),
+        zod.null(),
+      ]),
       isOwnedByMe: zod.boolean(),
       content: zod.string(),
       category: zod.enum([
@@ -361,6 +399,13 @@ export const ListPostsResponse = zod.object({
 /**
  * @summary Create a new feed post
  */
+export const createPostBodyPollQuestionMax = 240;
+
+export const createPostBodyPollOptionsItemMax = 100;
+
+export const createPostBodyPollOptionsMin = 2;
+export const createPostBodyPollOptionsMax = 4;
+
 export const CreatePostBody = zod.object({
   content: zod.string(),
   category: zod
@@ -369,6 +414,15 @@ export const CreatePostBody = zod.object({
   imageUrl: zod.string().nullish(),
   videoUrl: zod.string().nullish(),
   isAnonymous: zod.boolean().optional(),
+  poll: zod
+    .object({
+      question: zod.string().min(1).max(createPostBodyPollQuestionMax),
+      options: zod
+        .array(zod.string().min(1).max(createPostBodyPollOptionsItemMax))
+        .min(createPostBodyPollOptionsMin)
+        .max(createPostBodyPollOptionsMax),
+    })
+    .optional(),
 });
 
 /**
@@ -391,6 +445,25 @@ export const GetPostResponse = zod.object({
   authorIsVerified: zod.boolean(),
   authorVerificationStatus: zod.string(),
   isAnonymous: zod.boolean(),
+  poll: zod.union([
+    zod.object({
+      id: zod.number(),
+      question: zod.string(),
+      createdAt: zod.coerce.date(),
+      expiresAt: zod.coerce.date(),
+      isExpired: zod.boolean(),
+      selectedOptionId: zod.number().nullable(),
+      totalVotes: zod.number().nullable(),
+      options: zod.array(
+        zod.object({
+          id: zod.number(),
+          optionText: zod.string(),
+          voteCount: zod.number().nullable(),
+        }),
+      ),
+    }),
+    zod.null(),
+  ]),
   isOwnedByMe: zod.boolean(),
   content: zod.string(),
   category: zod.enum([
@@ -433,6 +506,34 @@ export const GetPostResponse = zod.object({
  */
 export const DeletePostParams = zod.object({
   postId: zod.coerce.number(),
+});
+
+/**
+ * @summary Cast one vote on an active poll
+ */
+export const VotePollParams = zod.object({
+  pollId: zod.coerce.number(),
+});
+
+export const VotePollBody = zod.object({
+  optionId: zod.number(),
+});
+
+export const VotePollResponse = zod.object({
+  id: zod.number(),
+  question: zod.string(),
+  createdAt: zod.coerce.date(),
+  expiresAt: zod.coerce.date(),
+  isExpired: zod.boolean(),
+  selectedOptionId: zod.number().nullable(),
+  totalVotes: zod.number().nullable(),
+  options: zod.array(
+    zod.object({
+      id: zod.number(),
+      optionText: zod.string(),
+      voteCount: zod.number().nullable(),
+    }),
+  ),
 });
 
 /**

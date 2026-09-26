@@ -27,7 +27,9 @@ import {
   useLikePost,
   useNoCapPost,
   useCreatePost,
+  useVotePoll,
   Post,
+  Poll,
 } from "@workspace/api-client-react";
 import { useColors } from "@/hooks/useColors";
 import { UserVerificationMarks } from "@/components/UserVerificationMarks";
@@ -50,6 +52,10 @@ type FeedCategory = Post["category"];
 function PostCard({ post }: { post: Post }) {
   const colors = useColors();
   const queryClient = useQueryClient();
+  // Keep only the just-submitted result locally; normal feed refreshes should win.
+  const [poll, setPoll] = useState<Poll | null>(null);
+  const [selectedOptionId, setSelectedOptionId] = useState<number | null>(null);
+  const [voteError, setVoteError] = useState("");
 
   const likeMutation = useLikePost({
     mutation: {
@@ -59,6 +65,21 @@ function PostCard({ post }: { post: Post }) {
   const noCapMutation = useNoCapPost({
     mutation: {
       onSuccess: () => queryClient.invalidateQueries({ queryKey: getListPostsQueryKey() }),
+    },
+  });
+  const voteMutation = useVotePoll({
+    mutation: {
+      onSuccess: (updatedPoll) => {
+        setPoll(updatedPoll);
+        setSelectedOptionId(null);
+        setVoteError("");
+        queryClient.invalidateQueries({ queryKey: getListPostsQueryKey() });
+      },
+      onError: (error) => {
+        setPoll(null);
+        setVoteError(error.message);
+        queryClient.invalidateQueries({ queryKey: getListPostsQueryKey() });
+      },
     },
   });
 
@@ -73,6 +94,23 @@ function PostCard({ post }: { post: Post }) {
   };
 
   const timeAgo = formatDistanceToNow(new Date(post.createdAt), { addSuffix: true });
+  const displayedPoll = poll?.id === post.poll?.id && post.poll?.selectedOptionId == null
+    ? poll
+    : post.poll;
+  const pollExpired = displayedPoll
+    ? displayedPoll.isExpired || new Date(displayedPoll.expiresAt).getTime() <= Date.now()
+    : false;
+  const pollHasVoted = Boolean(displayedPoll?.selectedOptionId !== null && displayedPoll?.selectedOptionId !== undefined);
+  const showPollResults = displayedPoll?.totalVotes !== null && (pollExpired || pollHasVoted);
+  const pollTotalVotes = displayedPoll
+    ? displayedPoll.totalVotes ?? displayedPoll.options.reduce((total, option) => total + (option.voteCount ?? 0), 0)
+    : 0;
+
+  const handleVote = () => {
+    if (!displayedPoll || selectedOptionId === null || pollExpired || pollHasVoted || voteMutation.isPending) return;
+    setVoteError("");
+    voteMutation.mutate({ pollId: displayedPoll.id, data: { optionId: selectedOptionId } });
+  };
 
   return (
     <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
@@ -109,7 +147,91 @@ function PostCard({ post }: { post: Post }) {
           {CATEGORIES.find((item) => item.value === post.category)?.emoji ?? "🌶️"} {post.category}
         </Text>
       </View>
-      <Text style={[styles.content, { color: colors.foreground }]}>{post.content}</Text>
+      {post.content ? <Text style={[styles.content, { color: colors.foreground }]}>{post.content}</Text> : null}
+
+      {displayedPoll && (
+        <View style={[styles.pollContainer, { borderColor: colors.border, backgroundColor: colors.surface }]}>
+          <View style={styles.pollHeader}>
+            <View style={styles.pollLabel}>
+              <Feather name="bar-chart-2" size={14} color={colors.primary} />
+              <Text style={[styles.pollLabelText, { color: colors.primary }]}>POLL</Text>
+            </View>
+            {(pollExpired || pollHasVoted) && (
+              <View style={[styles.pollEndedBadge, { backgroundColor: colors.muted }]}>
+                <Text style={[styles.pollEndedText, { color: colors.mutedForeground }]}>{pollExpired ? "Poll Ended" : "Voted"}</Text>
+              </View>
+            )}
+          </View>
+          <Text style={[styles.pollQuestion, { color: colors.foreground }]}>{displayedPoll.question}</Text>
+          <Text style={[styles.pollExpiry, { color: colors.mutedForeground }]}>
+            {pollExpired
+              ? `Ended ${formatDistanceToNow(new Date(displayedPoll.expiresAt), { addSuffix: true })}`
+              : `Ends ${formatDistanceToNow(new Date(displayedPoll.expiresAt), { addSuffix: true })}`}
+          </Text>
+          <View style={styles.pollOptions}>
+            {displayedPoll.options.map((option) => {
+              const isSelected = (showPollResults && displayedPoll.selectedOptionId === option.id)
+                || (!showPollResults && selectedOptionId === option.id);
+              const percentage = pollTotalVotes > 0
+                ? Math.round(((option.voteCount ?? 0) / pollTotalVotes) * 100)
+                : 0;
+              return (
+                <TouchableOpacity
+                  key={option.id}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: isSelected }}
+                  disabled={showPollResults || pollExpired || voteMutation.isPending}
+                  onPress={() => setSelectedOptionId(option.id)}
+                  activeOpacity={showPollResults ? 1 : 0.75}
+                  style={[
+                    styles.pollOption,
+                    { borderColor: isSelected ? colors.primary : colors.border },
+                    isSelected && { backgroundColor: colors.primary + "12" },
+                  ]}
+                >
+                  {showPollResults && (
+                    <View style={[styles.pollBar, { width: `${percentage}%`, backgroundColor: colors.primary + "20" }]} />
+                  )}
+                  <View style={styles.pollOptionContent}>
+                    {!showPollResults && (
+                      <View style={[styles.pollRadio, { borderColor: isSelected ? colors.primary : colors.mutedForeground }]}>
+                        {isSelected && <View style={[styles.pollRadioSelected, { backgroundColor: colors.primary }]} />}
+                      </View>
+                    )}
+                    <Text style={[styles.pollOptionText, { color: colors.foreground }]}>{option.optionText}</Text>
+                    {showPollResults && (
+                      <Text style={[styles.pollPercentage, { color: isSelected ? colors.primary : colors.mutedForeground }]}>
+                        {percentage}%
+                      </Text>
+                    )}
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+          {!showPollResults && !pollExpired && (
+            <TouchableOpacity
+              accessibilityRole="button"
+              onPress={handleVote}
+              disabled={selectedOptionId === null || voteMutation.isPending}
+              style={[
+                styles.voteButton,
+                { backgroundColor: selectedOptionId !== null && !voteMutation.isPending ? colors.primary : colors.muted },
+              ]}
+            >
+              {voteMutation.isPending
+                ? <ActivityIndicator color="#fff" size="small" />
+                : <Text style={[styles.voteButtonText, { color: selectedOptionId !== null ? "#fff" : colors.mutedForeground }]}>Vote</Text>}
+            </TouchableOpacity>
+          )}
+          {voteError ? <Text style={[styles.pollError, { color: colors.destructive ?? "#ef4444" }]}>{voteError}</Text> : null}
+          <Text style={[styles.pollVoteCount, { color: colors.mutedForeground }]}>
+            {displayedPoll.totalVotes === null
+              ? pollExpired ? "Loading final results…" : "Results appear after you vote"
+              : `${pollTotalVotes} ${pollTotalVotes === 1 ? "vote" : "votes"}`}
+          </Text>
+        </View>
+      )}
 
       <View style={[styles.reactions, { borderTopColor: colors.border }]}>
         <TouchableOpacity
@@ -148,6 +270,9 @@ function ComposeModal({ visible, onClose, onPosted }: { visible: boolean; onClos
   const queryClient = useQueryClient();
   const insets = useSafeAreaInsets();
   const [content, setContent] = useState("");
+  const [pollEnabled, setPollEnabled] = useState(false);
+  const [pollQuestion, setPollQuestion] = useState("");
+  const [pollOptions, setPollOptions] = useState<string[]>(["", ""]);
   const [category, setCategory] = useState<FeedCategory | "All">("Amebo Hot");
   const [isAnonymous, setIsAnonymous] = useState(true);
   const [showFacultyPicker, setShowFacultyPicker] = useState(false);
@@ -160,6 +285,9 @@ function ComposeModal({ visible, onClose, onPosted }: { visible: boolean; onClos
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         onPosted(variables.data.category ?? "Amebo Hot");
         setContent("");
+        setPollEnabled(false);
+        setPollQuestion("");
+        setPollOptions(["", ""]);
         setCategory("Amebo Hot");
         setIsAnonymous(true);
         onClose();
@@ -170,9 +298,24 @@ function ComposeModal({ visible, onClose, onPosted }: { visible: boolean; onClos
     },
   });
 
+  const trimmedPollOptions = pollOptions.map((option) => option.trim());
+  const pollIsValid = pollQuestion.trim().length > 0
+    && trimmedPollOptions.length >= 2
+    && trimmedPollOptions.length <= 4
+    && trimmedPollOptions.every(Boolean)
+    && new Set(trimmedPollOptions.map((option) => option.toLocaleLowerCase())).size === trimmedPollOptions.length;
+  const canPost = pollEnabled ? pollIsValid : Boolean(content.trim());
+
   const handlePost = () => {
-    if (!content.trim()) return;
-    createPost.mutate({ data: { content: content.trim(), category: category === "All" ? "Amebo Hot" : category, isAnonymous } });
+    if (!canPost) return;
+    createPost.mutate({
+      data: {
+        content: content.trim(),
+        category: category === "All" ? "Amebo Hot" : category,
+        isAnonymous,
+        ...(pollEnabled ? { poll: { question: pollQuestion.trim(), options: trimmedPollOptions } } : {}),
+      },
+    });
   };
 
   return (
@@ -186,13 +329,13 @@ function ComposeModal({ visible, onClose, onPosted }: { visible: boolean; onClos
             <Text style={[styles.modalTitle, { color: colors.foreground }]}>Drop Gist 📢</Text>
             <TouchableOpacity
               onPress={handlePost}
-              disabled={!content.trim() || createPost.isPending}
-              style={[styles.postButton, { backgroundColor: content.trim() && !createPost.isPending ? colors.primary : colors.muted }]}
+              disabled={!canPost || createPost.isPending}
+              style={[styles.postButton, { backgroundColor: canPost && !createPost.isPending ? colors.primary : colors.muted }]}
             >
               {createPost.isPending ? (
                 <ActivityIndicator color="#fff" size="small" />
               ) : (
-                <Text style={[styles.postButtonText, { color: content.trim() ? "#fff" : colors.mutedForeground }]}>Post</Text>
+                <Text style={[styles.postButtonText, { color: canPost ? "#fff" : colors.mutedForeground }]}>Post</Text>
               )}
             </TouchableOpacity>
           </View>
@@ -222,6 +365,72 @@ function ComposeModal({ visible, onClose, onPosted }: { visible: boolean; onClos
               autoFocus
               maxLength={500}
             />
+            <TouchableOpacity
+              accessibilityRole="switch"
+              accessibilityLabel="Create a poll"
+              accessibilityState={{ checked: pollEnabled }}
+              onPress={() => setPollEnabled((enabled) => !enabled)}
+              style={[
+                styles.createPollToggle,
+                { borderColor: pollEnabled ? colors.primary : colors.border, backgroundColor: pollEnabled ? colors.primary + "16" : colors.surface },
+              ]}
+            >
+              <Feather name="bar-chart-2" size={17} color={pollEnabled ? colors.primary : colors.mutedForeground} />
+              <Text style={{ color: pollEnabled ? colors.primary : colors.mutedForeground, fontSize: 13, fontWeight: "600" }}>
+                {pollEnabled ? "Poll added · 24 hours" : "Create Poll"}
+              </Text>
+            </TouchableOpacity>
+            {pollEnabled && (
+              <View style={[styles.pollForm, { borderColor: colors.border, backgroundColor: colors.surface }]}>
+                <TextInput
+                  accessibilityLabel="Poll question"
+                  style={[styles.pollQuestionInput, { color: colors.foreground, borderColor: colors.border }]}
+                  value={pollQuestion}
+                  onChangeText={setPollQuestion}
+                  placeholder="Ask your campus..."
+                  placeholderTextColor={colors.mutedForeground}
+                  maxLength={240}
+                />
+                {pollOptions.map((option, index) => (
+                  <View key={`poll-option-${index}`} style={styles.pollInputRow}>
+                    <TextInput
+                      accessibilityLabel={`Poll option ${index + 1}`}
+                      style={[styles.pollOptionInput, { color: colors.foreground, borderColor: colors.border }]}
+                      value={option}
+                      onChangeText={(value) => setPollOptions((current) => current.map((item, itemIndex) => itemIndex === index ? value : item))}
+                      placeholder={`Option ${index + 1}`}
+                      placeholderTextColor={colors.mutedForeground}
+                      maxLength={100}
+                    />
+                    {pollOptions.length > 2 && (
+                      <TouchableOpacity
+                        accessibilityRole="button"
+                        accessibilityLabel={`Remove option ${index + 1}`}
+                        onPress={() => setPollOptions((current) => current.filter((_, itemIndex) => itemIndex !== index))}
+                        style={styles.removePollOption}
+                      >
+                        <Feather name="x" size={17} color={colors.mutedForeground} />
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                ))}
+                {pollOptions.length < 4 && (
+                  <TouchableOpacity
+                    accessibilityRole="button"
+                    onPress={() => setPollOptions((current) => [...current, ""])}
+                    style={styles.addPollOption}
+                  >
+                    <Feather name="plus" size={15} color={colors.primary} />
+                    <Text style={{ color: colors.primary, fontSize: 13, fontWeight: "600" }}>Add Option</Text>
+                  </TouchableOpacity>
+                )}
+                {!pollIsValid && (pollQuestion.trim() || pollOptions.some((option) => option.trim())) && (
+                  <Text style={{ color: colors.mutedForeground, fontSize: 11, marginTop: 2 }}>
+                    Enter a question and 2–4 distinct, non-empty choices.
+                  </Text>
+                )}
+              </View>
+            )}
             <Text style={{ color: colors.mutedForeground, fontSize: 12, fontWeight: "600", marginTop: 12, marginBottom: 8 }}>Post category</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingBottom: 8 }}>
               {CATEGORIES.map((item) => {
@@ -270,7 +479,7 @@ export default function AmeboFeed() {
 
   const { data, isLoading, isError, refetch, isRefetching } = useListPosts(
     { category: activeCategory },
-    { query: { queryKey: getListPostsQueryKey({ category: activeCategory }) } },
+    { query: { queryKey: getListPostsQueryKey({ category: activeCategory }), refetchInterval: 10_000 } },
   );
   const { data: notificationData } = useListNotifications(
     { limit: 50 },
@@ -452,4 +661,31 @@ const styles = StyleSheet.create({
   facultyPickerText: { fontSize: 12, fontWeight: "600" },
   contentInput: { fontSize: 16, lineHeight: 24, minHeight: 120 },
   charCount: { fontSize: 12, textAlign: "right", marginTop: 8 },
+  pollContainer: { marginTop: 12, padding: 14, borderRadius: 14, borderWidth: 1 },
+  pollHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  pollLabel: { flexDirection: "row", alignItems: "center", gap: 6 },
+  pollLabelText: { fontSize: 10, fontWeight: "800", letterSpacing: 1 },
+  pollEndedBadge: { borderRadius: 10, paddingHorizontal: 8, paddingVertical: 4 },
+  pollEndedText: { fontSize: 10, fontWeight: "700" },
+  pollQuestion: { fontSize: 16, lineHeight: 22, fontWeight: "700", marginTop: 10 },
+  pollExpiry: { fontSize: 11, marginTop: 4 },
+  pollOptions: { gap: 8, marginTop: 13 },
+  pollOption: { minHeight: 44, justifyContent: "center", borderRadius: 10, borderWidth: 1, overflow: "hidden" },
+  pollOptionContent: { flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 11, paddingVertical: 10 },
+  pollBar: { position: "absolute", left: 0, top: 0, bottom: 0 },
+  pollRadio: { width: 18, height: 18, borderRadius: 9, borderWidth: 1.5, alignItems: "center", justifyContent: "center" },
+  pollRadioSelected: { width: 9, height: 9, borderRadius: 5 },
+  pollOptionText: { flex: 1, fontSize: 13, fontWeight: "500" },
+  pollPercentage: { fontSize: 12, fontWeight: "700" },
+  voteButton: { minHeight: 42, borderRadius: 10, alignItems: "center", justifyContent: "center", marginTop: 12 },
+  voteButtonText: { fontSize: 13, fontWeight: "700" },
+  pollError: { fontSize: 11, marginTop: 8 },
+  pollVoteCount: { fontSize: 11, marginTop: 10 },
+  createPollToggle: { alignSelf: "flex-start", flexDirection: "row", alignItems: "center", gap: 8, borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 9, marginTop: 10 },
+  pollForm: { gap: 9, borderWidth: 1, borderRadius: 12, padding: 12, marginTop: 10 },
+  pollQuestionInput: { minHeight: 44, borderWidth: 1, borderRadius: 9, paddingHorizontal: 11, fontSize: 14 },
+  pollInputRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  pollOptionInput: { flex: 1, minHeight: 42, borderWidth: 1, borderRadius: 9, paddingHorizontal: 11, fontSize: 13 },
+  removePollOption: { width: 36, height: 38, alignItems: "center", justifyContent: "center" },
+  addPollOption: { alignSelf: "flex-start", flexDirection: "row", alignItems: "center", gap: 5, paddingVertical: 4 },
 });

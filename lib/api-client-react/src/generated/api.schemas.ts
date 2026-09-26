@@ -172,6 +172,26 @@ export const PostCategory = {
   Amebo_Hot: "Amebo Hot",
 } as const;
 
+export interface PollOption {
+  id: number;
+  optionText: string;
+  /** @nullable */
+  voteCount: number | null;
+}
+
+export interface Poll {
+  id: number;
+  question: string;
+  createdAt: string;
+  expiresAt: string;
+  isExpired: boolean;
+  /** @nullable */
+  selectedOptionId: number | null;
+  /** @nullable */
+  totalVotes: number | null;
+  options: PollOption[];
+}
+
 export interface EmbeddedPost {
   id: number;
   authorId: string;
@@ -201,6 +221,7 @@ export interface Post {
   authorIsVerified: boolean;
   authorVerificationStatus: string;
   isAnonymous: boolean;
+  poll: Poll | null;
   isOwnedByMe: boolean;
   content: string;
   category: PostCategory;
@@ -237,6 +258,19 @@ export const CreatePostBodyCategory = {
   Amebo_Hot: "Amebo Hot",
 } as const;
 
+export interface PollInput {
+  /**
+   * @minLength 1
+   * @maxLength 240
+   */
+  question: string;
+  /**
+   * @minItems 2
+   * @maxItems 4
+   */
+  options: string[];
+}
+
 export interface CreatePostBody {
   content: string;
   category?: CreatePostBodyCategory;
@@ -245,6 +279,11 @@ export interface CreatePostBody {
   /** @nullable */
   videoUrl?: string | null;
   isAnonymous?: boolean;
+  poll?: PollInput;
+}
+
+export interface PollVoteInput {
+  optionId: number;
 }
 
 export interface LikeResponse {

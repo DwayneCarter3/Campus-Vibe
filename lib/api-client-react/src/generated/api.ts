@@ -50,6 +50,8 @@ import type {
   NoCapResponse,
   PaymentStatusResponse,
   PinResponse,
+  Poll,
+  PollVoteInput,
   Post,
   PublicUserProfile,
   ReceivePaystackWebhook200,
@@ -1150,6 +1152,93 @@ export const useDeletePost = <
   TContext
 > => {
   return useMutation(getDeletePostMutationOptions(options));
+};
+
+/**
+ * @summary Cast one vote on an active poll
+ */
+export const getVotePollUrl = (pollId: number) => {
+  return `/api/polls/${pollId}/vote`;
+};
+
+export const votePoll = async (
+  pollId: number,
+  pollVoteInput: PollVoteInput,
+  options?: RequestInit,
+): Promise<Poll> => {
+  return customFetch<Poll>(getVotePollUrl(pollId), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(pollVoteInput),
+  });
+};
+
+export const getVotePollMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof votePoll>>,
+    TError,
+    { pollId: number; data: BodyType<PollVoteInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof votePoll>>,
+  TError,
+  { pollId: number; data: BodyType<PollVoteInput> },
+  TContext
+> => {
+  const mutationKey = ["votePoll"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof votePoll>>,
+    { pollId: number; data: BodyType<PollVoteInput> }
+  > = (props) => {
+    const { pollId, data } = props ?? {};
+
+    return votePoll(pollId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type VotePollMutationResult = NonNullable<
+  Awaited<ReturnType<typeof votePoll>>
+>;
+export type VotePollMutationBody = BodyType<PollVoteInput>;
+export type VotePollMutationError = ErrorType<void>;
+
+/**
+ * @summary Cast one vote on an active poll
+ */
+export const useVotePoll = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof votePoll>>,
+    TError,
+    { pollId: number; data: BodyType<PollVoteInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof votePoll>>,
+  TError,
+  { pollId: number; data: BodyType<PollVoteInput> },
+  TContext
+> => {
+  return useMutation(getVotePollMutationOptions(options));
 };
 
 /**

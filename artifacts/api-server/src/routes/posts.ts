@@ -2,13 +2,14 @@ import { Router, type IRouter } from "express";
 import { getAuth } from "@clerk/express";
 import { eq, desc, and, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
-import { db, postsTable, postLikesTable, postNoCapsTable, postCommentsTable, usersTable } from "@workspace/db";
+import { db, postsTable, postLikesTable, postNoCapsTable, postCommentsTable, usersTable, pollsTable, pollOptionsTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/auth";
 import { computeCampusTitle } from "./admin";
 import { isVerifiedAccount, publicVerificationStatus } from "../lib/verification";
 import { getEffectiveLevel } from "../lib/academic-level";
 import { createNotification } from "../lib/notifications";
 import { publicPost } from "../lib/post-privacy";
+import { loadPublicPolls } from "../lib/polls";
 import {
   ListPostsQueryParams,
   ListPostsResponse,
@@ -176,7 +177,9 @@ async function buildPostWithMeta(postId: number, clerkUserId?: string) {
     isNoCapByMe,
   };
 
-  return publicPost(built, clerkUserId);
+  const pollPostId = post.originalPostId ?? post.id;
+  const poll = (await loadPublicPolls([pollPostId], clerkUserId)).get(pollPostId) ?? null;
+  return publicPost({ ...built, poll }, clerkUserId);
 }
 
 router.get("/posts", async (req, res): Promise<void> => {
@@ -238,6 +241,7 @@ router.get("/posts", async (req, res): Promise<void> => {
     .from(postsTable)
     .where(category ? eq(postsTable.category, category) : undefined);
 
+  const publicPolls = await loadPublicPolls(posts.map((post) => post.originalPostId ?? post.id), clerkUserId);
   const postsWithReactions = await Promise.all(
     posts.map(async (post) => {
       let isLikedByMe = false;
@@ -299,7 +303,7 @@ router.get("/posts", async (req, res): Promise<void> => {
         isNoCapByMe,
       };
 
-      return publicPost(built, clerkUserId);
+      return publicPost({ ...built, poll: publicPolls.get(post.originalPostId ?? post.id) ?? null }, clerkUserId);
     })
   );
 
@@ -315,19 +319,34 @@ router.post("/posts", requireAuth, async (req, res): Promise<void> => {
     return;
   }
 
-  const [post] = await db
-    .insert(postsTable)
-    .values({
+  const pollInput = parsed.data.poll;
+  const question = pollInput?.question.trim();
+  const options = pollInput?.options.map((option) => option.trim());
+  if (pollInput && (
+    !question || !options || options.length < 2 || options.length > 4 ||
+    options.some((option) => !option) ||
+    new Set(options.map((option) => option.toLocaleLowerCase())).size !== options.length
+  )) {
+    res.status(400).json({ error: "Enter a question and 2–4 different, nonempty poll options." });
+    return;
+  }
+  const postId = await db.transaction(async (tx) => {
+    const [post] = await tx.insert(postsTable).values({
       authorId: userId,
       content: parsed.data.content,
       category: parsed.data.category ?? "Amebo Hot",
       imageUrl: parsed.data.imageUrl ?? null,
       videoUrl: parsed.data.videoUrl ?? null,
       isAnonymous: parsed.data.isAnonymous ?? false,
-    })
-    .returning();
+    }).returning({ id: postsTable.id });
+    if (question && options) {
+      const [poll] = await tx.insert(pollsTable).values({ postId: post.id, question }).returning({ id: pollsTable.id });
+      await tx.insert(pollOptionsTable).values(options.map((option) => ({ pollId: poll.id, optionText: option })));
+    }
+    return post.id;
+  });
 
-  const result = await buildPostWithMeta(post.id, userId);
+  const result = await buildPostWithMeta(postId, userId);
   res.status(201).json(GetPostResponse.parse(result));
 });
 

@@ -4,6 +4,7 @@ import { alias } from "drizzle-orm/pg-core";
 import { clerkClient, getAuth } from "@clerk/express";
 import { db, usersTable, postsTable, postLikesTable, postNoCapsTable, postCommentsTable, servicesTable } from "@workspace/db";
 import { publicEmbeddedPost } from "../lib/post-privacy";
+import { loadPublicPolls } from "../lib/polls";
 import { requireAuth } from "../middlewares/auth";
 import {
   GetMyProfileResponse,
@@ -496,6 +497,7 @@ router.get("/users/:userId/posts", async (req, res): Promise<void> => {
     .from(postsTable)
     .where(and(eq(postsTable.authorId, userId), eq(postsTable.isAnonymous, false)));
 
+  const publicPolls = await loadPublicPolls(posts.map((post) => post.originalPostId ?? post.id), clerkUserId);
   const postsWithReactions = await Promise.all(
     posts.map(async (post) => {
       let isLikedByMe = false;
@@ -537,6 +539,7 @@ router.get("/users/:userId/posts", async (req, res): Promise<void> => {
         authorIsVerified: isVerifiedAccount(post.authorVerificationStatus, role),
         authorVerificationStatus: publicVerificationStatus(post.authorVerificationStatus, role),
         isAnonymous: post.isAnonymous ?? false,
+        poll: publicPolls.get(post.originalPostId ?? post.id) ?? null,
         commentsCount: commentsCount ?? 0,
         reshareCount: post.reshareCount ?? 0,
         originalPostId: post.originalPostId ?? null,

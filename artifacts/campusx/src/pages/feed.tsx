@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { Sparkles, Radio, Camera, Video, X, Loader2, Ghost } from "lucide-react";
+import { Sparkles, Radio, Camera, Video, X, Loader2, Ghost, BarChart3, Plus, Trash2 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
@@ -55,7 +55,7 @@ export default function FeedPage() {
   });
 
   const { data, isLoading, refetch } = useListPosts({ category: activeCategory }, {
-    query: { queryKey: getListPostsQueryKey({ category: activeCategory }) }
+    query: { queryKey: getListPostsQueryKey({ category: activeCategory }), refetchInterval: 10_000 }
   });
 
   const createPost = useCreatePost();
@@ -64,6 +64,10 @@ export default function FeedPage() {
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [isAnonymous, setIsAnonymous] = useState(true);
+  const [pollEnabled, setPollEnabled] = useState(false);
+  const [pollQuestion, setPollQuestion] = useState("");
+  const [pollOptions, setPollOptions] = useState(["", ""]);
+  const [postError, setPostError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isProfileLoading && (profileError || (profile && !profile.fullName))) {
@@ -97,15 +101,33 @@ export default function FeedPage() {
   }, [media]);
 
   const handlePost = () => {
-    if (!content.trim() && !media) return;
+    if (createPost.isPending || isUploading || (!content.trim() && !media && !pollEnabled)) return;
+    const question = pollQuestion.trim();
+    const options = pollOptions.map((option) => option.trim());
+    if (pollEnabled) {
+      if (!question || question.length > 240) {
+        setPostError("Add a poll question (up to 240 characters).");
+        return;
+      }
+      if (options.length < 2 || options.length > 4 || options.some((option) => !option || option.length > 100)) {
+        setPostError("Add 2–4 options, each up to 100 characters.");
+        return;
+      }
+      if (new Set(options.map((option) => option.toLocaleLowerCase())).size !== options.length) {
+        setPostError("Each poll option needs to be different.");
+        return;
+      }
+    }
+    setPostError(null);
     const publishedCategory = postCategory === "All" ? "Amebo Hot" : postCategory;
     createPost.mutate({
       data: {
-        content,
+        content: content.trim(),
         category: publishedCategory,
         imageUrl: media?.type === "image" ? media.url : null,
         videoUrl: media?.type === "video" ? media.url : null,
         isAnonymous,
+        ...(pollEnabled ? { poll: { question, options } } : {}),
       }
     }, {
       onSuccess: () => {
@@ -113,9 +135,14 @@ export default function FeedPage() {
         setActiveBubble(POST_CATEGORIES.find((item) => item.category === publishedCategory)?.id ?? "all");
         setPostCategory("Amebo Hot");
         setIsAnonymous(true);
+        setPollEnabled(false);
+        setPollQuestion("");
+        setPollOptions(["", ""]);
+        setPostError(null);
         clearMedia();
         queryClient.invalidateQueries({ queryKey: getListPostsQueryKey() });
-      }
+      },
+      onError: () => setPostError("Couldn't publish your post. Please try again."),
     });
   };
 
@@ -262,6 +289,46 @@ export default function FeedPage() {
               {postCategory === "All" && <p className="text-[11px] text-muted-foreground">All Gist is a feed view. This post will be tagged Amebo Hot.</p>}
             </div>
 
+            {pollEnabled && (
+              <div className="rounded-xl border border-primary/25 bg-primary/[0.06] p-3 space-y-3" data-testid="composer-poll">
+                <div className="flex items-center justify-between">
+                  <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary"><BarChart3 className="h-3.5 w-3.5" /> 24-hour poll</span>
+                  <button type="button" data-testid="button-remove-poll" aria-label="Remove poll" onClick={() => { setPollEnabled(false); setPostError(null); }} className="text-muted-foreground hover:text-foreground p-1 rounded-md"><X className="h-4 w-4" /></button>
+                </div>
+                <input
+                  data-testid="input-poll-question"
+                  aria-label="Poll question"
+                  maxLength={240}
+                  value={pollQuestion}
+                  onChange={(e) => { setPollQuestion(e.target.value); setPostError(null); }}
+                  placeholder="Ask the campus a question"
+                  className="w-full rounded-lg border border-white/10 bg-background/40 px-3 py-2 text-sm outline-none focus:border-primary/50 placeholder:text-muted-foreground"
+                />
+                <div className="space-y-2">
+                  {pollOptions.map((option, index) => (
+                    <div className="flex items-center gap-2" key={index}>
+                      <input
+                        data-testid={`input-poll-option-${index}`}
+                        aria-label={`Poll option ${index + 1}`}
+                        maxLength={100}
+                        value={option}
+                        onChange={(e) => { setPollOptions((current) => current.map((item, i) => i === index ? e.target.value : item)); setPostError(null); }}
+                        placeholder={`Option ${index + 1}`}
+                        className="min-w-0 flex-1 rounded-lg border border-white/10 bg-background/40 px-3 py-2 text-sm outline-none focus:border-primary/50 placeholder:text-muted-foreground"
+                      />
+                      {pollOptions.length > 2 && (
+                        <button type="button" data-testid={`button-remove-poll-option-${index}`} aria-label={`Remove option ${index + 1}`} onClick={() => { setPollOptions((current) => current.filter((_, i) => i !== index)); setPostError(null); }} className="p-2 text-muted-foreground hover:text-destructive rounded-lg"><Trash2 className="h-4 w-4" /></button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                {pollOptions.length < 4 && (
+                  <button type="button" data-testid="button-add-poll-option" onClick={() => setPollOptions((current) => [...current, ""])} className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:text-primary/80"><Plus className="h-3.5 w-3.5" /> Add Option</button>
+                )}
+                <p className="text-[11px] text-muted-foreground">Voting stays open for 24 hours. Results appear after you vote or when the poll ends.</p>
+              </div>
+            )}
+
             {/* Media preview */}
             <AnimatePresence>
               {isUploading && (
@@ -329,11 +396,11 @@ export default function FeedPage() {
                 <button
                   type="button"
                   title="Add photo"
-                  disabled={isUploading || !!media}
+                   disabled={isUploading || !!media || pollEnabled}
                   onClick={() => imageInputRef.current?.click()}
                   className={cn(
                     "flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all",
-                    media
+                     media || pollEnabled
                       ? "text-muted-foreground/40 cursor-not-allowed"
                       : "text-muted-foreground hover:text-primary hover:bg-primary/10"
                   )}
@@ -344,17 +411,29 @@ export default function FeedPage() {
                 <button
                   type="button"
                   title="Add video"
-                  disabled={isUploading || !!media}
+                   disabled={isUploading || !!media || pollEnabled}
                   onClick={() => videoInputRef.current?.click()}
                   className={cn(
                     "flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all",
-                    media
+                     media || pollEnabled
                       ? "text-muted-foreground/40 cursor-not-allowed"
                       : "text-muted-foreground hover:text-pink-400 hover:bg-pink-500/10"
                   )}
                 >
                   <Video className="h-4 w-4" />
                   <span className="hidden sm:inline">Video</span>
+                </button>
+                <button
+                  type="button"
+                  data-testid="button-create-poll"
+                  title="Create Poll"
+                  aria-pressed={pollEnabled}
+                  disabled={isUploading || !!media}
+                  onClick={() => { setPollEnabled((enabled) => !enabled); setPostError(null); }}
+                  className={cn("flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all", pollEnabled ? "bg-primary/15 text-primary" : "text-muted-foreground hover:text-primary hover:bg-primary/10")}
+                >
+                  <BarChart3 className="h-4 w-4" />
+                  <span className="hidden sm:inline">Create Poll</span>
                 </button>
 
                 {/* Anonymous toggle */}
@@ -379,12 +458,13 @@ export default function FeedPage() {
                 data-testid="btn-create-post"
                 className="gradient-btn rounded-full px-5 h-8 text-sm"
                 onClick={handlePost}
-                disabled={(!content.trim() && !media) || createPost.isPending || isUploading}
+                 disabled={(!content.trim() && !media && !pollEnabled) || createPost.isPending || isUploading}
               >
                 {createPost.isPending ? "Posting..." : isAnonymous ? "Post Anon 👻" : "Post Gist"}
                 <Sparkles className="h-3 w-3 ml-1.5" />
               </Button>
             </div>
+            {postError && <p role="alert" data-testid="error-create-post" className="text-xs text-destructive">{postError}</p>}
           </div>
         </div>
       </motion.div>
