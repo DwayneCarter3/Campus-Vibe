@@ -1,7 +1,8 @@
 import { Router, type IRouter } from "express";
 import { and, desc, eq } from "drizzle-orm";
-import { db, postsTable, reportsTable, servicesTable, usersTable } from "@workspace/db";
+import { db, postsTable, reportsTable, servicesTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/auth";
+import { hasAdminPrivileges } from "../lib/privilege";
 import {
   ListAdminReportsResponse,
   ReviewAdminReportParams,
@@ -11,22 +12,13 @@ import {
 
 const router: IRouter = Router();
 
-async function isAdminOrCeo(userId: string): Promise<boolean> {
-  const [user] = await db
-    .select({ role: usersTable.role })
-    .from(usersTable)
-    .where(eq(usersTable.clerkUserId, userId));
-  return Boolean(user && (user.role === "admin" || user.role === "ceo"));
-}
-
 function reportTargetTitle(postContent: string | null, serviceTitle: string | null): string {
   if (serviceTitle != null) return serviceTitle;
   return (postContent ?? "").slice(0, 160);
 }
 
 router.get("/admin/reports", requireAuth, async (req, res): Promise<void> => {
-  const userId = (req as any).userId as string;
-  if (!(await isAdminOrCeo(userId))) {
+  if (!(await hasAdminPrivileges(req))) {
     res.status(403).json({ error: "Admin/CEO only" });
     return;
   }
@@ -56,8 +48,7 @@ router.get("/admin/reports", requireAuth, async (req, res): Promise<void> => {
 });
 
 router.patch("/admin/reports/:reportId", requireAuth, async (req, res): Promise<void> => {
-  const userId = (req as any).userId as string;
-  if (!(await isAdminOrCeo(userId))) {
+  if (!(await hasAdminPrivileges(req))) {
     res.status(403).json({ error: "Admin/CEO only" });
     return;
   }

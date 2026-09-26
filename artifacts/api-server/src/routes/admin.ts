@@ -1,14 +1,36 @@
 import { Router, type IRouter } from "express";
 import { eq, ilike, or, sql, and, inArray } from "drizzle-orm";
-import { db, usersTable, postsTable } from "@workspace/db";
+import {
+  db,
+  earlyBirdClaimsTable,
+  paymentTransactionsTable,
+  usersTable,
+  postsTable,
+} from "@workspace/db";
 import { requireAuth } from "../middlewares/auth";
 import { isPrivilegedRole, PENDING_VERIFICATION_STATUSES } from "../lib/verification";
 import { getEffectiveLevel } from "../lib/academic-level";
 import { createNotification } from "../lib/notifications";
+import { CEO_EMAIL, hasAdminPrivileges, isVerifiedCEO } from "../lib/privilege";
 
 const router: IRouter = Router();
 
-const CEO_EMAIL = "dwaynecartergabriel@gmail.com";
+const EARLY_BIRD_LIMIT = 100;
+
+function paymentEntitlementIsActive(
+  payment: {
+    paidAt: Date | null;
+    createdAt: Date;
+    durationDays: number;
+    entitlementExpiresAt: Date | null;
+  },
+  now: Date,
+): boolean {
+  const expiresAt =
+    payment.entitlementExpiresAt ??
+    new Date((payment.paidAt ?? payment.createdAt).getTime() + payment.durationDays * 86_400_000);
+  return expiresAt > now;
+}
 
 function computeCampusTitle(role: string, postCount: number): string {
   if (role === "ceo") return "CEO";
@@ -23,12 +45,7 @@ function computeCampusTitle(role: string, postCount: number): string {
 }
 
 async function requireCEO(req: any, res: any): Promise<boolean> {
-  const userId = req.userId as string;
-  const [caller] = await db
-    .select({ role: usersTable.role })
-    .from(usersTable)
-    .where(eq(usersTable.clerkUserId, userId));
-  if (caller?.role !== "ceo") {
+  if (!(await isVerifiedCEO(req))) {
     res.status(403).json({ error: "CEO only." });
     return false;
   }
@@ -36,12 +53,7 @@ async function requireCEO(req: any, res: any): Promise<boolean> {
 }
 
 async function requireAdminOrCEO(req: any, res: any): Promise<boolean> {
-  const userId = req.userId as string;
-  const [caller] = await db
-    .select({ role: usersTable.role })
-    .from(usersTable)
-    .where(eq(usersTable.clerkUserId, userId));
-  if (!caller || !["admin", "ceo"].includes(caller.role)) {
+  if (!(await hasAdminPrivileges(req))) {
     res.status(403).json({ error: "Admin/CEO only." });
     return false;
   }
@@ -50,22 +62,20 @@ async function requireAdminOrCEO(req: any, res: any): Promise<boolean> {
 
 router.post("/admin/claim", requireAuth, async (req, res): Promise<void> => {
   const userId = (req as any).userId as string;
-
-  const [existing] = await db
-    .select({ id: usersTable.id })
-    .from(usersTable)
-    .where(eq(usersTable.isAdmin, true))
-    .limit(1);
-
-  if (existing) {
-    res.status(403).json({ error: "An admin already exists." });
+  if (!(await isVerifiedCEO(req))) {
+    res.status(403).json({ error: "Only the freshly verified designated CEO may claim the CEO role." });
     return;
   }
 
-  await db
+  const [updated] = await db
     .update(usersTable)
     .set({ isAdmin: true, role: "ceo", verificationStatus: "Premium_Approved" })
-    .where(eq(usersTable.clerkUserId, userId));
+    .where(eq(usersTable.clerkUserId, userId))
+    .returning({ id: usersTable.id });
+  if (!updated) {
+    res.status(404).json({ error: "User profile not found." });
+    return;
+  }
 
   res.json({ success: true, message: "You are now the CampusX admin!" });
 });
@@ -213,32 +223,123 @@ router.post("/admin/users/:userId/approve-badge", requireAuth, async (req, res):
 
   const targetUserId = Array.isArray(req.params.userId) ? req.params.userId[0] : req.params.userId;
 
-  const [target] = await db
-    .select({
-      role: usersTable.role,
-      verificationStatus: usersTable.verificationStatus,
-    })
-    .from(usersTable)
-    .where(eq(usersTable.clerkUserId, targetUserId))
-    .limit(1);
+  const approval = await db.transaction(async (tx) => {
+    const [target] = await tx
+      .select({
+        role: usersTable.role,
+        registrationRank: usersTable.registrationRank,
+        verificationStatus: usersTable.verificationStatus,
+        promoExpiresAt: usersTable.promoExpiresAt,
+      })
+      .from(usersTable)
+      .where(eq(usersTable.clerkUserId, targetUserId))
+      .for("update")
+      .limit(1);
 
-  if (!target) {
-    res.status(404).json({ error: "User not found" });
+    if (!target) return { ok: false as const, status: 404, error: "User not found" };
+
+    const status = target.verificationStatus;
+    const now = new Date();
+    const pendingStatuses = [
+      "pending_paid",
+      "Premium_Pending_Approval",
+      "Student_Pending",
+      "pending_promo",
+    ];
+    if (!pendingStatuses.includes(status)) {
+      return {
+        ok: false as const,
+        status: 409,
+        error: "This user does not have a pending badge request.",
+      };
+    }
+
+    let eligible = false;
+    if (status === "pending_paid" || status === "Premium_Pending_Approval") {
+      const packageType =
+        status === "pending_paid" ? "student_verification" : "premium_blue_tick";
+      const payments = await tx
+        .select({
+          paidAt: paymentTransactionsTable.paidAt,
+          createdAt: paymentTransactionsTable.createdAt,
+          durationDays: paymentTransactionsTable.durationDays,
+          entitlementExpiresAt: paymentTransactionsTable.entitlementExpiresAt,
+        })
+        .from(paymentTransactionsTable)
+        .where(
+          and(
+            eq(paymentTransactionsTable.clerkUserId, targetUserId),
+            eq(paymentTransactionsTable.packageType, packageType),
+            eq(paymentTransactionsTable.status, "paid"),
+          ),
+        );
+      eligible = payments.some((payment) => paymentEntitlementIsActive(payment, now));
+
+      if (status === "Premium_Pending_Approval" && !eligible) {
+        const [claim] = await tx
+          .select({
+            claimRank: earlyBirdClaimsTable.claimRank,
+            badgeClaimedAt: earlyBirdClaimsTable.badgeClaimedAt,
+          })
+          .from(earlyBirdClaimsTable)
+          .where(eq(earlyBirdClaimsTable.clerkUserId, targetUserId))
+          .limit(1);
+        eligible =
+          !!claim?.badgeClaimedAt &&
+          claim.claimRank <= EARLY_BIRD_LIMIT &&
+          target.registrationRank <= EARLY_BIRD_LIMIT &&
+          !!target.promoExpiresAt &&
+          target.promoExpiresAt >= now;
+      }
+    } else {
+      const [claim] = await tx
+        .select({
+          claimRank: earlyBirdClaimsTable.claimRank,
+          badgeClaimedAt: earlyBirdClaimsTable.badgeClaimedAt,
+        })
+        .from(earlyBirdClaimsTable)
+        .where(eq(earlyBirdClaimsTable.clerkUserId, targetUserId))
+        .limit(1);
+      eligible =
+        !!claim?.badgeClaimedAt &&
+        claim.claimRank <= EARLY_BIRD_LIMIT &&
+        target.registrationRank <= EARLY_BIRD_LIMIT &&
+        !!target.promoExpiresAt &&
+        target.promoExpiresAt >= now;
+    }
+
+    if (!eligible) {
+      return {
+        ok: false as const,
+        status: 409,
+        error: "The pending badge request is expired or has no eligible payment/early-bird claim.",
+      };
+    }
+
+    const verificationStatus = isPrivilegedRole(target.role)
+      ? "Premium_Approved"
+      : status === "Premium_Pending_Approval"
+        ? "Premium_Approved"
+        : "Student_Verified";
+    await tx
+      .update(usersTable)
+      .set({
+        verificationStatus,
+        premiumBadgeDiscountPercent: 0,
+      })
+      .where(eq(usersTable.clerkUserId, targetUserId));
+
+    return { ok: true as const, verificationStatus };
+  });
+
+  if (!approval.ok) {
+    if (approval.status === 404) {
+      res.status(404).json({ error: approval.error });
+      return;
+    }
+    res.status(409).json({ error: approval.error });
     return;
   }
-  await db
-    .update(usersTable)
-    .set({
-      verificationStatus:
-        isPrivilegedRole(target.role)
-          ? "Premium_Approved"
-          : target.verificationStatus === "Premium_Pending_Approval"
-          ? "Premium_Approved"
-          : "approved",
-      promoExpiresAt: null,
-      premiumBadgeDiscountPercent: 0,
-    })
-    .where(eq(usersTable.clerkUserId, targetUserId));
 
   await createNotification({
     userId: targetUserId,
@@ -344,18 +445,18 @@ router.patch("/admin/users/:userId/verification", requireAuth, async (req, res):
 
 router.post("/admin/auto-detect-ceo", requireAuth, async (req, res): Promise<void> => {
   const userId = (req as any).userId as string;
-
-  const [user] = await db
-    .select({ email: usersTable.email, role: usersTable.role })
-    .from(usersTable)
-    .where(eq(usersTable.clerkUserId, userId));
-
+  if (!(await isVerifiedCEO(req))) {
+    res.status(403).json({ error: "Freshly verified designated CEO email required." });
+    return;
+  }
+  const [user] = await db.select({ role: usersTable.role })
+    .from(usersTable).where(eq(usersTable.clerkUserId, userId));
   if (!user) {
     res.status(404).json({ error: "User not found" });
     return;
   }
 
-  if (user.email === CEO_EMAIL && user.role !== "ceo") {
+  if (user.role !== "ceo") {
     await db
       .update(usersTable)
       .set({ role: "ceo", isAdmin: true, verificationStatus: "Premium_Approved" })

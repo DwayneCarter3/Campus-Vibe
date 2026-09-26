@@ -1,8 +1,20 @@
-import { Router, type IRouter } from "express";
-import { eq, desc, and, ne, sql } from "drizzle-orm";
+import { Router, type IRouter, type Request } from "express";
+import { eq, desc, and, ne, or, isNull, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { clerkClient, getAuth } from "@clerk/express";
-import { db, usersTable, postsTable, postLikesTable, postNoCapsTable, postCommentsTable, servicesTable, savedPostsTable, savedServicesTable } from "@workspace/db";
+import {
+  db,
+  earlyBirdClaimsTable,
+  paymentTransactionsTable,
+  usersTable,
+  postsTable,
+  postLikesTable,
+  postNoCapsTable,
+  postCommentsTable,
+  servicesTable,
+  savedPostsTable,
+  savedServicesTable,
+} from "@workspace/db";
 import { publicEmbeddedPost } from "../lib/post-privacy";
 import { loadPublicPolls } from "../lib/polls";
 import { requireAuth } from "../middlewares/auth";
@@ -19,15 +31,238 @@ import {
   SearchStudentsQueryParams,
   SearchStudentsResponse,
 } from "@workspace/api-zod";
-import { CEO_EMAIL, computeCampusTitle } from "./admin";
+import { computeCampusTitle } from "./admin";
+import { CEO_EMAIL, hasAdminPrivileges } from "../lib/privilege";
 import { isPrivilegedRole, isVerifiedAccount, publicVerificationStatus, PENDING_VERIFICATION_STATUSES } from "../lib/verification";
+import { expirePaidBadgeEntitlement } from "./payments";
 import { decodeMatricEntryYear, getEffectiveLevel } from "../lib/academic-level";
 import { ensureWazobiaConversation } from "../lib/wazobia";
+import { getInstitutionByName } from "@workspace/campus-institutions";
+import {
+  campusScopeCondition,
+  profilesShareCampus,
+  profilesShareSchool,
+  schoolScopeCondition,
+  type CampusScopeProfile,
+} from "./list-scope";
 
 const opAlias = alias(postsTable, "op");
 const ouAlias = alias(usersTable, "ou");
+const NOT_LISTED_SCHOOL = "My School is Not Listed";
+const OTHER_DEPARTMENT = "Other department";
 
 const router: IRouter = Router();
+
+function normalizeEmail(email: string): string {
+  return email.trim().toLowerCase();
+}
+
+function normalizeMatricNumber(matricNumber: string): string {
+  return matricNumber.trim().toUpperCase();
+}
+
+async function getVerifiedPrimaryEmail(clerkUserId: string): Promise<string | null> {
+  const clerkUser = await clerkClient.users.getUser(clerkUserId);
+  const primaryEmail = clerkUser.emailAddresses.find(
+    (email) => email.id === clerkUser.primaryEmailAddressId,
+  );
+  if (primaryEmail?.verification?.status !== "verified") return null;
+  const email = normalizeEmail(primaryEmail.emailAddress);
+  return email || null;
+}
+
+type IdentityReconciliation = {
+  user: typeof usersTable.$inferSelect;
+  emailConflict: boolean;
+};
+
+async function reconcileClerkIdentity(
+  user: typeof usersTable.$inferSelect,
+  verifiedPrimaryEmail: string | null,
+): Promise<IdentityReconciliation> {
+  const emailConflict = Boolean(
+    verifiedPrimaryEmail &&
+      normalizeEmail(user.email) !== verifiedPrimaryEmail &&
+      (await db
+        .select({ id: usersTable.id })
+        .from(usersTable)
+        .where(and(
+          sql`lower(btrim(${usersTable.email})) = ${verifiedPrimaryEmail}`,
+          ne(usersTable.clerkUserId, user.clerkUserId),
+        ))
+        .limit(1))[0],
+  );
+
+  const changes: Partial<typeof usersTable.$inferInsert> = {};
+  const roleChanges: Partial<typeof usersTable.$inferInsert> = {};
+  if (verifiedPrimaryEmail && !emailConflict && normalizeEmail(user.email) !== verifiedPrimaryEmail) {
+    changes.email = verifiedPrimaryEmail;
+  }
+
+  if (verifiedPrimaryEmail === CEO_EMAIL && !emailConflict) {
+    if (user.role !== "admin") {
+      if (user.role !== "ceo") roleChanges.role = "ceo";
+      if (!user.isAdmin) roleChanges.isAdmin = true;
+      if (user.verificationStatus !== "Premium_Approved") {
+        roleChanges.verificationStatus = "Premium_Approved";
+      }
+    }
+  } else if (user.role === "ceo") {
+    roleChanges.role = "student";
+    roleChanges.isAdmin = false;
+  }
+
+  Object.assign(changes, roleChanges);
+  const identityConflict = emailConflict;
+  if (identityConflict && Object.keys(roleChanges).length) {
+    const [updated] = await db
+      .update(usersTable)
+      .set(roleChanges)
+      .where(eq(usersTable.clerkUserId, user.clerkUserId))
+      .returning();
+    if (roleChanges.role === "student") {
+      await expirePaidBadgeEntitlement(user.clerkUserId);
+      const [refreshed] = await db
+        .select()
+        .from(usersTable)
+        .where(eq(usersTable.clerkUserId, user.clerkUserId))
+        .limit(1);
+      return { user: refreshed ?? updated ?? { ...user, ...roleChanges }, emailConflict: true };
+    }
+    return { user: updated ?? { ...user, ...roleChanges }, emailConflict: true };
+  }
+
+  if (!Object.keys(changes).length) return { user, emailConflict: false };
+
+  try {
+    const [updated] = await db
+      .update(usersTable)
+      .set(changes)
+      .where(eq(usersTable.clerkUserId, user.clerkUserId))
+      .returning();
+    let reconciled = updated ?? { ...user, ...changes };
+    if (roleChanges.role === "student") {
+      await expirePaidBadgeEntitlement(user.clerkUserId);
+      const [refreshed] = await db
+        .select()
+        .from(usersTable)
+        .where(eq(usersTable.clerkUserId, user.clerkUserId))
+        .limit(1);
+      reconciled = refreshed ?? reconciled;
+    }
+    return { user: reconciled, emailConflict: false };
+  } catch (error: any) {
+    if (error?.code === "23505" && error?.constraint?.includes("email")) {
+      let reconciled = user;
+      if (roleChanges.role === "student") {
+        const [updated] = await db
+          .update(usersTable)
+          .set(roleChanges)
+          .where(eq(usersTable.clerkUserId, user.clerkUserId))
+          .returning();
+        await expirePaidBadgeEntitlement(user.clerkUserId);
+        const [refreshed] = await db
+          .select()
+          .from(usersTable)
+          .where(eq(usersTable.clerkUserId, user.clerkUserId))
+          .limit(1);
+        reconciled = refreshed ?? updated ?? { ...user, ...roleChanges };
+      }
+      return { user: reconciled, emailConflict: true };
+    }
+    throw error;
+  }
+}
+
+type ProfileScope = CampusScopeProfile & { clerkUserId: string; role: string };
+
+async function resolveProfileReadAccess(
+  req: Request,
+  viewerId: string,
+  profileId: string,
+): Promise<{ viewer: ProfileScope; profile: ProfileScope; unrestricted: boolean } | null> {
+  const [viewer] = await db
+    .select({
+      clerkUserId: usersTable.clerkUserId,
+      institutionId: usersTable.institutionId,
+      school: usersTable.school,
+      campusLocation: usersTable.campusLocation,
+      role: usersTable.role,
+    })
+    .from(usersTable)
+    .where(eq(usersTable.clerkUserId, viewerId))
+    .limit(1);
+  if (!viewer) return null;
+  const [profile] = await db
+    .select({
+      clerkUserId: usersTable.clerkUserId,
+      institutionId: usersTable.institutionId,
+      school: usersTable.school,
+      campusLocation: usersTable.campusLocation,
+      role: usersTable.role,
+    })
+    .from(usersTable)
+    .where(eq(usersTable.clerkUserId, profileId))
+    .limit(1);
+  if (!profile) return null;
+
+  const unrestricted = viewerId === profileId || await hasAdminPrivileges(req);
+  if (
+    !unrestricted &&
+    (!profilesShareSchool(viewer, profile) || !profilesShareCampus(viewer, profile))
+  ) {
+    return null;
+  }
+  return { viewer, profile, unrestricted };
+}
+
+type ValidatedInstitutionScope = {
+  school: string;
+  institutionId: string | null;
+  campusLocation: string;
+  faculty: string;
+};
+
+type InstitutionScopeResult =
+  | { value: ValidatedInstitutionScope }
+  | { error: string };
+
+function validateInstitutionScope(
+  schoolValue: unknown,
+  campusValue: unknown,
+  facultyValue: unknown,
+): InstitutionScopeResult {
+  const school = typeof schoolValue === "string" ? schoolValue.trim() : "";
+  const campusLocation = typeof campusValue === "string" ? campusValue.trim() : "";
+  const faculty = typeof facultyValue === "string" ? facultyValue.trim() : "";
+  if (!school || !campusLocation || !faculty) {
+    return { error: "School, campus location, and faculty/school are required." };
+  }
+
+  if (school.toLowerCase() === NOT_LISTED_SCHOOL.toLowerCase()) {
+    return { value: { school: NOT_LISTED_SCHOOL, institutionId: null, campusLocation, faculty } };
+  }
+
+  const institution = getInstitutionByName(school);
+  if (!institution) {
+    return { error: "Select a listed institution or use the Not Listed option." };
+  }
+  if (!institution.campuses.includes(campusLocation)) {
+    return { error: "The selected campus does not belong to the selected institution." };
+  }
+  if (!institution.faculties.includes(faculty) && faculty !== OTHER_DEPARTMENT) {
+    return { error: "The selected faculty or school does not belong to the selected institution." };
+  }
+
+  return {
+    value: {
+      school: institution.name,
+      institutionId: institution.id,
+      campusLocation,
+      faculty,
+    },
+  };
+}
 
 router.get("/users/search", requireAuth, async (req, res): Promise<void> => {
   const parsed = SearchStudentsQueryParams.safeParse(req.query);
@@ -85,19 +320,62 @@ async function getPostCount(clerkUserId: string): Promise<number> {
 /** Strip expired promo badges (lazy check on any user read). Returns updated user. */
 async function expirePromoIfNeeded(user: typeof usersTable.$inferSelect): Promise<typeof usersTable.$inferSelect> {
   if (user.promoExpiresAt && user.promoExpiresAt < new Date()) {
-    const roleKeepsVerification = user.role === "ceo" || user.role === "admin";
-    const status = roleKeepsVerification
+    let status = user.role === "ceo" || user.role === "admin"
       ? "Premium_Approved"
-      : PENDING_VERIFICATION_STATUSES.includes(user.verificationStatus as typeof PENDING_VERIFICATION_STATUSES[number])
-        ? user.verificationStatus
-        : "none";
+      : user.verificationStatus;
+
+    if (
+      user.role !== "ceo" &&
+      user.role !== "admin" &&
+      (user.verificationStatus === "Student_Verified" ||
+        user.verificationStatus === "Premium_Approved")
+    ) {
+      const [badgeClaim] = await db
+        .select({ badgeClaimedAt: earlyBirdClaimsTable.badgeClaimedAt })
+        .from(earlyBirdClaimsTable)
+        .where(eq(earlyBirdClaimsTable.clerkUserId, user.clerkUserId))
+        .limit(1);
+
+      if (badgeClaim?.badgeClaimedAt) {
+        const packageType =
+          user.verificationStatus === "Student_Verified"
+            ? "student_verification"
+            : "premium_blue_tick";
+        const payments = await db
+          .select({
+            paidAt: paymentTransactionsTable.paidAt,
+            createdAt: paymentTransactionsTable.createdAt,
+            durationDays: paymentTransactionsTable.durationDays,
+            entitlementExpiresAt: paymentTransactionsTable.entitlementExpiresAt,
+          })
+          .from(paymentTransactionsTable)
+          .where(
+            and(
+              eq(paymentTransactionsTable.clerkUserId, user.clerkUserId),
+              eq(paymentTransactionsTable.packageType, packageType),
+              eq(paymentTransactionsTable.status, "paid"),
+            ),
+          );
+        const now = new Date();
+        const hasActivePaidBadge = payments.some((payment) => {
+          const expiresAt =
+            payment.entitlementExpiresAt ??
+            new Date(
+              (payment.paidAt ?? payment.createdAt).getTime() +
+                payment.durationDays * 24 * 60 * 60 * 1000,
+            );
+          return expiresAt > now;
+        });
+        if (!hasActivePaidBadge) status = "approved";
+      }
+    }
+
     const [updated] = await db
       .update(usersTable)
       .set({
         verificationStatus: status,
         premiumBadgeDiscountPercent: 0,
         promoExpiresAt: null,
-        hustlePromoExpiresAt: null,
       })
       .where(eq(usersTable.clerkUserId, user.clerkUserId))
       .returning();
@@ -106,7 +384,6 @@ async function expirePromoIfNeeded(user: typeof usersTable.$inferSelect): Promis
       verificationStatus: status,
       premiumBadgeDiscountPercent: 0,
       promoExpiresAt: null,
-      hustlePromoExpiresAt: null,
     };
   }
   return user;
@@ -125,36 +402,39 @@ router.get("/users/me", requireAuth, async (req, res): Promise<void> => {
     return;
   }
 
-  // Sync email from Clerk if DB email is missing/stale — enables CEO auto-detect
-  if (!user.email) {
-    try {
-      const clerkUser = await clerkClient.users.getUser(userId);
-      const clerkEmail = clerkUser.emailAddresses.find(
-        (e) => e.id === clerkUser.primaryEmailAddressId
-      )?.emailAddress?.trim().toLowerCase() ?? "";
-      if (clerkEmail) {
-        await db.update(usersTable).set({ email: clerkEmail }).where(eq(usersTable.clerkUserId, userId));
-        user = { ...user, email: clerkEmail };
-      }
-    } catch { /* non-fatal */ }
+  // Reconcile identity on login from Clerk's verified primary address, never the stored email.
+  let clerkIdentityFetched = false;
+  let verifiedPrimaryEmail: string | null = null;
+  try {
+    verifiedPrimaryEmail = await getVerifiedPrimaryEmail(userId);
+    clerkIdentityFetched = true;
+  } catch {
+    // Keep this read available during a Clerk outage, but do not grant privileges from stale email.
+  }
+  if (clerkIdentityFetched) {
+    const reconciled = await reconcileClerkIdentity(user, verifiedPrimaryEmail);
+    user = reconciled.user;
+    if (reconciled.emailConflict) {
+      res.status(409).json({
+        code: "EMAIL_CONFLICT",
+        error: "This verified email address is already registered to another account.",
+      });
+      return;
+    }
   }
 
-  if (user.email.trim().toLowerCase() === CEO_EMAIL && user.role !== "ceo") {
-    await db.update(usersTable).set({
-      role: "ceo",
-      isAdmin: true,
-      verificationStatus: "Premium_Approved",
-    }).where(eq(usersTable.clerkUserId, userId));
-    user = { ...user, role: "ceo", isAdmin: true, verificationStatus: "Premium_Approved" };
-  } else if (
-    (user.role === "ceo" || user.role === "admin") &&
-    user.verificationStatus !== "Premium_Approved"
-  ) {
-    await db.update(usersTable).set({ verificationStatus: "Premium_Approved" }).where(eq(usersTable.clerkUserId, userId));
-    user = { ...user, verificationStatus: "Premium_Approved" };
+  if (isPrivilegedRole(user.role) && user.verificationStatus !== "Premium_Approved") {
+    [user] = await db
+      .update(usersTable)
+      .set({ verificationStatus: "Premium_Approved" })
+      .where(eq(usersTable.clerkUserId, userId))
+      .returning();
   }
 
-  // Lazy expiry: strip promo badge if 30-day window has closed
+  await expirePaidBadgeEntitlement(userId);
+  // Reload because paid-badge expiration may have changed this profile.
+  [user] = await db.select().from(usersTable).where(eq(usersTable.clerkUserId, userId));
+  // Lazy expiry of the independent registration discount.
   user = await expirePromoIfNeeded(user);
 
   const postCount = await getPostCount(userId);
@@ -174,7 +454,7 @@ router.put("/users/me", requireAuth, async (req, res): Promise<void> => {
     return;
   }
 
-  const profileData = { ...parsed.data };
+  const profileData: Partial<typeof usersTable.$inferInsert> = { ...parsed.data };
   if (profileData.username !== undefined) {
     const username = profileData.username?.trim().toLowerCase() || null;
     if (username && !/^[a-z0-9_]{3,24}$/.test(username)) {
@@ -186,7 +466,7 @@ router.put("/users/me", requireAuth, async (req, res): Promise<void> => {
       const [duplicate] = await db.select({ id: usersTable.id }).from(usersTable)
         .where(and(sql`lower(${usersTable.username}) = ${username}`, ne(usersTable.clerkUserId, userId))).limit(1);
       if (duplicate) {
-        res.status(409).json({ error: "This username is already taken." });
+        res.status(409).json({ code: "USERNAME_CONFLICT", error: "This username is already taken." });
         return;
       }
     }
@@ -209,51 +489,90 @@ router.put("/users/me", requireAuth, async (req, res): Promise<void> => {
   let createdNewAccount = false;
   if (existing.length === 0) {
     // ── New registration ─────────────────────────────────────────
-    const data = parsed.data as any;
-    if (!data.fullName || data.level === undefined || !data.faculty || !data.enrollmentStatus || !data.matricNumber) {
+    const data = parsed.data;
+    if (
+      !data.fullName?.trim() ||
+      data.level === undefined ||
+      !data.faculty?.trim() ||
+      !data.enrollmentStatus?.trim() ||
+      !data.school?.trim() ||
+      !data.campusLocation?.trim()
+    ) {
       res.status(400).json({ error: "Missing required profile fields" });
       return;
     }
-    if (data.level === "" && decodeMatricEntryYear(data.matricNumber) === null) {
+
+    const scope = validateInstitutionScope(data.school, data.campusLocation, data.faculty);
+    if ("error" in scope) {
+      res.status(400).json({ error: scope.error });
+      return;
+    }
+    if (!scope.value.institutionId) {
+      res.status(400).json({ error: "Vote for your institution to be added before registering." });
+      return;
+    }
+    const matricVal = typeof data.matricNumber === "string"
+      ? normalizeMatricNumber(data.matricNumber)
+      : "";
+    if (scope.value.institutionId && !matricVal) {
+      res.status(400).json({ error: "Matriculation number is required for a listed institution." });
+      return;
+    }
+    if (data.level === "" && decodeMatricEntryYear(matricVal) === null) {
       res.status(400).json({ error: "Automatic level needs a matric number beginning with a valid two-digit entry year." });
       return;
     }
 
-    let emailVal: string = typeof data.email === "string" ? data.email.trim().toLowerCase() : "";
-    if (!emailVal) {
-      try {
-        const clerkUser = await clerkClient.users.getUser(userId);
-        emailVal = clerkUser.emailAddresses.find(
-          (e) => e.id === clerkUser.primaryEmailAddressId
-        )?.emailAddress?.trim().toLowerCase() ?? "";
-      } catch {
-        // Email is still protected by the database when available; Clerk lookup is best-effort.
-      }
+    let emailVal: string | null;
+    try {
+      emailVal = await getVerifiedPrimaryEmail(userId);
+    } catch {
+      res.status(503).json({ error: "Could not verify your primary email with Clerk. Please try again." });
+      return;
     }
-    const matricVal: string = data.matricNumber;
-
-    // ── Unique constraint: Matriculation Number ──────────────────
-    const [matricConflict] = await db
-      .select({ id: usersTable.id })
-      .from(usersTable)
-      .where(eq(usersTable.matricNumber, matricVal))
-      .limit(1);
-    if (matricConflict) {
-      res.status(409).json({ error: "This Matriculation Number is already registered to another account. Each student may only create one CampusX account." });
+    if (!emailVal) {
+      res.status(400).json({ error: "A verified primary Clerk email is required to register." });
       return;
     }
 
-    // ── Unique constraint: Email (skip empty string) ─────────────
-    if (emailVal) {
-      const [emailConflict] = await db
-        .select({ id: usersTable.id })
+    // ── Unique constraint: institution + normalized matric number ──
+    if (scope.value.institutionId && matricVal) {
+      const matricCandidates = await db
+        .select({
+          id: usersTable.id,
+          institutionId: usersTable.institutionId,
+          school: usersTable.school,
+        })
         .from(usersTable)
-        .where(sql`lower(${usersTable.email}) = ${emailVal}`)
-        .limit(1);
-      if (emailConflict) {
-        res.status(409).json({ error: "This email address is already registered to another account." });
+        .where(and(
+          or(eq(usersTable.institutionId, scope.value.institutionId), isNull(usersTable.institutionId)),
+          sql`lower(btrim(${usersTable.matricNumber})) = ${matricVal.toLowerCase()}`,
+        ));
+      const matricConflict = matricCandidates.some((candidate) =>
+        candidate.institutionId === scope.value.institutionId ||
+        (!candidate.institutionId && getInstitutionByName(candidate.school)?.id === scope.value.institutionId)
+      );
+      if (matricConflict) {
+        res.status(409).json({
+          code: "MATRIC_CONFLICT",
+          error: "This matriculation number is already registered at this institution.",
+        });
         return;
       }
+    }
+
+    // ── Unique constraint: verified primary email ─────────────────
+    const [emailConflict] = await db
+      .select({ id: usersTable.id })
+      .from(usersTable)
+      .where(sql`lower(btrim(${usersTable.email})) = ${emailVal}`)
+      .limit(1);
+    if (emailConflict) {
+      res.status(409).json({
+        code: "EMAIL_CONFLICT",
+        error: "This verified email address is already registered to another account.",
+      });
+      return;
     }
 
     const roleVal = emailVal === CEO_EMAIL ? "ceo" : "student";
@@ -269,18 +588,19 @@ router.put("/users/me", requireAuth, async (req, res): Promise<void> => {
           username: profileData.username ?? null,
           department: profileData.department ?? null,
           email: emailVal,
-          school: data.school || "Lagos State University (LASU)",
-          campusLocation: data.campusLocation || "Ojo",
+          institutionId: scope.value.institutionId,
+          school: scope.value.school,
+          campusLocation: scope.value.campusLocation,
           level: data.level,
-          faculty: data.faculty,
+          faculty: scope.value.faculty,
           enrollmentStatus: data.enrollmentStatus,
           matricNumber: matricVal,
-          campus: data.campus || "LASU Ojo",
+          campus: scope.value.campusLocation,
           bio: data.bio ?? null,
           avatarUrl: data.avatarUrl ?? null,
           role: roleVal,
           isAdmin: isAdminVal,
-          verificationStatus: isAdminVal ? "Premium_Approved" : "none",
+          verificationStatus: isAdminVal ? "Premium_Approved" : "approved",
         })
         .returning();
       createdNewAccount = true;
@@ -288,12 +608,18 @@ router.put("/users/me", requireAuth, async (req, res): Promise<void> => {
       // Catch any DB-level unique violations that slipped the pre-checks (race condition)
       if (err?.code === "23505") {
         const constraint = err?.constraint ?? "";
-        if (constraint.includes("matric")) {
-          res.status(409).json({ error: "This Matriculation Number is already registered to another account." });
+        if (constraint.includes("institution_matric") || constraint.includes("matric")) {
+          res.status(409).json({
+            code: "MATRIC_CONFLICT",
+            error: "This matriculation number is already registered at this institution.",
+          });
         } else if (constraint.includes("email")) {
-          res.status(409).json({ error: "This email address is already registered to another account." });
+          res.status(409).json({
+            code: "EMAIL_CONFLICT",
+            error: "This verified email address is already registered to another account.",
+          });
         } else if (constraint.includes("username")) {
-          res.status(409).json({ error: "This username is already taken." });
+          res.status(409).json({ code: "USERNAME_CONFLICT", error: "This username is already taken." });
         } else {
           res.status(409).json({ error: "An account with these details already exists." });
         }
@@ -309,7 +635,6 @@ router.put("/users/me", requireAuth, async (req, res): Promise<void> => {
       [user] = await db
         .update(usersTable)
         .set({
-          verificationStatus: isPrivilegedRole(user.role) ? "Premium_Approved" : "approved",
           premiumBadgeDiscountPercent: 100,
           promoExpiresAt,
           hustlePromoExpiresAt: promoExpiresAt,
@@ -319,25 +644,115 @@ router.put("/users/me", requireAuth, async (req, res): Promise<void> => {
     }
   } else {
     // ── Profile update (existing user) ─────────────────────────────
-    const nextLevel = parsed.data.level ?? existing[0].level;
-    const nextMatric = parsed.data.matricNumber ?? existing[0].matricNumber;
+    const current = existing[0];
+    const nextLevel = parsed.data.level ?? current.level;
+    const scopeSupplied =
+      parsed.data.school !== undefined ||
+      parsed.data.campusLocation !== undefined ||
+      parsed.data.faculty !== undefined;
+    const matricSupplied = parsed.data.matricNumber !== undefined;
+    const candidateMatric = matricSupplied
+      ? normalizeMatricNumber(parsed.data.matricNumber ?? "")
+      : current.matricNumber;
+    const nextMatric = scopeSupplied ? normalizeMatricNumber(candidateMatric) : candidateMatric;
     if (nextLevel === "" && decodeMatricEntryYear(nextMatric) === null) {
       res.status(400).json({ error: "Automatic level needs a matric number beginning with a valid two-digit entry year." });
       return;
     }
-    // If user is trying to change their matric number, check uniqueness
-    if (parsed.data.matricNumber && parsed.data.matricNumber !== existing[0].matricNumber) {
-      const [conflict] = await db
-        .select({ id: usersTable.id })
-        .from(usersTable)
-        .where(and(
-          eq(usersTable.matricNumber, parsed.data.matricNumber),
-          // exclude this user
-          sql`${usersTable.clerkUserId} != ${userId}`
-        ))
-        .limit(1);
-      if (conflict) {
-        res.status(409).json({ error: "This Matriculation Number is already registered to another account." });
+
+    let targetInstitutionId = current.institutionId ?? getInstitutionByName(current.school)?.id ?? null;
+    if (matricSupplied && targetInstitutionId && !nextMatric) {
+      res.status(400).json({ error: "Matriculation number is required for a listed institution." });
+      return;
+    }
+    if (scopeSupplied) {
+      const nextSchool = parsed.data.school ?? current.school;
+      const currentSchoolKey = current.institutionId
+        ?? getInstitutionByName(current.school)?.id
+        ?? (current.school.toLowerCase() === NOT_LISTED_SCHOOL.toLowerCase() ? NOT_LISTED_SCHOOL : current.school.trim().toLowerCase());
+      const requestedInstitution = nextSchool.toLowerCase() === NOT_LISTED_SCHOOL.toLowerCase()
+        ? null
+        : getInstitutionByName(nextSchool);
+      const nextSchoolKey = requestedInstitution?.id
+        ?? (nextSchool.toLowerCase() === NOT_LISTED_SCHOOL.toLowerCase() ? NOT_LISTED_SCHOOL : nextSchool.trim().toLowerCase());
+      if (
+        parsed.data.school !== undefined &&
+        currentSchoolKey !== nextSchoolKey &&
+        (parsed.data.campusLocation === undefined || parsed.data.faculty === undefined)
+      ) {
+        res.status(400).json({ error: "Select a campus and faculty/school when changing institutions." });
+        return;
+      }
+
+      const scope = validateInstitutionScope(
+        nextSchool,
+        parsed.data.campusLocation ?? current.campusLocation,
+        parsed.data.faculty ?? current.faculty,
+      );
+      if ("error" in scope) {
+        res.status(400).json({ error: scope.error });
+        return;
+      }
+      targetInstitutionId = scope.value.institutionId;
+      if (targetInstitutionId && !nextMatric) {
+        res.status(400).json({ error: "Matriculation number is required for a listed institution." });
+        return;
+      }
+      profileData.institutionId = targetInstitutionId;
+      profileData.school = scope.value.school;
+      profileData.campusLocation = scope.value.campusLocation;
+      profileData.faculty = scope.value.faculty;
+      profileData.campus = scope.value.campusLocation;
+    }
+
+    if (matricSupplied || scopeSupplied) {
+      profileData.matricNumber = nextMatric;
+      if (matricSupplied && current.institutionId !== targetInstitutionId) {
+        profileData.institutionId = targetInstitutionId;
+      }
+      if (targetInstitutionId && nextMatric) {
+        const matricCandidates = await db
+          .select({
+            id: usersTable.id,
+            institutionId: usersTable.institutionId,
+            school: usersTable.school,
+          })
+          .from(usersTable)
+          .where(and(
+            or(eq(usersTable.institutionId, targetInstitutionId), isNull(usersTable.institutionId)),
+            sql`lower(btrim(${usersTable.matricNumber})) = ${nextMatric.toLowerCase()}`,
+            ne(usersTable.clerkUserId, userId),
+          ));
+        const conflict = matricCandidates.some((candidate) =>
+          candidate.institutionId === targetInstitutionId ||
+          (!candidate.institutionId && getInstitutionByName(candidate.school)?.id === targetInstitutionId)
+        );
+        if (conflict) {
+          res.status(409).json({
+            code: "MATRIC_CONFLICT",
+            error: "This matriculation number is already registered at this institution.",
+          });
+          return;
+        }
+      }
+    }
+
+    // Client payloads cannot set email; reconcile it and CEO access from Clerk's verified primary address.
+    let clerkIdentityFetched = false;
+    let verifiedEmail: string | null = null;
+    try {
+      verifiedEmail = await getVerifiedPrimaryEmail(userId);
+      clerkIdentityFetched = true;
+    } catch {
+      // Existing users can still update non-email fields during a temporary Clerk outage.
+    }
+    if (clerkIdentityFetched) {
+      const reconciled = await reconcileClerkIdentity(current, verifiedEmail);
+      if (reconciled.emailConflict) {
+        res.status(409).json({
+          code: "EMAIL_CONFLICT",
+          error: "This verified email address is already registered to another account.",
+        });
         return;
       }
     }
@@ -349,19 +764,26 @@ router.put("/users/me", requireAuth, async (req, res): Promise<void> => {
         .where(eq(usersTable.clerkUserId, userId))
         .returning();
     } catch (error: any) {
-      if (error?.code === "23505" && error?.constraint?.includes("username")) {
-        res.status(409).json({ error: "This username is already taken." });
+      if (error?.code === "23505") {
+        const constraint = error?.constraint ?? "";
+        if (constraint.includes("institution_matric") || constraint.includes("matric")) {
+          res.status(409).json({
+            code: "MATRIC_CONFLICT",
+            error: "This matriculation number is already registered at this institution.",
+          });
+        } else if (constraint.includes("email")) {
+          res.status(409).json({
+            code: "EMAIL_CONFLICT",
+            error: "This verified email address is already registered to another account.",
+          });
+        } else if (constraint.includes("username")) {
+          res.status(409).json({ code: "USERNAME_CONFLICT", error: "This username is already taken." });
+        } else {
+          res.status(409).json({ error: "An account with these details already exists." });
+        }
         return;
       }
       throw error;
-    }
-
-    if (user.email.trim().toLowerCase() === CEO_EMAIL && user.role !== "ceo") {
-      [user] = await db
-        .update(usersTable)
-        .set({ role: "ceo", isAdmin: true, verificationStatus: "Premium_Approved" })
-        .where(eq(usersTable.clerkUserId, userId))
-        .returning();
     }
 
     if (isPrivilegedRole(user.role) && user.verificationStatus !== "Premium_Approved") {
@@ -385,64 +807,14 @@ router.put("/users/me", requireAuth, async (req, res): Promise<void> => {
   }));
 });
 
-router.post("/users/me/request-badge", requireAuth, async (req, res): Promise<void> => {
-  const userId = (req as any).userId as string;
-  const { badgeType } = req.body;
-
-  if (!badgeType || !["promo", "paid"].includes(badgeType)) {
-    res.status(400).json({ error: "Invalid badgeType. Must be 'promo' or 'paid'" });
-    return;
-  }
-
-  const [user] = await db
-    .select()
-    .from(usersTable)
-    .where(eq(usersTable.clerkUserId, userId));
-
-  if (!user) {
-    res.status(404).json({ error: "Profile not found" });
-    return;
-  }
-
-  if (isPrivilegedRole(user.role)) {
-    const verificationStatus = "Premium_Approved";
-    if (user.verificationStatus !== verificationStatus) {
-      await db.update(usersTable).set({ verificationStatus }).where(eq(usersTable.clerkUserId, userId));
-    }
-    res.json({ success: true, verificationStatus });
-    return;
-  }
-  if (user.promoExpiresAt && user.promoExpiresAt < new Date()) {
-    await db
-      .update(usersTable)
-      .set({
-        verificationStatus: "none",
-        premiumBadgeDiscountPercent: 0,
-        promoExpiresAt: null,
-        hustlePromoExpiresAt: null,
-      })
-      .where(eq(usersTable.clerkUserId, userId));
-  }
-
-  if (badgeType === "promo") {
-    const promoActive = !!user.promoExpiresAt && user.promoExpiresAt >= new Date() && user.premiumBadgeDiscountPercent === 100;
-    if (!promoActive) {
-      res.status(402).json({ error: "The free early-bird promotion is unavailable. Please use a standard paid verification tier." });
-      return;
-    }
-  }
-
-  const verificationStatus = badgeType === "paid" ? "pending_paid" : "approved";
-
-  await db
-    .update(usersTable)
-    .set({ verificationStatus })
-    .where(eq(usersTable.clerkUserId, userId));
-
-  res.json({ success: true, verificationStatus });
+router.post("/users/me/request-badge", requireAuth, async (_req, res): Promise<void> => {
+  res.status(410).json({
+    code: "BADGE_CHECKOUT_REQUIRED",
+    error: "This badge endpoint is retired. Start verification through /payments/initialize.",
+  });
 });
 
-router.get("/users/:userId/posts", async (req, res): Promise<void> => {
+router.get("/users/:userId/posts", requireAuth, async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.userId) ? req.params.userId[0] : req.params.userId;
   const params = GetUserPostsParams.safeParse({ userId: raw });
   if (!params.success) {
@@ -450,8 +822,21 @@ router.get("/users/:userId/posts", async (req, res): Promise<void> => {
     return;
   }
 
-  const clerkUserId = getAuth(req).userId ?? undefined;
+  const clerkUserId = getAuth(req).userId;
+  if (!clerkUserId) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
   const { userId } = params.data;
+  const readAccess = await resolveProfileReadAccess(req, clerkUserId, userId);
+  if (!readAccess) {
+    res.status(403).json({ error: "You can only view profiles in your school and campus." });
+    return;
+  }
+  const scopeFilters = readAccess.unrestricted ? [] : [
+    schoolScopeCondition(usersTable.institutionId, usersTable.school, readAccess.viewer),
+    campusScopeCondition(usersTable.campusLocation, readAccess.viewer.campusLocation),
+  ];
   const limit = Number(req.query.limit) || 50;
   const offset = Number(req.query.offset) || 0;
 
@@ -491,12 +876,19 @@ router.get("/users/:userId/posts", async (req, res): Promise<void> => {
       opAuthorVerificationStatus: ouAlias.verificationStatus,
       opAuthorRole: ouAlias.role,
       opIsAnonymous: opAlias.isAnonymous,
+      opAuthorInstitutionId: ouAlias.institutionId,
+      opAuthorSchool: ouAlias.school,
+      opAuthorCampusLocation: ouAlias.campusLocation,
     })
     .from(postsTable)
     .leftJoin(usersTable, eq(postsTable.authorId, usersTable.clerkUserId))
     .leftJoin(opAlias, eq(postsTable.originalPostId, opAlias.id))
     .leftJoin(ouAlias, eq(opAlias.authorId, ouAlias.clerkUserId))
-    .where(and(eq(postsTable.authorId, userId), eq(postsTable.isAnonymous, false)))
+    .where(and(
+      eq(postsTable.authorId, userId),
+      eq(postsTable.isAnonymous, false),
+      ...scopeFilters,
+    ))
     .orderBy(desc(postsTable.isPinnedToProfile), desc(postsTable.createdAt))
     .limit(limit)
     .offset(offset);
@@ -504,7 +896,12 @@ router.get("/users/:userId/posts", async (req, res): Promise<void> => {
   const [{ count }] = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(postsTable)
-    .where(and(eq(postsTable.authorId, userId), eq(postsTable.isAnonymous, false)));
+    .innerJoin(usersTable, eq(postsTable.authorId, usersTable.clerkUserId))
+    .where(and(
+      eq(postsTable.authorId, userId),
+      eq(postsTable.isAnonymous, false),
+      ...scopeFilters,
+    ));
 
   const publicPolls = await loadPublicPolls(posts.map((post) => post.originalPostId ?? post.id), clerkUserId);
   const postsWithReactions = await Promise.all(
@@ -534,9 +931,26 @@ router.get("/users/:userId/posts", async (req, res): Promise<void> => {
         authorMatricNumber,
         opId, opAuthorId, opContent, opImageUrl, opCreatedAt,
         opAuthorName, opAuthorAvatarUrl, opAuthorVerificationStatus,
-        opAuthorRole, opIsAnonymous,
+        opAuthorRole, opIsAnonymous, opAuthorInstitutionId, opAuthorSchool,
+        opAuthorCampusLocation,
         ...publicFields
       } = post;
+      const originalAuthorScope = opAuthorSchool && opAuthorCampusLocation
+        ? {
+            institutionId: opAuthorInstitutionId,
+            school: opAuthorSchool,
+            campusLocation: opAuthorCampusLocation,
+          }
+        : null;
+      const canViewOriginal = Boolean(
+        opId != null &&
+          opAuthorId != null &&
+          (readAccess.unrestricted ||
+            opAuthorId === clerkUserId ||
+            (originalAuthorScope &&
+              profilesShareSchool(readAccess.viewer, originalAuthorScope) &&
+              profilesShareCampus(readAccess.viewer, originalAuthorScope))),
+      );
 
       return {
         ...publicFields,
@@ -552,11 +966,13 @@ router.get("/users/:userId/posts", async (req, res): Promise<void> => {
         authorIsVerified: isVerifiedAccount(post.authorVerificationStatus, role),
         authorVerificationStatus: publicVerificationStatus(post.authorVerificationStatus, role),
         isAnonymous: post.isAnonymous ?? false,
-        poll: publicPolls.get(post.originalPostId ?? post.id) ?? null,
+        poll: post.originalPostId == null || canViewOriginal
+          ? publicPolls.get(post.originalPostId ?? post.id) ?? null
+          : null,
         commentsCount: commentsCount ?? 0,
         reshareCount: post.reshareCount ?? 0,
-        originalPostId: post.originalPostId ?? null,
-        originalPost: post.opId != null ? publicEmbeddedPost({
+        originalPostId: canViewOriginal ? post.originalPostId ?? null : null,
+        originalPost: canViewOriginal && post.opId != null ? publicEmbeddedPost({
           id: post.opId,
           authorId: post.opAuthorId ?? "",
           authorName: post.opAuthorName ?? "Unknown",
@@ -580,7 +996,7 @@ router.get("/users/:userId/posts", async (req, res): Promise<void> => {
   res.json(GetUserPostsResponse.parse({ posts: postsWithReactions, total: count, nextCursor: null }));
 });
 
-router.get("/users/:userId/services", async (req, res): Promise<void> => {
+router.get("/users/:userId/services", requireAuth, async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.userId) ? req.params.userId[0] : req.params.userId;
   const params = GetUserServicesParams.safeParse({ userId: raw });
   if (!params.success) {
@@ -588,8 +1004,21 @@ router.get("/users/:userId/services", async (req, res): Promise<void> => {
     return;
   }
 
-  const clerkUserId = getAuth(req).userId ?? undefined;
+  const clerkUserId = getAuth(req).userId;
+  if (!clerkUserId) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
   const { userId } = params.data;
+  const readAccess = await resolveProfileReadAccess(req, clerkUserId, userId);
+  if (!readAccess) {
+    res.status(403).json({ error: "You can only view profiles in your school and campus." });
+    return;
+  }
+  const scopeFilters = readAccess.unrestricted ? [] : [
+    schoolScopeCondition(usersTable.institutionId, usersTable.school, readAccess.viewer),
+    campusScopeCondition(usersTable.campusLocation, readAccess.viewer.campusLocation),
+  ];
   const limit = Number(req.query.limit) || 50;
   const offset = Number(req.query.offset) || 0;
 
@@ -626,6 +1055,7 @@ router.get("/users/:userId/services", async (req, res): Promise<void> => {
       eq(servicesTable.providerId, userId),
       eq(servicesTable.isActive, true),
       sql`(${servicesTable.isFlashSale} = false OR ${servicesTable.flashExpiresAt} > ${new Date()})`,
+      ...scopeFilters,
     ))
     .orderBy(desc(servicesTable.isPinnedToProfile), desc(servicesTable.createdAt))
     .limit(limit)
@@ -634,10 +1064,12 @@ router.get("/users/:userId/services", async (req, res): Promise<void> => {
   const [{ count }] = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(servicesTable)
+    .innerJoin(usersTable, eq(servicesTable.providerId, usersTable.clerkUserId))
     .where(and(
       eq(servicesTable.providerId, userId),
       eq(servicesTable.isActive, true),
       sql`(${servicesTable.isFlashSale} = false OR ${servicesTable.flashExpiresAt} > ${new Date()})`,
+      ...scopeFilters,
     ));
 
   const enriched = await Promise.all(services.map(async (s) => {
@@ -664,6 +1096,7 @@ router.get("/users/:userId/services", async (req, res): Promise<void> => {
     };
   }));
 
+  res.setHeader("Cache-Control", "private, no-store");
   res.json(GetUserServicesResponse.parse({ services: enriched, total: count, nextCursor: null }));
 });
 
@@ -675,33 +1108,37 @@ router.get("/users/:userId", async (req, res): Promise<void> => {
     return;
   }
 
-  const [user] = await db
-    .select({
-      id: usersTable.id,
-      clerkUserId: usersTable.clerkUserId,
-      fullName: usersTable.fullName,
-      username: usersTable.username,
-      department: usersTable.department,
-      school: usersTable.school,
-      campusLocation: usersTable.campusLocation,
-      level: usersTable.level,
-      faculty: usersTable.faculty,
-      enrollmentStatus: usersTable.enrollmentStatus,
-      campus: usersTable.campus,
-      bio: usersTable.bio,
-      avatarUrl: usersTable.avatarUrl,
-      matricNumber: usersTable.matricNumber,
-      role: usersTable.role,
-      verificationStatus: usersTable.verificationStatus,
-    })
+  await expirePaidBadgeEntitlement(params.data.userId);
+  let [profile] = await db
+    .select()
     .from(usersTable)
-    .where(eq(usersTable.clerkUserId, params.data.userId));
+    .where(eq(usersTable.clerkUserId, params.data.userId))
+    .limit(1);
 
-  if (!user) {
+  if (!profile) {
     res.status(404).json({ error: "User not found" });
     return;
   }
 
+  profile = await expirePromoIfNeeded(profile);
+  const user = {
+    id: profile.id,
+    clerkUserId: profile.clerkUserId,
+    fullName: profile.fullName,
+    username: profile.username,
+    department: profile.department,
+    school: profile.school,
+    campusLocation: profile.campusLocation,
+    level: profile.level,
+    faculty: profile.faculty,
+    enrollmentStatus: profile.enrollmentStatus,
+    campus: profile.campus,
+    bio: profile.bio,
+    avatarUrl: profile.avatarUrl,
+    matricNumber: profile.matricNumber,
+    role: profile.role,
+    verificationStatus: profile.verificationStatus,
+  };
   const { matricNumber, ...publicUser } = user;
   const postCount = await getPostCount(user.clerkUserId);
   const campusTitle = computeCampusTitle(user.role ?? "student", postCount);

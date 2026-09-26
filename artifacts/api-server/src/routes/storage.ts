@@ -6,8 +6,11 @@ import {
 } from "@workspace/api-zod";
 import { ObjectStorageService, ObjectNotFoundError } from "../lib/objectStorage";
 import { ObjectPermission } from "../lib/objectAcl";
-import { db, uploadedMediaTable } from "@workspace/db";
+import { db, matricClaimsTable, uploadedMediaTable } from "@workspace/db";
+import { and, eq } from "drizzle-orm";
 import { requireAuth } from "../middlewares/auth";
+import { getAuth } from "@clerk/express";
+import { hasAdminPrivileges } from "../lib/privilege";
 
 const router: IRouter = Router();
 const objectStorageService = new ObjectStorageService();
@@ -104,6 +107,39 @@ router.get("/storage/objects/*path", async (req: Request, res: Response) => {
     const raw = req.params.path;
     const wildcardPath = Array.isArray(raw) ? raw.join("/") : raw;
     const objectPath = `/objects/${wildcardPath}`;
+    let isClaimEvidence = false;
+    const [claimUpload] = await db
+      .select({
+        uploaderId: uploadedMediaTable.uploaderId,
+      })
+      .from(uploadedMediaTable)
+      .where(and(
+        eq(uploadedMediaTable.objectPath, objectPath),
+        eq(uploadedMediaTable.purpose, "matric-claim-evidence"),
+      ))
+      .limit(1);
+    if (claimUpload) {
+      isClaimEvidence = true;
+      const requesterId = ((req as any).userId ?? getAuth(req)?.userId) as string | undefined;
+      if (!requesterId) {
+        res.status(401).json({ error: "Unauthorized" });
+        return;
+      }
+      (req as Request & { userId?: string }).userId = requesterId;
+      const [linkedClaim] = await db
+        .select({ claimantClerkId: matricClaimsTable.claimantClerkId })
+        .from(matricClaimsTable)
+        .where(eq(matricClaimsTable.evidenceObjectPath, objectPath))
+        .limit(1);
+      const isAdmin = await hasAdminPrivileges(req);
+      const isClaimant = linkedClaim
+        ? linkedClaim.claimantClerkId === requesterId
+        : claimUpload.uploaderId === requesterId;
+      if (!isAdmin && !isClaimant) {
+        res.status(403).json({ error: "Forbidden" });
+        return;
+      }
+    }
     const objectFile = await objectStorageService.getObjectEntityFile(objectPath);
 
     // --- Protected route example (uncomment when using replit-auth) ---
@@ -125,6 +161,11 @@ router.get("/storage/objects/*path", async (req: Request, res: Response) => {
 
     res.status(response.status);
     response.headers.forEach((value, key) => res.setHeader(key, value));
+    if (isClaimEvidence) {
+      res.setHeader("Content-Disposition", 'attachment; filename="claim-evidence"');
+      res.setHeader("X-Content-Type-Options", "nosniff");
+      res.setHeader("Cache-Control", "private, no-store");
+    }
 
     if (response.body) {
       const nodeStream = Readable.fromWeb(response.body as ReadableStream<Uint8Array>);

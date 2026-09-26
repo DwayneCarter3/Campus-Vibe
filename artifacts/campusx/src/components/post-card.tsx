@@ -41,6 +41,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { AvatarModal } from "@/components/avatar-modal";
 import { UserVerificationMarks } from "@/components/user-verification-marks";
+import { VerificationBadge } from "@/components/verification-badge";
 import { getPostCategoryMeta } from "@/components/post-categories";
 import { PollCard } from "@/components/poll-card";
 import { useToast } from "@/hooks/use-toast";
@@ -279,12 +280,17 @@ export function PostCard({ post, isAdmin, isModerator, moderationMode = false, o
                   <Ghost className="h-5 w-5 text-violet-200" aria-hidden="true" />
                 </div>
               ) : (
-                <Avatar className="cursor-pointer border border-white/10 hover:border-primary/50 transition-colors shrink-0 h-10 w-10">
-                  <AvatarImage src={authorAvatarUrl || undefined} />
-                  <AvatarFallback className="text-sm gradient-text font-bold">
-                    {authorName.charAt(0)}
-                  </AvatarFallback>
-                </Avatar>
+                <span className="relative inline-flex shrink-0">
+                  <Avatar className="cursor-pointer border border-white/10 hover:border-primary/50 transition-colors shrink-0 h-10 w-10">
+                    <AvatarImage src={authorAvatarUrl || undefined} />
+                    <AvatarFallback className="text-sm gradient-text font-bold">
+                      {authorName.charAt(0)}
+                    </AvatarFallback>
+                  </Avatar>
+                  {post.authorVerificationStatus === "Student_Verified" && (
+                    <VerificationBadge type="green-circle" className="absolute -right-0.5 -bottom-0.5 bg-background rounded-full ring-2 ring-background text-[11px]" />
+                  )}
+                </span>
               )}
             </AvatarWrapper>
 
@@ -301,7 +307,7 @@ export function PostCard({ post, isAdmin, isModerator, moderationMode = false, o
                       ) : (
                         <span className="font-semibold text-muted-foreground">{authorName}</span>
                       )}
-                      {!isAnon && <UserVerificationMarks status={post.authorVerificationStatus} />}
+                      {!isAnon && <UserVerificationMarks status={post.authorVerificationStatus} role={post.authorRole} />}
                     </span>
                     {!isAnon && (
                       <Badge variant="outline" className="h-5 px-1.5 text-[10px] border-white/15 text-muted-foreground">

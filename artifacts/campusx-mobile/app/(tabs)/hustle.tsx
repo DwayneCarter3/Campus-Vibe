@@ -285,7 +285,7 @@ function ServiceCard({
           <View>
             <View style={{ flexDirection: "row", alignItems: "center" }}>
               <Text style={[styles.authorName, { color: colors.foreground }]} numberOfLines={1}>{service.providerName}</Text>
-              <UserVerificationMarks status={service.providerVerificationStatus} />
+              <UserVerificationMarks status={service.providerVerificationStatus} role={service.providerRole} />
             </View>
             <Text style={[styles.priceText, { color: colors.mutedForeground }]}>{service.providerLevel}</Text>
             {service.isFlashSale && service.price && service.originalPrice && service.flashExpiresAt ? (

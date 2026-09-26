@@ -13,12 +13,13 @@ export const usersTable = pgTable(
     username: text("username"),
     department: text("department"),
     email: text("email").notNull().default(""),
+    institutionId: text("institution_id"),
     school: text("school").notNull().default("Lagos State University (LASU)"),
     campusLocation: text("campus_location").notNull().default("Ojo"),
     level: text("level").notNull(),
     faculty: text("faculty").notNull(),
     enrollmentStatus: text("enrollment_status").notNull(),
-    matricNumber: text("matric_number").notNull().unique(), // DB-level unique constraint
+    matricNumber: text("matric_number").notNull(),
     campus: text("campus").notNull().default("LASU Ojo"),
     bio: text("bio"),
     avatarUrl: text("avatar_url"),
@@ -34,7 +35,13 @@ export const usersTable = pgTable(
   (table) => [
     // Partial unique index: only enforce email uniqueness when email is non-empty
     // (new users may register without email; empty string is allowed multiple times)
-    uniqueIndex("users_email_nonempty_unique").on(sql`lower(${table.email})`).where(sql`${table.email} != ''`),
+    uniqueIndex("users_email_nonempty_unique").on(sql`lower(btrim(${table.email}))`).where(sql`btrim(${table.email}) <> ''`),
+    uniqueIndex("users_institution_matric_unique")
+      .on(
+        sql`coalesce(${table.institutionId}, regexp_replace(regexp_replace(lower(btrim(${table.school})), ' *[(][^)]*[)] *$', ''), '[^a-z0-9]+', '-', 'g'))`,
+        sql`lower(btrim(${table.matricNumber}))`,
+      )
+      .where(sql`btrim(${table.matricNumber}) <> ''`),
     uniqueIndex("users_username_nonempty_unique").on(sql`lower(${table.username})`).where(sql`${table.username} IS NOT NULL AND ${table.username} != ''`),
   ]
 );

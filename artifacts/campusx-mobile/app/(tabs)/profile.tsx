@@ -31,12 +31,14 @@ import {
   useUpdateMyProfile,
   useRequestUploadUrl,
   useInitializePayment,
+  useListPaymentProducts,
 } from "@workspace/api-client-react";
 import type { PaymentPackage, UpdateProfileBodyLevel } from "@workspace/api-client-react";
 import { useColors } from "@/hooks/useColors";
 import * as ImagePicker from "expo-image-picker";
 import { PRIVACY_POLICY, TERMS_OF_SERVICE } from "@/constants/legal";
 import { UserVerificationMarks } from "@/components/UserVerificationMarks";
+import { VerificationBadge } from "@/components/VerificationBadge";
 
 const CEO_EMAIL = "dwaynecartergabriel@gmail.com";
 const ACADEMIC_LEVELS = ["100L", "200L", "300L", "400L", "500L", "Alumni/Postgrad"] as const;
@@ -62,6 +64,7 @@ export default function ProfileScreen() {
     query: { queryKey: getGetMyProfileQueryKey() },
   });
   const initializePayment = useInitializePayment();
+  const { data: paymentCatalog, isLoading: paymentProductsLoading, isError: paymentProductsError } = useListPaymentProducts();
   const updateProfile = useUpdateMyProfile();
   const requestUploadUrl = useRequestUploadUrl();
 
@@ -98,7 +101,13 @@ export default function ProfileScreen() {
             await Linking.openURL(result.authorizationUrl);
             return;
           }
-          Alert.alert("Benefit active", result.message ?? "Your CampusX benefit is now active.");
+          const isBadge = packageType === "student_verification" || packageType === "premium_blue_tick";
+          Alert.alert(
+            isBadge ? "Verification request received" : "Benefit active",
+            isBadge
+              ? "Badge activation requires campus admin review. No badge is granted by this screen."
+              : result.message ?? "Your CampusX benefit is now active.",
+          );
         },
         onError: () => Alert.alert("Error", "Could not start payment. Try again."),
       },
@@ -245,12 +254,15 @@ export default function ProfileScreen() {
                 <Feather name="camera" size={9} color={colors.mutedForeground} />
               </View>
             )}
+            {!isAvatarUploading && verificationStatus === "Student_Verified" && (
+              <VerificationBadge type="green-circle" fontSize={18} placement="avatar" />
+            )}
           </TouchableOpacity>
 
           {/* Public identity markers only */}
           <View style={{ flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 5, marginBottom: 6 }}>
             <Text style={[styles.profileName, { color: colors.foreground, marginBottom: 0 }]}>{displayName}</Text>
-            <UserVerificationMarks status={verificationStatus} />
+            <UserVerificationMarks status={verificationStatus} role={profile?.role} />
           </View>
 
           {profile && (
@@ -329,12 +341,9 @@ export default function ProfileScreen() {
           );
         })()}
 
-        {/* ── Verified Student Badge Section ─────────── */}
+        {/* ── Verification status ─────────── */}
         {hasMatric && !isVerified && !isPremium && (
-          <TouchableOpacity
-            activeOpacity={badgePending ? 1 : 0.75}
-            onPress={badgePending ? undefined : () => startPayment("student_verification")}
-            disabled={initializePayment.isPending || badgePending}
+          <View
             style={[
               styles.actionCard,
               {
@@ -347,43 +356,21 @@ export default function ProfileScreen() {
               <Feather name="star" size={16} color="#38BDF8" />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={[styles.actionTitle, { color: "#BAE6FD" }]}>Verified Student Badge</Text>
+              <Text style={[styles.actionTitle, { color: "#BAE6FD" }]}>Student verification</Text>
               <Text style={[styles.actionSub, { color: colors.mutedForeground }]}>
                 {badgePending
                   ? "Your request is pending admin review ⏳"
-                  : profile?.promoExpiresAt
-                    ? "Tap to claim your free launch badge"
-                    : "Launch perk ended — verify for ₦1,500"}
+                  : "Choose a verification plan below. Paid and early-bird badge requests require admin review."}
               </Text>
             </View>
-            {initializePayment.isPending ? (
-              <ActivityIndicator size="small" color="#38BDF8" />
-            ) : badgePending ? (
+            {badgePending ? (
               <View style={[styles.pendingPill, { backgroundColor: "#F59E0B20", borderColor: "#F59E0B40" }]}>
                 <Text style={[styles.pendingPillText, { color: "#F59E0B" }]}>Pending</Text>
               </View>
             ) : (
-              <Feather name="chevron-right" size={16} color="#38BDF8" />
+              <Feather name="info" size={16} color="#38BDF8" />
             )}
-          </TouchableOpacity>
-        )}
-
-        {hasMatric && !isVerified && !isPremium && !badgePending && (
-          <TouchableOpacity
-            activeOpacity={0.8}
-            onPress={() => startPayment("premium_blue_tick")}
-            disabled={initializePayment.isPending}
-            style={[styles.actionCard, { backgroundColor: "#2563EB12", borderColor: "#3B82F680" }]}
-          >
-            <View style={[styles.actionIconBox, { backgroundColor: "#2563EB20", borderColor: "#3B82F660" }]}>
-              <Feather name="star" size={16} color="#93C5FD" />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.actionTitle, { color: "#BFDBFE" }]}>Premium Blue Tick · ₦5,000</Text>
-              <Text style={[styles.actionSub, { color: colors.mutedForeground }]}>Payment is reviewed by a campus admin before activation.</Text>
-            </View>
-            <Feather name="chevron-right" size={16} color="#93C5FD" />
-          </TouchableOpacity>
+          </View>
         )}
 
         {/* Already verified banner */}
@@ -423,23 +410,67 @@ export default function ProfileScreen() {
           </View>
         )}
 
-        {myServices.length > 0 && (
-          <TouchableOpacity
-            activeOpacity={0.8}
-            onPress={() => startPayment("marketplace_promotion")}
-            disabled={initializePayment.isPending}
-            style={[styles.actionCard, { backgroundColor: "#8B5CF612", borderColor: "#8B5CF650" }]}
-          >
-            <View style={[styles.actionIconBox, { backgroundColor: "#8B5CF620", borderColor: "#8B5CF650" }]}>
-              <Feather name="trending-up" size={16} color="#C4B5FD" />
+        <View style={[styles.actionCard, { backgroundColor: colors.card, borderColor: colors.border, alignItems: "stretch" }]}>
+            <View style={{ marginBottom: 4 }}>
+              <Text style={[styles.actionTitle, { color: colors.foreground }]}>Verification, boosts &amp; ads</Text>
+              <Text style={[styles.actionSub, { color: colors.mutedForeground }]}>
+                Fixed-duration plans. Renew manually after expiry; there is no auto-billing.
+              </Text>
             </View>
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.actionTitle, { color: "#DDD6FE" }]}>Promote your Hustle · ₦1,500</Text>
-              <Text style={[styles.actionSub, { color: colors.mutedForeground }]}>Boost marketplace visibility for 30 days.</Text>
-            </View>
-            <Feather name="chevron-right" size={16} color="#C4B5FD" />
-          </TouchableOpacity>
-        )}
+            {paymentProductsLoading && <ActivityIndicator color={colors.primary} />}
+            {paymentProductsError && (
+              <Text accessibilityRole="alert" style={[styles.actionSub, { color: colors.accent }]}>
+                Could not load current prices. Please try again later.
+              </Text>
+            )}
+            {paymentCatalog?.products.map((product) => {
+              const isBadge = product.packageType === "student_verification" || product.packageType === "premium_blue_tick";
+              const eligibleFreeStudent =
+                product.packageType === "student_verification" &&
+                (profile?.registrationRank ?? 0) <= 100 &&
+                !!profile?.promoExpiresAt &&
+                new Date(profile.promoExpiresAt) > new Date();
+              const basePrice = (product.baseAmountKobo / 100).toLocaleString("en-NG", { maximumFractionDigits: 2 });
+              const payablePrice = (product.amountKobo / 100).toLocaleString("en-NG", { maximumFractionDigits: 2 });
+              const planTitle = eligibleFreeStudent
+                ? `FREE Student Verified · ${product.durationDays} days`
+                : product.packageType === "student_verification"
+                  ? "Green Tick"
+                  : product.packageType === "premium_blue_tick"
+                    ? "Premium Blue Tick"
+                    : product.label;
+              return (
+                <TouchableOpacity
+                  key={product.packageType}
+                  activeOpacity={0.8}
+                  onPress={() => startPayment(product.packageType)}
+                  disabled={initializePayment.isPending || (isBadge && !hasMatric)}
+                  style={[styles.actionCard, { backgroundColor: colors.surface, borderColor: colors.border, marginHorizontal: -6, marginVertical: 4 }]}
+                >
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.actionTitle, { color: colors.foreground }]}>
+                      {planTitle}{!eligibleFreeStudent ? ` · ₦${basePrice} / ${product.durationDays} days` : ""}
+                    </Text>
+                    <Text style={[styles.actionSub, { color: colors.mutedForeground }]}>
+                      {eligibleFreeStudent
+                        ? `First-100 claim cap applies; if no free claim remains, customer total is ₦${payablePrice}. Badge requests need admin review.`
+                        : `Paystack customer total ₦${payablePrice}. ${isBadge ? "Admin review required. " : ""}Manual renewal only.`}
+                    </Text>
+                    {isBadge && !hasMatric && (
+                      <Text style={[styles.actionSub, { color: colors.accent }]}>
+                        Add your matric number before requesting verification.
+                      </Text>
+                    )}
+                  </View>
+                  {initializePayment.isPending ? (
+                    <ActivityIndicator size="small" color={colors.primary} />
+                  ) : (
+                    <Feather name="chevron-right" size={16} color={colors.primary} />
+                  )}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
 
         <View style={[styles.settingsCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <View style={styles.settingsHeader}>

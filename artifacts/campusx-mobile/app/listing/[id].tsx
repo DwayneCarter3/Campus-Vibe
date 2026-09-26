@@ -43,7 +43,7 @@ export default function ListingDetailsScreen() {
             <View style={{ flex: 1 }}>
               <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
                 <Text style={[styles.providerName, { color: colors.foreground }]}>{service.providerName}</Text>
-                <UserVerificationMarks status={service.providerVerificationStatus} />
+                <UserVerificationMarks status={service.providerVerificationStatus} role={service.providerRole} />
               </View>
               <Text style={[styles.bodySmall, { color: colors.mutedForeground }]}>{service.providerLevel}</Text>
             </View>

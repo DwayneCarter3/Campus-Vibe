@@ -758,14 +758,46 @@ export interface SetUserVerificationResponse {
   verificationStatus: string;
 }
 
+/**
+ * Stable product identifier accepted by POST /payments/initialize.
+ */
 export type PaymentPackage =
   (typeof PaymentPackage)[keyof typeof PaymentPackage];
 
 export const PaymentPackage = {
   student_verification: "student_verification",
   premium_blue_tick: "premium_blue_tick",
-  marketplace_promotion: "marketplace_promotion",
+  marketplace_promotion_3_day: "marketplace_promotion_3_day",
+  marketplace_promotion_7_day: "marketplace_promotion_7_day",
+  marketplace_promotion_30_day: "marketplace_promotion_30_day",
+  event_performance_ad_30_day: "event_performance_ad_30_day",
+  corporate_ad_30_day: "corporate_ad_30_day",
 } as const;
+
+export interface PaymentProduct {
+  packageType: PaymentPackage;
+  label: string;
+  /** Fixed entitlement duration; entitlements are manually renewed. */
+  durationDays: number;
+  /** Listed product price in kobo. */
+  baseAmountKobo: number;
+  /** Paystack amount including customer-paid processing fee. */
+  amountKobo: number;
+}
+
+export type PaymentProductsResponseCurrency =
+  (typeof PaymentProductsResponseCurrency)[keyof typeof PaymentProductsResponseCurrency];
+
+export const PaymentProductsResponseCurrency = {
+  NGN: "NGN",
+} as const;
+
+export interface PaymentProductsResponse {
+  currency: PaymentProductsResponseCurrency;
+  /** Processing-fee and merchant checkout-configuration disclosure. */
+  feeDisclosure: string;
+  products: PaymentProduct[];
+}
 
 export interface InitializePaymentBody {
   packageType: PaymentPackage;
@@ -782,6 +814,8 @@ export interface InitializePaymentResponse {
   accessCode?: string | null;
   baseAmountKobo?: number;
   amountKobo?: number;
+  durationDays?: number;
+  packageType?: PaymentPackage;
   label?: string;
 }
 
@@ -789,18 +823,38 @@ export interface PaymentStatusResponse {
   reference: string;
   status: string;
   packageType: PaymentPackage;
+  durationDays: number;
+  /** Listed product price in kobo. */
+  baseAmountKobo: number;
+  /** Customer-payable amount including Paystack fee. */
+  amountKobo: number;
+  /** @nullable */
+  entitlementExpiresAt: string | null;
 }
 
 export interface PaymentHistoryItem {
   reference: string;
   packageType: PaymentPackage;
   status: string;
+  /** Customer-payable amount including Paystack fee. */
   amountKobo: number;
+  /** Listed product price in kobo. */
+  baseAmountKobo: number;
   createdAt: string;
+  durationDays: number;
+  /** @nullable */
+  entitlementExpiresAt: string | null;
 }
 
 export interface ListPaymentsResponse {
   payments: PaymentHistoryItem[];
+}
+
+/**
+ * Paystack-signed event payload; charge.success is reconciled against the saved amount, currency, reference, and customer.
+ */
+export interface PaystackWebhookInput {
+  [key: string]: unknown;
 }
 
 export interface ConversationSummary {
@@ -897,6 +951,331 @@ export interface ListMessagesResponse {
   total: number;
 }
 
+export type MatricClaimEvidenceUploadRequestContentType =
+  (typeof MatricClaimEvidenceUploadRequestContentType)[keyof typeof MatricClaimEvidenceUploadRequestContentType];
+
+export const MatricClaimEvidenceUploadRequestContentType = {
+  "application/pdf": "application/pdf",
+  "image/jpeg": "image/jpeg",
+  "image/png": "image/png",
+  "image/webp": "image/webp",
+} as const;
+
+export type MatricClaimEvidenceUploadRequestDocumentType =
+  (typeof MatricClaimEvidenceUploadRequestDocumentType)[keyof typeof MatricClaimEvidenceUploadRequestDocumentType];
+
+export const MatricClaimEvidenceUploadRequestDocumentType = {
+  "student-id": "student-id",
+  "course-form": "course-form",
+} as const;
+
+export interface MatricClaimEvidenceUploadRequest {
+  /**
+   * @minLength 1
+   * @maxLength 255
+   */
+  name: string;
+  /**
+   * @minimum 1
+   * @maximum 10485760
+   */
+  size: number;
+  contentType: MatricClaimEvidenceUploadRequestContentType;
+  documentType: MatricClaimEvidenceUploadRequestDocumentType;
+}
+
+export type MatricClaimEvidenceUploadResponseExpiresInSeconds =
+  (typeof MatricClaimEvidenceUploadResponseExpiresInSeconds)[keyof typeof MatricClaimEvidenceUploadResponseExpiresInSeconds];
+
+export const MatricClaimEvidenceUploadResponseExpiresInSeconds = {
+  NUMBER_900: 900,
+} as const;
+
+export type MatricClaimEvidenceUploadResponseMetadataContentType =
+  (typeof MatricClaimEvidenceUploadResponseMetadataContentType)[keyof typeof MatricClaimEvidenceUploadResponseMetadataContentType];
+
+export const MatricClaimEvidenceUploadResponseMetadataContentType = {
+  "application/pdf": "application/pdf",
+  "image/jpeg": "image/jpeg",
+  "image/png": "image/png",
+  "image/webp": "image/webp",
+} as const;
+
+export type MatricClaimEvidenceUploadResponseMetadataDocumentType =
+  (typeof MatricClaimEvidenceUploadResponseMetadataDocumentType)[keyof typeof MatricClaimEvidenceUploadResponseMetadataDocumentType];
+
+export const MatricClaimEvidenceUploadResponseMetadataDocumentType = {
+  "student-id": "student-id",
+  "course-form": "course-form",
+} as const;
+
+export type MatricClaimEvidenceUploadResponseMetadata = {
+  name: string;
+  size: number;
+  contentType: MatricClaimEvidenceUploadResponseMetadataContentType;
+  documentType: MatricClaimEvidenceUploadResponseMetadataDocumentType;
+};
+
+export interface MatricClaimEvidenceUploadResponse {
+  uploadURL: string;
+  /** @pattern ^/objects/[A-Za-z0-9/_-]+$ */
+  objectPath: string;
+  expiresInSeconds: MatricClaimEvidenceUploadResponseExpiresInSeconds;
+  metadata: MatricClaimEvidenceUploadResponseMetadata;
+}
+
+export interface MatricClaimSubmission {
+  /**
+   * Compared server-side after removing whitespace and normalizing case.
+   * @minLength 1
+   * @maxLength 100
+   */
+  matricNumber: string;
+  /**
+   * Compared server-side case-insensitively to the existing account institution.
+   * @minLength 1
+   * @maxLength 200
+   */
+  institution: string;
+  /** @pattern ^/objects/[A-Za-z0-9/_-]+$ */
+  evidenceObjectPath: string;
+}
+
+export type MatricClaimCreatedStatus =
+  (typeof MatricClaimCreatedStatus)[keyof typeof MatricClaimCreatedStatus];
+
+export const MatricClaimCreatedStatus = {
+  pending: "pending",
+} as const;
+
+export interface MatricClaimCreated {
+  id: number;
+  status: MatricClaimCreatedStatus;
+  createdAt: string;
+}
+
+export type MyMatricClaimEvidenceType =
+  (typeof MyMatricClaimEvidenceType)[keyof typeof MyMatricClaimEvidenceType];
+
+export const MyMatricClaimEvidenceType = {
+  "student-id": "student-id",
+  "course-form": "course-form",
+} as const;
+
+export type MyMatricClaimStatus =
+  (typeof MyMatricClaimStatus)[keyof typeof MyMatricClaimStatus];
+
+export const MyMatricClaimStatus = {
+  pending: "pending",
+  approved: "approved",
+  rejected: "rejected",
+} as const;
+
+/**
+ * @nullable
+ */
+export type MyMatricClaimAdminDecision =
+  | (typeof MyMatricClaimAdminDecision)[keyof typeof MyMatricClaimAdminDecision]
+  | null;
+
+export const MyMatricClaimAdminDecision = {
+  approved: "approved",
+  rejected: "rejected",
+} as const;
+
+export interface MyMatricClaim {
+  id: number;
+  matricNumber: string;
+  institution: string;
+  evidenceType: MyMatricClaimEvidenceType;
+  status: MyMatricClaimStatus;
+  /** @nullable */
+  adminDecision?: MyMatricClaimAdminDecision;
+  /** @nullable */
+  adminDecisionNote?: string | null;
+  /** @nullable */
+  decidedAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MyMatricClaimsResponse {
+  claims: MyMatricClaim[];
+}
+
+export type AdminMatricClaim = MyMatricClaim & {
+  claimantClerkId: string;
+  existingAccountId: number;
+  evidenceObjectPath: string;
+  /** @nullable */
+  decidedByClerkId?: string | null;
+};
+
+export interface AdminMatricClaimsResponse {
+  claims: AdminMatricClaim[];
+}
+
+export type MatricClaimDecisionInputDecision =
+  (typeof MatricClaimDecisionInputDecision)[keyof typeof MatricClaimDecisionInputDecision];
+
+export const MatricClaimDecisionInputDecision = {
+  approved: "approved",
+  rejected: "rejected",
+} as const;
+
+export interface MatricClaimDecisionInput {
+  decision: MatricClaimDecisionInputDecision;
+  /** @maxLength 2000 */
+  note?: string;
+}
+
+export type MatricClaimDecisionResultStatus =
+  (typeof MatricClaimDecisionResultStatus)[keyof typeof MatricClaimDecisionResultStatus];
+
+export const MatricClaimDecisionResultStatus = {
+  approved: "approved",
+  rejected: "rejected",
+} as const;
+
+export type MatricClaimDecisionResultAdminDecision =
+  (typeof MatricClaimDecisionResultAdminDecision)[keyof typeof MatricClaimDecisionResultAdminDecision];
+
+export const MatricClaimDecisionResultAdminDecision = {
+  approved: "approved",
+  rejected: "rejected",
+} as const;
+
+export interface MatricClaimDecisionResult {
+  id: number;
+  status: MatricClaimDecisionResultStatus;
+  adminDecision: MatricClaimDecisionResultAdminDecision;
+  /** @nullable */
+  adminDecisionNote?: string | null;
+  decidedByClerkId: string;
+  decidedAt: string;
+}
+
+export interface AdCampaignInput {
+  /**
+   * @minLength 1
+   * @maxLength 200
+   */
+  paymentReference: string;
+  /**
+   * @minLength 1
+   * @maxLength 100
+   */
+  title: string;
+  /**
+   * @minLength 1
+   * @maxLength 2000
+   */
+  body: string;
+  /**
+   * Must be a public HTTPS URL; credentials and local/private destinations are rejected.
+   * @maxLength 2048
+   */
+  destinationUrl: string;
+}
+
+export type AdCampaignCreatedStatus =
+  (typeof AdCampaignCreatedStatus)[keyof typeof AdCampaignCreatedStatus];
+
+export const AdCampaignCreatedStatus = {
+  pending: "pending",
+} as const;
+
+export interface AdCampaignCreated {
+  id: number;
+  status: AdCampaignCreatedStatus;
+  expiresAt: string;
+}
+
+export interface ActiveAdCampaign {
+  id: number;
+  title: string;
+  body: string;
+  destinationUrl: string;
+  packageType: PaymentPackage;
+  expiresAt: string;
+}
+
+export interface ActiveAdsResponse {
+  ads: ActiveAdCampaign[];
+}
+
+export type MyAdCampaignStatus =
+  (typeof MyAdCampaignStatus)[keyof typeof MyAdCampaignStatus];
+
+export const MyAdCampaignStatus = {
+  pending: "pending",
+  approved: "approved",
+  rejected: "rejected",
+} as const;
+
+export interface MyAdCampaign {
+  id: number;
+  paymentReference: string;
+  title: string;
+  status: MyAdCampaignStatus;
+  expiresAt: string;
+  /** @nullable */
+  rejectionReason?: string | null;
+  createdAt: string;
+}
+
+export interface MyAdCampaignsResponse {
+  campaigns: MyAdCampaign[];
+}
+
+export type AdminAdCampaignStatus =
+  (typeof AdminAdCampaignStatus)[keyof typeof AdminAdCampaignStatus];
+
+export const AdminAdCampaignStatus = {
+  pending: "pending",
+} as const;
+
+export type AdminAdCampaign = ActiveAdCampaign & {
+  ownerClerkUserId: string;
+  paymentReference: string;
+  school: string;
+  campusLocation: string;
+  status: AdminAdCampaignStatus;
+  createdAt: string;
+};
+
+export interface AdminAdCampaignsResponse {
+  campaigns: AdminAdCampaign[];
+}
+
+export type AdCampaignDecisionInputDecision =
+  (typeof AdCampaignDecisionInputDecision)[keyof typeof AdCampaignDecisionInputDecision];
+
+export const AdCampaignDecisionInputDecision = {
+  approved: "approved",
+  rejected: "rejected",
+} as const;
+
+export interface AdCampaignDecisionInput {
+  decision: AdCampaignDecisionInputDecision;
+  /** @maxLength 500 */
+  rejectionReason?: string;
+}
+
+export type AdCampaignDecisionResultStatus =
+  (typeof AdCampaignDecisionResultStatus)[keyof typeof AdCampaignDecisionResultStatus];
+
+export const AdCampaignDecisionResultStatus = {
+  approved: "approved",
+  rejected: "rejected",
+} as const;
+
+export interface AdCampaignDecisionResult {
+  id: number;
+  status: AdCampaignDecisionResultStatus;
+  decidedAt: string;
+}
+
 export type SearchStudentsParams = {
   /**
    * @minLength 2
@@ -979,8 +1358,6 @@ export type ListAdminUsersParams = {
   offset?: number;
 };
 
-export type ReceivePaystackWebhookBody = { [key: string]: unknown };
-
 export type ReceivePaystackWebhook200 = {
   received: boolean;
 };
@@ -989,3 +1366,16 @@ export type ListMessagesParams = {
   limit?: number;
   offset?: number;
 };
+
+export type ListAdminMatricClaimsParams = {
+  status?: ListAdminMatricClaimsStatus;
+};
+
+export type ListAdminMatricClaimsStatus =
+  (typeof ListAdminMatricClaimsStatus)[keyof typeof ListAdminMatricClaimsStatus];
+
+export const ListAdminMatricClaimsStatus = {
+  pending: "pending",
+  approved: "approved",
+  rejected: "rejected",
+} as const;

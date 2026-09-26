@@ -178,6 +178,9 @@ importers:
       '@workspace/api-zod':
         specifier: workspace:*
         version: link:../../lib/api-zod
+      '@workspace/campus-institutions':
+        specifier: workspace:*
+        version: link:../../lib/campus-institutions
       '@workspace/db':
         specifier: workspace:*
         version: link:../../lib/db
@@ -205,6 +208,9 @@ importers:
       pino-http:
         specifier: ^10
         version: 10.5.0
+      zod:
+        specifier: 'catalog:'
+        version: 3.25.76
     devDependencies:
       '@types/cookie-parser':
         specifier: ^1.4.10
@@ -360,6 +366,9 @@ importers:
       '@workspace/api-client-react':
         specifier: workspace:*
         version: link:../../lib/api-client-react
+      '@workspace/campus-institutions':
+        specifier: workspace:*
+        version: link:../../lib/campus-institutions
       class-variance-authority:
         specifier: 'catalog:'
         version: 0.7.1
@@ -484,6 +493,9 @@ importers:
       '@workspace/api-client-react':
         specifier: workspace:*
         version: link:../../lib/api-client-react
+      '@workspace/campus-institutions':
+        specifier: workspace:*
+        version: link:../../lib/campus-institutions
       babel-plugin-react-compiler:
         specifier: ^19.0.0-beta-e993439-20250117
         version: 19.0.0-beta-ebf51a3-20250411
@@ -781,6 +793,8 @@ importers:
       zod:
         specifier: 'catalog:'
         version: 3.25.76
+
+  lib/campus-institutions: {}
 
   lib/db:
     dependencies:

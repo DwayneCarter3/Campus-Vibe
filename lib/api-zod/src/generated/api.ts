@@ -317,15 +317,10 @@ export const SaveMyCgpaPlanResponse = zod.object({
 });
 
 /**
- * @summary Request premium badge verification
+ * @summary Deprecated legacy badge request; use /payments/initialize instead
  */
 export const RequestPremiumBadgeBody = zod.object({
   badgeType: zod.enum(["promo", "paid"]),
-});
-
-export const RequestPremiumBadgeResponse = zod.object({
-  success: zod.boolean(),
-  verificationStatus: zod.string(),
 });
 
 /**
@@ -1521,14 +1516,59 @@ export const SetUserVerificationResponse = zod.object({
 });
 
 /**
+ * @summary List available products, fixed durations, and customer-payable amounts
+ */
+export const ListPaymentProductsResponse = zod.object({
+  currency: zod.enum(["NGN"]),
+  feeDisclosure: zod
+    .string()
+    .describe("Processing-fee and merchant checkout-configuration disclosure."),
+  products: zod.array(
+    zod.object({
+      packageType: zod
+        .enum([
+          "student_verification",
+          "premium_blue_tick",
+          "marketplace_promotion_3_day",
+          "marketplace_promotion_7_day",
+          "marketplace_promotion_30_day",
+          "event_performance_ad_30_day",
+          "corporate_ad_30_day",
+        ])
+        .describe(
+          "Stable product identifier accepted by POST \/payments\/initialize.",
+        ),
+      label: zod.string(),
+      durationDays: zod
+        .number()
+        .describe(
+          "Fixed entitlement duration; entitlements are manually renewed.",
+        ),
+      baseAmountKobo: zod.number().describe("Listed product price in kobo."),
+      amountKobo: zod
+        .number()
+        .describe("Paystack amount including customer-paid processing fee."),
+    }),
+  ),
+});
+
+/**
  * @summary Initialize a Paystack payment or claim an eligible early-bird benefit
  */
 export const InitializePaymentBody = zod.object({
-  packageType: zod.enum([
-    "student_verification",
-    "premium_blue_tick",
-    "marketplace_promotion",
-  ]),
+  packageType: zod
+    .enum([
+      "student_verification",
+      "premium_blue_tick",
+      "marketplace_promotion_3_day",
+      "marketplace_promotion_7_day",
+      "marketplace_promotion_30_day",
+      "event_performance_ad_30_day",
+      "corporate_ad_30_day",
+    ])
+    .describe(
+      "Stable product identifier accepted by POST \/payments\/initialize.",
+    ),
 });
 
 export const InitializePaymentResponse = zod.object({
@@ -1541,6 +1581,21 @@ export const InitializePaymentResponse = zod.object({
   accessCode: zod.string().nullish(),
   baseAmountKobo: zod.number().optional(),
   amountKobo: zod.number().optional(),
+  durationDays: zod.number().optional(),
+  packageType: zod
+    .enum([
+      "student_verification",
+      "premium_blue_tick",
+      "marketplace_promotion_3_day",
+      "marketplace_promotion_7_day",
+      "marketplace_promotion_30_day",
+      "event_performance_ad_30_day",
+      "corporate_ad_30_day",
+    ])
+    .optional()
+    .describe(
+      "Stable product identifier accepted by POST \/payments\/initialize.",
+    ),
   label: zod.string().optional(),
 });
 
@@ -1554,17 +1609,35 @@ export const GetPaymentStatusParams = zod.object({
 export const GetPaymentStatusResponse = zod.object({
   reference: zod.string(),
   status: zod.string(),
-  packageType: zod.enum([
-    "student_verification",
-    "premium_blue_tick",
-    "marketplace_promotion",
-  ]),
+  packageType: zod
+    .enum([
+      "student_verification",
+      "premium_blue_tick",
+      "marketplace_promotion_3_day",
+      "marketplace_promotion_7_day",
+      "marketplace_promotion_30_day",
+      "event_performance_ad_30_day",
+      "corporate_ad_30_day",
+    ])
+    .describe(
+      "Stable product identifier accepted by POST \/payments\/initialize.",
+    ),
+  durationDays: zod.number(),
+  baseAmountKobo: zod.number().describe("Listed product price in kobo."),
+  amountKobo: zod
+    .number()
+    .describe("Customer-payable amount including Paystack fee."),
+  entitlementExpiresAt: zod.coerce.date().nullable(),
 });
 
 /**
  * @summary Receive a signed Paystack webhook
  */
-export const ReceivePaystackWebhookBody = zod.object({}).passthrough();
+export const ReceivePaystackWebhookBody = zod
+  .record(zod.string(), zod.unknown())
+  .describe(
+    "Paystack-signed event payload; charge.success is reconciled against the saved amount, currency, reference, and customer.",
+  );
 
 export const ReceivePaystackWebhookResponse = zod.object({
   received: zod.boolean(),
@@ -1577,16 +1650,164 @@ export const ListPaymentsResponse = zod.object({
   payments: zod.array(
     zod.object({
       reference: zod.string(),
-      packageType: zod.enum([
-        "student_verification",
-        "premium_blue_tick",
-        "marketplace_promotion",
-      ]),
+      packageType: zod
+        .enum([
+          "student_verification",
+          "premium_blue_tick",
+          "marketplace_promotion_3_day",
+          "marketplace_promotion_7_day",
+          "marketplace_promotion_30_day",
+          "event_performance_ad_30_day",
+          "corporate_ad_30_day",
+        ])
+        .describe(
+          "Stable product identifier accepted by POST \/payments\/initialize.",
+        ),
       status: zod.string(),
-      amountKobo: zod.number(),
+      amountKobo: zod
+        .number()
+        .describe("Customer-payable amount including Paystack fee."),
+      baseAmountKobo: zod.number().describe("Listed product price in kobo."),
+      createdAt: zod.coerce.date(),
+      durationDays: zod.number(),
+      entitlementExpiresAt: zod.coerce.date().nullable(),
+    }),
+  ),
+});
+
+/**
+ * @summary List approved, unexpired ads for the signed-in viewer's campus
+ */
+export const ListActiveAdsResponse = zod.object({
+  ads: zod.array(
+    zod.object({
+      id: zod.number(),
+      title: zod.string(),
+      body: zod.string(),
+      destinationUrl: zod.string().url(),
+      packageType: zod
+        .enum([
+          "student_verification",
+          "premium_blue_tick",
+          "marketplace_promotion_3_day",
+          "marketplace_promotion_7_day",
+          "marketplace_promotion_30_day",
+          "event_performance_ad_30_day",
+          "corporate_ad_30_day",
+        ])
+        .describe(
+          "Stable product identifier accepted by POST \/payments\/initialize.",
+        ),
+      expiresAt: zod.coerce.date(),
+    }),
+  ),
+});
+
+/**
+ * @summary Submit an ad using an owned paid, unexpired ad purchase
+ */
+export const submitAdCampaignBodyPaymentReferenceMax = 200;
+
+export const submitAdCampaignBodyTitleMax = 100;
+
+export const submitAdCampaignBodyBodyMax = 2000;
+
+export const submitAdCampaignBodyDestinationUrlMax = 2048;
+
+export const SubmitAdCampaignBody = zod.object({
+  paymentReference: zod
+    .string()
+    .min(1)
+    .max(submitAdCampaignBodyPaymentReferenceMax),
+  title: zod.string().min(1).max(submitAdCampaignBodyTitleMax),
+  body: zod.string().min(1).max(submitAdCampaignBodyBodyMax),
+  destinationUrl: zod
+    .string()
+    .url()
+    .max(submitAdCampaignBodyDestinationUrlMax)
+    .describe(
+      "Must be a public HTTPS URL; credentials and local\/private destinations are rejected.",
+    ),
+});
+
+/**
+ * @summary List the signed-in user's ad campaign submissions and review states
+ */
+export const ListMyAdCampaignsResponse = zod.object({
+  campaigns: zod.array(
+    zod.object({
+      id: zod.number(),
+      paymentReference: zod.string(),
+      title: zod.string(),
+      status: zod.enum(["pending", "approved", "rejected"]),
+      expiresAt: zod.coerce.date(),
+      rejectionReason: zod.string().nullish(),
       createdAt: zod.coerce.date(),
     }),
   ),
+});
+
+/**
+ * @summary List campaigns awaiting admin moderation
+ */
+export const ListPendingAdCampaignsResponse = zod.object({
+  campaigns: zod.array(
+    zod
+      .object({
+        id: zod.number(),
+        title: zod.string(),
+        body: zod.string(),
+        destinationUrl: zod.string().url(),
+        packageType: zod
+          .enum([
+            "student_verification",
+            "premium_blue_tick",
+            "marketplace_promotion_3_day",
+            "marketplace_promotion_7_day",
+            "marketplace_promotion_30_day",
+            "event_performance_ad_30_day",
+            "corporate_ad_30_day",
+          ])
+          .describe(
+            "Stable product identifier accepted by POST \/payments\/initialize.",
+          ),
+        expiresAt: zod.coerce.date(),
+      })
+      .and(
+        zod.object({
+          ownerClerkUserId: zod.string(),
+          paymentReference: zod.string(),
+          school: zod.string(),
+          campusLocation: zod.string(),
+          status: zod.enum(["pending"]),
+          createdAt: zod.coerce.date(),
+        }),
+      ),
+  ),
+});
+
+/**
+ * @summary Approve or reject a pending ad campaign
+ */
+
+export const DecideAdCampaignParams = zod.object({
+  campaignId: zod.coerce.number().min(1),
+});
+
+export const decideAdCampaignBodyRejectionReasonMax = 500;
+
+export const DecideAdCampaignBody = zod.object({
+  decision: zod.enum(["approved", "rejected"]),
+  rejectionReason: zod
+    .string()
+    .max(decideAdCampaignBodyRejectionReasonMax)
+    .optional(),
+});
+
+export const DecideAdCampaignResponse = zod.object({
+  id: zod.number(),
+  status: zod.enum(["approved", "rejected"]),
+  decidedAt: zod.coerce.date(),
 });
 
 /**
@@ -1731,6 +1952,153 @@ export const RequestUploadUrlResponse = zod.object({
  */
 export const GetStorageObjectParams = zod.object({
   objectPath: zod.coerce.string(),
+});
+
+/**
+ * @summary Request a private signed upload URL for claim evidence
+ */
+export const requestMatricClaimEvidenceUploadUrlBodyNameMax = 255;
+
+export const requestMatricClaimEvidenceUploadUrlBodySizeMax = 10485760;
+
+export const RequestMatricClaimEvidenceUploadUrlBody = zod.object({
+  name: zod.string().min(1).max(requestMatricClaimEvidenceUploadUrlBodyNameMax),
+  size: zod.number().min(1).max(requestMatricClaimEvidenceUploadUrlBodySizeMax),
+  contentType: zod.enum([
+    "application/pdf",
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+  ]),
+  documentType: zod.enum(["student-id", "course-form"]),
+});
+
+/**
+ * @summary Submit an authenticated matric account claim against a matching institution and matric number
+ */
+export const submitMatricClaimBodyMatricNumberMax = 100;
+
+export const submitMatricClaimBodyInstitutionMax = 200;
+
+export const submitMatricClaimBodyEvidenceObjectPathRegExp = new RegExp(
+  "^\/objects\/[A-Za-z0-9\/_-]+$",
+);
+
+export const SubmitMatricClaimBody = zod.object({
+  matricNumber: zod
+    .string()
+    .min(1)
+    .max(submitMatricClaimBodyMatricNumberMax)
+    .describe(
+      "Compared server-side after removing whitespace and normalizing case.",
+    ),
+  institution: zod
+    .string()
+    .min(1)
+    .max(submitMatricClaimBodyInstitutionMax)
+    .describe(
+      "Compared server-side case-insensitively to the existing account institution.",
+    ),
+  evidenceObjectPath: zod
+    .string()
+    .regex(submitMatricClaimBodyEvidenceObjectPathRegExp),
+});
+
+/**
+ * @summary List only the authenticated claimant's requests and status
+ */
+export const ListMyMatricClaimsResponse = zod.object({
+  claims: zod.array(
+    zod.object({
+      id: zod.number(),
+      matricNumber: zod.string(),
+      institution: zod.string(),
+      evidenceType: zod.enum(["student-id", "course-form"]),
+      status: zod.enum(["pending", "approved", "rejected"]),
+      adminDecision: zod
+        .union([
+          zod.literal("approved"),
+          zod.literal("rejected"),
+          zod.literal(null),
+        ])
+        .nullish(),
+      adminDecisionNote: zod.string().nullish(),
+      decidedAt: zod.coerce.date().nullish(),
+      createdAt: zod.coerce.date(),
+      updatedAt: zod.coerce.date(),
+    }),
+  ),
+});
+
+/**
+ * @summary List matric claims for admin/CEO review
+ */
+export const ListAdminMatricClaimsQueryParams = zod.object({
+  status: zod.enum(["pending", "approved", "rejected"]).optional(),
+});
+
+export const ListAdminMatricClaimsResponse = zod.object({
+  claims: zod.array(
+    zod
+      .object({
+        id: zod.number(),
+        matricNumber: zod.string(),
+        institution: zod.string(),
+        evidenceType: zod.enum(["student-id", "course-form"]),
+        status: zod.enum(["pending", "approved", "rejected"]),
+        adminDecision: zod
+          .union([
+            zod.literal("approved"),
+            zod.literal("rejected"),
+            zod.literal(null),
+          ])
+          .nullish(),
+        adminDecisionNote: zod.string().nullish(),
+        decidedAt: zod.coerce.date().nullish(),
+        createdAt: zod.coerce.date(),
+        updatedAt: zod.coerce.date(),
+      })
+      .and(
+        zod.object({
+          claimantClerkId: zod.string(),
+          existingAccountId: zod.number(),
+          evidenceObjectPath: zod.string(),
+          decidedByClerkId: zod.string().nullish(),
+        }),
+      ),
+  ),
+});
+
+/**
+ * @summary Record a final review decision without transferring an account
+ */
+
+export const ResolveMatricClaimParams = zod.object({
+  claimId: zod.coerce.number().min(1),
+});
+
+export const resolveMatricClaimBodyNoteMax = 2000;
+
+export const ResolveMatricClaimBody = zod.object({
+  decision: zod.enum(["approved", "rejected"]),
+  note: zod.string().max(resolveMatricClaimBodyNoteMax).optional(),
+});
+
+export const ResolveMatricClaimResponse = zod.object({
+  id: zod.number(),
+  status: zod.enum(["approved", "rejected"]),
+  adminDecision: zod.enum(["approved", "rejected"]),
+  adminDecisionNote: zod.string().nullish(),
+  decidedByClerkId: zod.string(),
+  decidedAt: zod.coerce.date(),
+});
+
+/**
+ * @summary Stream evidence privately to the claimant or an admin/CEO
+ */
+
+export const GetMatricClaimEvidenceParams = zod.object({
+  claimId: zod.coerce.number().min(1),
 });
 
 /**

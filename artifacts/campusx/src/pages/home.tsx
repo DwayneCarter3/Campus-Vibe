@@ -13,7 +13,7 @@ export default function Home() {
       >
         <div className="inline-flex items-center rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-sm font-medium text-primary mb-4 backdrop-blur-sm">
           <span className="flex h-2 w-2 rounded-full bg-primary mr-2 animate-pulse" />
-          LASU Ojo Campus Network
+          Your Campus Network
         </div>
         
         <h1 className="text-5xl md:text-7xl font-bold tracking-tighter text-balance">
@@ -22,7 +22,7 @@ export default function Home() {
         </h1>
         
         <p className="text-xl text-muted-foreground max-w-[600px] mx-auto text-balance mt-6">
-          A vibrant, electric social hub where LASU students post gist, find services, and connect. Urgent, social, and unmistakably collegiate.
+          A vibrant, electric social hub where students post gist, find services, and connect with their own campus. Urgent, social, and unmistakably collegiate.
         </p>
         
         <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-8">

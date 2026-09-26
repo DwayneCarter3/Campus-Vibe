@@ -3,6 +3,7 @@ import { getAuth } from "@clerk/express";
 import { eq, desc, sql, and, inArray } from "drizzle-orm";
 import { db, servicesTable, usersTable, postsTable, notificationsTable, savedServicesTable, reportsTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/auth";
+import { hasAdminPrivileges } from "../lib/privilege";
 import { broadcastNotification } from "../sse-manager";
 import { isVerifiedAccount, publicVerificationStatus } from "../lib/verification";
 import { getEffectiveLevel } from "../lib/academic-level";
@@ -11,6 +12,15 @@ import { ObjectStorageService } from "../lib/objectStorage";
 import { cursorFilterHash, decodeFeedCursor, encodeFeedCursor } from "../lib/listCursor";
 import { validateUploadedWebpImage } from "../lib/image-upload-validation";
 import { isSmallWebpDataUrl } from "../lib/blur-data-url";
+import {
+  campusScopeCondition,
+  normalizeCampusLocation,
+  normalizeSchoolLabel,
+  profilesShareCampus,
+  profilesShareSchool,
+  schoolScopeCondition,
+  type CampusScopeProfile,
+} from "./list-scope";
 import {
   ListServicesQueryParams,
   ListServicesResponse,
@@ -34,6 +44,22 @@ import {
 const router: IRouter = Router();
 const FLASH_SALE_DURATION_MS = 24 * 60 * 60 * 1000;
 const objectStorageService = new ObjectStorageService();
+
+async function getCampusScopeProfile(userId: string) {
+  const [profile] = await db
+    .select({
+      institutionId: usersTable.institutionId,
+      school: usersTable.school,
+      campusLocation: usersTable.campusLocation,
+    })
+    .from(usersTable)
+    .where(eq(usersTable.clerkUserId, userId));
+  return profile ?? null;
+}
+
+function hasCampusScope(profile: CampusScopeProfile | null): profile is CampusScopeProfile {
+  return Boolean(profile?.school.trim() && profile.campusLocation.trim());
+}
 
 function getPrivateServiceObjectPath(rawUrl: string | null | undefined): string | null {
   if (!rawUrl) return null;
@@ -178,14 +204,21 @@ router.get("/services", async (req, res): Promise<void> => {
   const savedOnly = savedOnlyQuery === "true";
   const flashSaleOnly = flashSaleQuery === "true";
   const viewerId = getAuth(req)?.userId;
-  if (savedOnly && !viewerId) {
-    res.status(401).json({ error: "Authentication required to view saved services" });
+  if (!viewerId) {
+    res.status(401).json({ error: "Sign in to view campus services." });
     return;
   }
-
+  const requesterProfile = await getCampusScopeProfile(viewerId);
+  if (!hasCampusScope(requesterProfile)) {
+    res.status(403).json({ error: "Complete your school and campus profile to view services." });
+    return;
+  }
+  const scope: CampusScopeProfile = requesterProfile;
   const conditions = [
     eq(servicesTable.isActive, true),
     sql`(${servicesTable.isFlashSale} = false OR ${servicesTable.flashExpiresAt} > ${new Date()})`,
+    schoolScopeCondition(usersTable.institutionId, usersTable.school, scope),
+    campusScopeCondition(usersTable.campusLocation, scope.campusLocation),
   ];
   if (flashSaleOnly) {
     conditions.push(sql`${servicesTable.isFlashSale} = true AND ${servicesTable.flashExpiresAt} > ${new Date()}`);
@@ -204,6 +237,9 @@ router.get("/services", async (req, res): Promise<void> => {
     savedOnly,
     flashSaleOnly,
     viewerId: savedOnly ? viewerId : null,
+    institutionId: scope.institutionId,
+    school: normalizeSchoolLabel(scope.school),
+    campus: normalizeCampusLocation(scope.campusLocation),
   });
   if (cursorToken && offset > 0) {
     res.status(400).json({ error: "Cursor pagination cannot be combined with a positive offset." });
@@ -273,6 +309,7 @@ router.get("/services", async (req, res): Promise<void> => {
   const [{ count }] = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(servicesTable)
+    .leftJoin(usersTable, eq(servicesTable.providerId, usersTable.clerkUserId))
     .where(conditions.length === 1 ? conditions[0] : and(...conditions));
 
   const enriched = await Promise.all(services.map(async (s) => {
@@ -369,6 +406,19 @@ router.get("/services/:serviceId", async (req, res): Promise<void> => {
     return;
   }
 
+  const viewerId = getAuth(req)?.userId;
+  if (!viewerId) {
+    res.status(401).json({ error: "Sign in to view this service." });
+    return;
+  }
+  const [serviceScope] = await db
+    .select({ providerId: servicesTable.providerId })
+    .from(servicesTable)
+    .where(eq(servicesTable.id, params.data.serviceId));
+  if (!serviceScope) {
+    res.status(404).json({ error: "Service not found" });
+    return;
+  }
   const result = await buildServiceWithMeta(params.data.serviceId, getAuth(req)?.userId ?? undefined);
   if (
     !result ||
@@ -376,6 +426,24 @@ router.get("/services/:serviceId", async (req, res): Promise<void> => {
   ) {
     res.status(404).json({ error: "Service not found" });
     return;
+  }
+
+  const requesterProfile = await getCampusScopeProfile(viewerId);
+  const isOwner = serviceScope.providerId === viewerId;
+  if (!isOwner && !(await hasAdminPrivileges(req))) {
+    if (!hasCampusScope(requesterProfile)) {
+      res.status(403).json({ error: "Complete your school and campus profile to view this service." });
+      return;
+    }
+    const providerProfile = await getCampusScopeProfile(serviceScope.providerId);
+    if (
+      !hasCampusScope(providerProfile) ||
+      !profilesShareSchool(requesterProfile, providerProfile) ||
+      !profilesShareCampus(requesterProfile, providerProfile)
+    ) {
+      res.status(404).json({ error: "Service not found" });
+      return;
+    }
   }
 
   res.json(GetServiceResponse.parse(result));
@@ -497,9 +565,7 @@ router.delete("/services/:serviceId", requireAuth, async (req, res): Promise<voi
     return;
   }
 
-  const [caller] = await db.select({ role: usersTable.role, isAdmin: usersTable.isAdmin })
-    .from(usersTable).where(eq(usersTable.clerkUserId, userId));
-  if (service.providerId !== userId && !caller?.isAdmin && !["admin", "ceo"].includes(caller?.role ?? "")) {
+  if (service.providerId !== userId && !(await hasAdminPrivileges(req))) {
     res.status(403).json({ error: "Forbidden" });
     return;
   }
@@ -583,9 +649,7 @@ router.patch("/services/:serviceId/feature", requireAuth, async (req, res): Prom
     return;
   }
   const userId = (req as any).userId as string;
-  const [caller] = await db.select({ role: usersTable.role })
-    .from(usersTable).where(eq(usersTable.clerkUserId, userId));
-  if (!caller || !["admin", "ceo"].includes(caller.role)) {
+  if (!(await hasAdminPrivileges(req))) {
     res.status(403).json({ error: "Admin/CEO only" });
     return;
   }

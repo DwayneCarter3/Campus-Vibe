@@ -1,0 +1,142 @@
+[
+  {
+    "id": "lagos-state-university",
+    "name": "Lagos State University",
+    "slug": "lasu",
+    "campuses": ["Ojo Main Campus", "Epe Campus", "Ikeja Campus"],
+    "faculties": ["Faculty of Agriculture", "Faculty of Arts", "Faculty of Education", "Faculty of Engineering", "Faculty of Law", "Faculty of Management Sciences", "Faculty of Science", "Faculty of Social Sciences", "College of Medicine", "School of Communication", "School of Transport and Logistics"]
+  },
+  {
+    "id": "lagos-state-university-of-education",
+    "name": "Lagos State University of Education",
+    "slug": "lasued",
+    "campuses": ["Oto-Ijanikin Campus", "Noforija Campus"],
+    "faculties": ["Faculty of Arts", "Faculty of Education", "Faculty of Science", "Faculty of Social Sciences", "Faculty of Vocational and Technical Education"]
+  },
+  {
+    "id": "lagos-state-university-of-science-and-technology",
+    "name": "Lagos State University of Science and Technology",
+    "slug": "lasustech",
+    "campuses": ["Ikorodu Main Campus", "Isolo Campus", "Surulere Campus"],
+    "faculties": ["College of Agriculture", "College of Applied Social Sciences", "College of Basic Sciences", "College of Engineering and Technology", "College of Environmental Design and Technology", "College of Management and Business Studies"]
+  },
+  {
+    "id": "university-of-lagos",
+    "name": "University of Lagos",
+    "slug": "unilag",
+    "campuses": ["Akoka Campus", "Idi-Araba Campus"],
+    "faculties": ["Faculty of Arts", "Faculty of Basic Medical Sciences", "Faculty of Clinical Sciences", "Faculty of Dental Sciences", "Faculty of Education", "Faculty of Engineering", "Faculty of Environmental Sciences", "Faculty of Law", "Faculty of Management Sciences", "Faculty of Pharmacy", "Faculty of Science", "Faculty of Social Sciences", "Faculty of Communication and Media Studies"]
+  },
+  {
+    "id": "university-of-ibadan",
+    "name": "University of Ibadan",
+    "slug": "ui",
+    "campuses": ["Ibadan Main Campus", "College of Medicine Campus"],
+    "faculties": ["Faculty of Agriculture", "Faculty of Arts", "Faculty of Basic Medical Sciences", "Faculty of Clinical Sciences", "Faculty of Dentistry", "Faculty of Education", "Faculty of Law", "Faculty of Pharmacy", "Faculty of Public Health", "Faculty of Science", "Faculty of Technology", "Faculty of The Social Sciences", "Faculty of Veterinary Medicine", "Faculty of Renewable Natural Resources", "Faculty of Economics and Management Sciences"]
+  },
+  {
+    "id": "obafemi-awolowo-university",
+    "name": "Obafemi Awolowo University",
+    "slug": "oau",
+    "campuses": ["Ile-Ife Main Campus"],
+    "faculties": ["Faculty of Agriculture", "Faculty of Arts", "Faculty of Basic Medical Sciences", "Faculty of Clinical Sciences", "Faculty of Dentistry", "Faculty of Education", "Faculty of Environmental Design and Management", "Faculty of Law", "Faculty of Pharmacy", "Faculty of Science", "Faculty of Social Sciences", "Faculty of Technology", "Faculty of Administration"]
+  },
+  {
+    "id": "university-of-ilorin",
+    "name": "University of Ilorin",
+    "slug": "unilorin",
+    "campuses": ["Main Campus", "Mini Campus"],
+    "faculties": ["Faculty of Agriculture", "Faculty of Arts", "Faculty of Basic Medical Sciences", "Faculty of Clinical Sciences", "Faculty of Communication and Information Sciences", "Faculty of Education", "Faculty of Engineering and Technology", "Faculty of Environmental Sciences", "Faculty of Law", "Faculty of Life Sciences", "Faculty of Management Sciences", "Faculty of Pharmaceutical Sciences", "Faculty of Physical Sciences", "Faculty of Social Sciences", "Faculty of Veterinary Medicine"]
+  },
+  {
+    "id": "university-of-benin",
+    "name": "University of Benin",
+    "slug": "uniben",
+    "campuses": ["Ugbowo Main Campus", "Ekehuan Campus"],
+    "faculties": ["Faculty of Agriculture", "Faculty of Arts", "Faculty of Basic Medical Sciences", "Faculty of Dentistry", "Faculty of Education", "Faculty of Engineering", "Faculty of Environmental Sciences", "Faculty of Law", "Faculty of Life Sciences", "Faculty of Management Sciences", "Faculty of Pharmacy", "Faculty of Physical Sciences", "Faculty of Social Sciences", "Faculty of Veterinary Medicine", "Faculty of Clinical Sciences"]
+  },
+  {
+    "id": "university-of-jos",
+    "name": "University of Jos",
+    "slug": "unijos",
+    "campuses": ["Bauchi Road Campus", "Naraguta Campus"],
+    "faculties": ["Faculty of Agriculture", "Faculty of Arts", "Faculty of Education", "Faculty of Environmental Sciences", "Faculty of Health Sciences and Technology", "Faculty of Law", "Faculty of Management Sciences", "Faculty of Natural Sciences", "Faculty of Pharmaceutical Sciences", "Faculty of Social Sciences", "Faculty of Veterinary Medicine", "Faculty of Clinical Sciences", "Faculty of Basic Medical Sciences"]
+  },
+  {
+    "id": "ambrose-alli-university",
+    "name": "Ambrose Alli University",
+    "slug": "aau",
+    "campuses": ["Ekpoma Main Campus"],
+    "faculties": ["Faculty of Agriculture", "Faculty of Arts", "Faculty of Basic Medical Sciences", "Faculty of Clinical Sciences", "Faculty of Education", "Faculty of Engineering and Technology", "Faculty of Environmental Studies", "Faculty of Law", "Faculty of Life Sciences", "Faculty of Management Sciences", "Faculty of Physical Sciences", "Faculty of Social Sciences"]
+  },
+  {
+    "id": "olabisi-onabanjo-university",
+    "name": "Olabisi Onabanjo University",
+    "slug": "oou",
+    "campuses": ["Ago-Iwoye Main Campus", "Ikenne Campus", "Sagamu Campus", "Ayetoro Campus"],
+    "faculties": ["Faculty of Agricultural Sciences", "Faculty of Arts", "Faculty of Basic Medical Sciences", "Faculty of Clinical Sciences", "Faculty of Education", "Faculty of Engineering", "Faculty of Environmental Studies", "Faculty of Law", "Faculty of Pharmacy", "Faculty of Science", "Faculty of Social Sciences"]
+  },
+  {
+    "id": "university-of-nigeria-nsukka",
+    "name": "University of Nigeria, Nsukka",
+    "slug": "unn",
+    "campuses": ["Nsukka Campus", "Enugu Campus", "Ituku-Ozalla Campus"],
+    "faculties": ["Faculty of Agriculture", "Faculty of Arts", "Faculty of Basic Medical Sciences", "Faculty of Biological Sciences", "Faculty of Business Administration", "Faculty of Dentistry", "Faculty of Education", "Faculty of Engineering", "Faculty of Environmental Studies", "Faculty of Health Sciences and Technology", "Faculty of Law", "Faculty of Medical Sciences", "Faculty of Pharmaceutical Sciences", "Faculty of Physical Sciences", "Faculty of Social Sciences", "Faculty of Veterinary Medicine"]
+  },
+  {
+    "id": "ahmadu-bello-university",
+    "name": "Ahmadu Bello University",
+    "slug": "abu",
+    "campuses": ["Samaru Campus", "Kongo Campus"],
+    "faculties": ["Faculty of Agriculture", "Faculty of Arts", "Faculty of Basic Medical Sciences", "Faculty of Clinical Sciences", "Faculty of Dentistry", "Faculty of Education", "Faculty of Engineering", "Faculty of Environmental Design", "Faculty of Life Sciences", "Faculty of Physical Sciences", "Faculty of Pharmaceutical Sciences", "Faculty of Social Sciences", "Faculty of Veterinary Medicine", "Faculty of Administration", "Faculty of Allied Health Sciences"]
+  },
+  {
+    "id": "covenant-university",
+    "name": "Covenant University",
+    "slug": "covenant",
+    "campuses": ["Canaanland Campus, Ota"],
+    "faculties": ["College of Business and Social Sciences", "College of Leadership Development Studies", "College of Engineering", "College of Science and Technology"]
+  },
+  {
+    "id": "yaba-college-of-technology",
+    "name": "Yaba College of Technology",
+    "slug": "yabatech",
+    "campuses": ["Yaba Main Campus"],
+    "faculties": ["School of Art, Design and Printing", "School of Engineering", "School of Environmental Studies", "School of Liberal Studies", "School of Management and Business Studies", "School of Science", "School of Technology"]
+  },
+  {
+    "id": "ogun-state-institute-of-technology",
+    "name": "Ogun State Institute of Technology",
+    "slug": "ogitech",
+    "campuses": ["Igbesa Main Campus"],
+    "faculties": ["School of Agricultural Technology", "School of Business and Management Studies", "School of Engineering", "School of Environmental Studies", "School of Science", "School of Communication and Information Technology"]
+  },
+  {
+    "id": "federal-polytechnic-ilaro",
+    "name": "Federal Polytechnic, Ilaro",
+    "slug": "federal-polytechnic-ilaro",
+    "campuses": ["Ilaro Main Campus"],
+    "faculties": ["School of Agricultural Technology", "School of Communication and Information Technology", "School of Environmental Studies", "School of Engineering", "School of Management Studies", "School of Pure and Applied Sciences"]
+  },
+  {
+    "id": "auchi-polytechnic",
+    "name": "Auchi Polytechnic",
+    "slug": "auchi-polytechnic",
+    "campuses": ["Auchi Main Campus"],
+    "faculties": ["School of Applied Sciences and Technology", "School of Art and Design", "School of Business Studies", "School of Engineering Technology", "School of Environmental Studies", "School of Information and Communication Technology"]
+  },
+  {
+    "id": "moshood-abiola-polytechnic",
+    "name": "Moshood Abiola Polytechnic",
+    "slug": "mapoly",
+    "campuses": ["Ojere Main Campus"],
+    "faculties": ["School of Business and Management Studies", "School of Communication and Information Technology", "School of Engineering", "School of Environmental Studies", "School of Science and Technology"]
+  },
+  {
+    "id": "kaduna-polytechnic",
+    "name": "Kaduna Polytechnic",
+    "slug": "kaduna-polytechnic",
+    "campuses": ["Tudun Wada Campus", "Barnawa Campus"],
+    "faculties": ["College of Business and Management Studies", "College of Engineering", "College of Environmental Studies", "College of Science and Technology", "College of Administrative Studies and Social Sciences"]
+  }
+]

@@ -1,17 +1,18 @@
 - [Codegen barrel fix](codegen-barrel-fix.md) — after every `codegen` run, must manually fix both barrels; run `typecheck:libs` after.
 - [UploadUrlResponse field name](upload-url-fields.md) — generated type uses `uploadURL` (not `signedUrl`) and `objectPath`.
-- [Admin bootstrap pattern](admin-bootstrap.md) — first-claim endpoint; isAdmin in usersTable; pin-feed requires isAdmin check.
+- [Admin bootstrap authorization](admin-bootstrap.md) — initial CEO claim requires fresh verified designated Clerk email; role flags alone never authorize it.
 - [Barrel split: api-zod vs api-client-react](codegen-barrel-fix.md) — api-zod generated dir has only `api.ts`; api-client-react has `api.ts` + `api.schemas.ts`. Never export `api.schemas` from api-zod barrel.
 - [Campus titles + role system](campus-roles.md) — computeCampusTitle in admin.ts, imported by users.ts and posts.ts; CEO_EMAIL env auto-upgrades on login; role values: ceo/admin/moderator/student.
-- [CEO access guard pattern](ceo-access-guard.md) — DB email may be empty if not sent during onboarding; use Clerk email as frontend bypass + sync email via clerkClient in GET /users/me.
+- [CEO authorization](ceo-authorization.md) — privileged CEO requests must check a fresh verified Clerk primary email, not a stale stored address or role.
 - [System DM actors](system-dm-actors.md) — automation in DMs should use a reserved actor, never a fabricated student/Clerk account.
 - [Gemini model availability](gemini-model-availability.md) — model listing alone does not prove generateContent works; probe a candidate before relying on it.
 - [Mobile avatar upload flow](mobile-avatar-upload.md) — expo-image-picker already installed; signed URL flow matches web (requestUploadUrl → PUT → /api/storage+objectPath); Change Photo button in avatar modal.
-- [Early-bird launch eligibility](early-bird-launch.md) — use the database registration sequence/rank, case-insensitive non-empty email uniqueness, explicit promo expiry fields, and paid-tier fallback after expiry.
+- [Early-bird launch eligibility](early-bird-launch.md) — use registration rank and verified email; school-scoped matric uniqueness and independent benefit expiry.
 - [Role verification invariant](role-verification.md) — CEO/admin accounts stay Premium_Approved and display both trust badges across reads, role changes, and expiry paths.
 - [Pending verification and promo expiry](pending-verification-expiry.md) — expiring launch perks must not erase a submitted pending review; manual admin overrides must outlive a promo timer.
 - [Academic level session anchor](academic-level-session.md) — matric-based level uses the 2025/26 session (start year 2025), not the 2026 calendar year.
-- [Verification badge tiers](verification-badge-tiers.md) — public surfaces may show academic levels and paid-verification tiers, but never CEO/Admin/Moderator badges.
+- [Verification badge tiers](verification-badge-tiers.md) — free Student Verified pill, approved paid ticks, and premium role tags from real API roles.
+- [Paystack customer fees](paystack-customer-fees.md) — local checkout gross-up and dashboard auto-pass-through are alternatives; enabling both double-charges buyers.
 - [Drizzle serial push mismatch](drizzle-serial-push.md) — Drizzle push can emit invalid SQL for an existing serial-backed rank; avoid force or sequence drops.
 - [Feed category semantics](feed-category-semantics.md) — “All Gist” is only a view, not a stored post category; default untagged and older posts to Amebo Hot.
 - [Anonymous post privacy](anonymous-post-privacy.md) — mask even the creator's public response and embedded originals; use a separate ownership flag for actions.

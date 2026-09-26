@@ -269,7 +269,7 @@ export function ServiceCard({ service, index = 0, currentUserId, directView = fa
               <div className="min-w-0">
                 <div className="text-sm font-semibold leading-tight flex items-center gap-1">
                   <Link href={`/profile/${service.providerId}`} className="truncate hover:text-primary transition-colors">{service.providerName}</Link>
-                  <UserVerificationMarks status={service.providerVerificationStatus} />
+                  <UserVerificationMarks status={service.providerVerificationStatus} role={service.providerRole} />
                 </div>
                 <div className="flex items-center gap-1 text-[11px] text-muted-foreground mt-0.5 flex-wrap">
                   <span>{service.providerFaculty}</span>

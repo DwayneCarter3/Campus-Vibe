@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { listPosts, useCreatePost, getListPostsQueryKey, useGetMyProfile, getGetMyProfileQueryKey, requestUploadUrl as requestUploadUrlApi, useGetShuttleStatus, getGetShuttleStatusQueryKey, useVoteShuttleStatus } from "@workspace/api-client-react";
-import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useWindowVirtualizer } from "@tanstack/react-virtual";
 import { useLocation } from "wouter";
 import { useUser } from "@clerk/react";
@@ -42,6 +42,36 @@ function formatUpdatedAgo(updatedAt: string | null | undefined): string {
 }
 
 const HIDDEN_POSTS_KEY = "campusx-hidden-posts";
+type CampusAd = {
+  id: number;
+  title: string;
+  body: string;
+  destinationUrl: string;
+  packageType: string;
+  expiresAt: string;
+};
+
+function CampusAdCard({ ad }: { ad: CampusAd }) {
+  return (
+    <article className="glass rounded-2xl border border-amber-400/20 bg-amber-400/[0.04] p-5 mb-4">
+      <div className="mb-3 flex items-center gap-2">
+        <Badge className="border border-amber-400/30 bg-amber-400/10 text-amber-200">Sponsored</Badge>
+        <span className="text-xs text-muted-foreground">{ad.packageType === "corporate_ad_30_day" ? "Campus partner" : "Event promotion"}</span>
+      </div>
+      <h3 className="text-base font-bold">{ad.title}</h3>
+      <p className="mt-2 text-sm text-foreground/85 whitespace-pre-wrap break-words">{ad.body}</p>
+      <a
+        href={ad.destinationUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="mt-4 inline-flex rounded-full border border-amber-300/30 px-4 py-2 text-sm font-semibold text-amber-200 transition-colors hover:bg-amber-300/10"
+      >
+        Learn more <span className="sr-only"> about {ad.title} (opens in a new tab)</span>
+      </a>
+    </article>
+  );
+}
+
 function getHiddenPostIds(): Set<number> {
   try {
     return new Set<number>(JSON.parse(sessionStorage.getItem(HIDDEN_POSTS_KEY) || "[]"));
@@ -80,6 +110,19 @@ export default function FeedPage() {
 
   const { data: profile, isLoading: isProfileLoading, error: profileError } = useGetMyProfile({
     query: { retry: false, queryKey: getGetMyProfileQueryKey() }
+  });
+  const campusAdsQuery = useQuery({
+    queryKey: ["active-campus-ads", profile?.school, profile?.campusLocation],
+    enabled: !!profile?.school && !!profile?.campusLocation && !savedOnly,
+    staleTime: 60_000,
+    refetchOnMount: "always",
+    refetchInterval: 60_000,
+    queryFn: async ({ signal }) => {
+      const response = await fetch("/api/ads", { credentials: "include", signal });
+      const result = await response.json() as { ads?: CampusAd[]; error?: string };
+      if (!response.ok) throw new Error(result.error || "Could not load campus ads.");
+      return result.ads ?? [];
+    },
   });
 
   const postParams = { category: savedOnly ? undefined : activeCategory, savedOnly, limit: 10 };
@@ -336,7 +379,7 @@ export default function FeedPage() {
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 <span className="font-semibold text-foreground/80 inline-flex items-center gap-1">
                   {profile.fullName}
-                  <UserVerificationMarks status={profile.verificationStatus} />
+                  <UserVerificationMarks status={profile.verificationStatus} role={profile.role} />
                 </span>
                 <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 border-primary/30 text-primary">
                   {profile.level}
@@ -619,6 +662,13 @@ export default function FeedPage() {
           <span className="text-xs text-muted-foreground">({data.pages[0]?.total ?? posts.length} posts)</span>
         )}
       </div>
+
+      {!savedOnly && campusAdsQuery.isError && (
+        <p role="alert" className="mb-4 rounded-xl border border-rose-500/20 px-4 py-3 text-xs text-rose-200">
+          {campusAdsQuery.error instanceof Error ? campusAdsQuery.error.message : "Could not load campus ads."}
+        </p>
+      )}
+      {!savedOnly && campusAdsQuery.data?.map((ad) => <CampusAdCard key={ad.id} ad={ad} />)}
 
       {/* Feed */}
       <div ref={feedListRef} className="relative" style={{ height: isLoading || isError || visiblePosts.length === 0 ? undefined : Math.max(0, feedVirtualizer.getTotalSize() - feedListOffset) }}>

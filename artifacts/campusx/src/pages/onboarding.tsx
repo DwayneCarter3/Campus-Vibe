@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -14,21 +14,144 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { GraduationCap, Vote } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "@/hooks/use-toast";
+import { CAMPUS_INSTITUTIONS, getInstitutionByName } from "@workspace/campus-institutions";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 
-const SCHOOLS = [
-  "Lagos State University (LASU)",
-  "University of Lagos (UNILAG)",
-  "Lagos State University of Education (LASUED)",
-  "My School is Not Listed",
-] as const;
+type MatricClaimStatus = {
+  id: number;
+  institution: string;
+  matricNumber: string;
+  status: "pending" | "approved" | "rejected";
+  adminDecisionNote?: string | null;
+  createdAt: string;
+};
 
 const NOT_LISTED = "My School is Not Listed";
+const OTHER_CAMPUS = "Other campus";
+const OTHER_DEPARTMENT = "Other department";
 
-const CAMPUS_LOCATIONS = [
-  { value: "Ojo", label: "Ojo (Main Campus)" },
-  { value: "Epe", label: "Epe Campus" },
-  { value: "Ikeja", label: "Ikeja Campus" },
-];
+interface SearchableSelectorProps {
+  id: string;
+  label: string;
+  placeholder: string;
+  value: string;
+  options: string[];
+  disabled?: boolean;
+  onChange: (value: string) => void;
+  testId: string;
+}
+
+function SearchableSelector({
+  id,
+  label,
+  placeholder,
+  value,
+  options,
+  disabled = false,
+  onChange,
+  testId,
+}: SearchableSelectorProps) {
+  const listboxId = useId();
+  const [query, setQuery] = useState(value);
+  const [open, setOpen] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(-1);
+  const previousValue = useRef(value);
+  const filteredOptions = options.filter((option) =>
+    option.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()),
+  );
+
+  useEffect(() => {
+    if (query === previousValue.current) setQuery(value);
+    previousValue.current = value;
+  }, [query, value]);
+
+  const choose = (option: string) => {
+    onChange(option);
+    setQuery(option);
+    setOpen(false);
+  };
+
+  return (
+    <div className="relative">
+      <label htmlFor={id} className="text-sm font-medium leading-none">
+        {label}
+      </label>
+      <Input
+        id={id}
+        data-testid={testId}
+        role="combobox"
+        aria-label={label}
+        aria-autocomplete="list"
+        aria-expanded={open}
+        aria-controls={listboxId}
+        aria-activedescendant={open && filteredOptions[activeIndex] ? `${listboxId}-option-${activeIndex}` : undefined}
+        autoComplete="off"
+        placeholder={placeholder}
+        value={query}
+        disabled={disabled}
+        className="mt-2 bg-background/50 border-white/10 focus:border-primary/50"
+        onFocus={() => {
+          setOpen(true);
+          setActiveIndex(-1);
+        }}
+        onBlur={() => setOpen(false)}
+        onChange={(event) => {
+          setQuery(event.target.value);
+          setActiveIndex(-1);
+          setOpen(true);
+          if (value) onChange("");
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "ArrowDown") {
+            event.preventDefault();
+            setOpen(true);
+            setActiveIndex((index) => Math.min(index < 0 ? 0 : index + 1, Math.max(filteredOptions.length - 1, 0)));
+          } else if (event.key === "ArrowUp") {
+            event.preventDefault();
+            setActiveIndex((index) => Math.max(index - 1, 0));
+          } else if (event.key === "Enter" && open && filteredOptions[activeIndex < 0 ? 0 : activeIndex]) {
+            event.preventDefault();
+            choose(filteredOptions[activeIndex < 0 ? 0 : activeIndex]);
+          } else if (event.key === "Escape") {
+            setOpen(false);
+            setQuery(value);
+          }
+        }}
+      />
+      {open && !disabled && (
+        <div className="absolute z-50 mt-1 max-h-60 w-full overflow-y-auto rounded-md border border-white/10 bg-popover p-1 text-popover-foreground shadow-md">
+          {filteredOptions.length ? (
+            <div id={listboxId} role="listbox" aria-label={`${label} options`}>
+              {filteredOptions.map((option, index) => (
+                <div
+                  id={`${listboxId}-option-${index}`}
+                  key={option}
+                  role="option"
+                  aria-selected={option === value}
+                  tabIndex={-1}
+                  data-testid={`${testId}-option-${index}`}
+                  className={`w-full rounded-sm px-3 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground ${
+                    index === activeIndex ? "bg-accent text-accent-foreground" : ""
+                  }`}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onMouseEnter={() => setActiveIndex(index)}
+                  onClick={() => choose(option)}
+                >
+                  {option}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p role="status" className="px-3 py-2 text-sm text-muted-foreground">
+              No matching options
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 const formSchema = z
   .object({
@@ -39,7 +162,7 @@ const formSchema = z
     faculty: z.string().min(1, "Faculty is required"),
     enrollmentStatus: z.string().min(1, "Enrollment status is required"),
     matricNumber: z.string().default(""),
-    campus: z.string().default("LASU Ojo"),
+    campus: z.string().default(""),
   })
   .superRefine((data, ctx) => {
     if (data.school !== NOT_LISTED && !data.matricNumber?.trim()) {
@@ -69,6 +192,14 @@ export default function Onboarding() {
   const [voteSubmitting, setVoteSubmitting] = useState(false);
   const [voted, setVoted] = useState(false);
   const [voteCount, setVoteCount] = useState<number | null>(null);
+  const [claimDialogOpen, setClaimDialogOpen] = useState(false);
+  const [claimInstitution, setClaimInstitution] = useState("");
+  const [claimMatricNumber, setClaimMatricNumber] = useState("");
+  const [claimDocumentType, setClaimDocumentType] = useState<"student-id" | "course-form">("student-id");
+  const [claimEvidenceFile, setClaimEvidenceFile] = useState<File | null>(null);
+  const [claimSubmitting, setClaimSubmitting] = useState(false);
+  const [claimStatuses, setClaimStatuses] = useState<MatricClaimStatus[]>([]);
+  const [claimStatusError, setClaimStatusError] = useState("");
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -80,7 +211,7 @@ export default function Onboarding() {
       faculty: "",
       enrollmentStatus: "",
       matricNumber: "",
-      campus: "LASU Ojo",
+      campus: "",
     },
   });
 
@@ -92,15 +223,123 @@ export default function Onboarding() {
 
   const selectedSchool = form.watch("school");
   const isNotListed = selectedSchool === NOT_LISTED;
+  const selectedInstitution = getInstitutionByName(selectedSchool);
+  const campusOptions = selectedInstitution?.campuses ?? (isNotListed ? [OTHER_CAMPUS] : []);
+  const facultyOptions = selectedInstitution
+    ? [...selectedInstitution.faculties, OTHER_DEPARTMENT]
+    : isNotListed
+      ? [OTHER_DEPARTMENT]
+      : [];
 
   const onSubmit = (values: z.infer<typeof formSchema>) => {
-    updateProfile.mutate({ data: values }, {
+    updateProfile.mutate({ data: { ...values, campus: values.campusLocation } }, {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: getGetMyProfileQueryKey() });
         setLocation("/feed");
       },
-      onError: () => alert("Could not save your profile. Please check your details and try again."),
+      onError: (error) => {
+        const apiError = error as unknown as { status?: number; data?: { error?: string; code?: string } };
+        if (
+          apiError.status === 409 &&
+          (apiError.data?.code === "MATRIC_CONFLICT" ||
+            apiError.data?.error?.toLowerCase().includes("matriculation number"))
+        ) {
+          setClaimInstitution(values.school);
+          setClaimMatricNumber(values.matricNumber.trim());
+          setClaimEvidenceFile(null);
+          setClaimDialogOpen(true);
+          return;
+        }
+        alert("Could not save your profile. Please check your details and try again.");
+      },
     });
+  };
+
+  useEffect(() => {
+    if (!claimDialogOpen) return;
+    let active = true;
+    fetch("/api/matric-claims/mine", { credentials: "include" })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("Status unavailable");
+        return await response.json() as { claims: MatricClaimStatus[] };
+      })
+      .then((data) => {
+        if (active) {
+          setClaimStatuses(data.claims ?? []);
+          setClaimStatusError("");
+        }
+      })
+      .catch(() => {
+        if (active) setClaimStatusError("Could not load previous claim statuses.");
+      });
+    return () => { active = false; };
+  }, [claimDialogOpen]);
+
+  const submitMatricClaim = async () => {
+    if (!claimEvidenceFile || !claimInstitution || !claimMatricNumber) return;
+    if (claimEvidenceFile.size > 10 * 1024 * 1024) {
+      toast({ title: "Evidence file is too large", description: "Choose a PDF or image up to 10 MB.", variant: "destructive" });
+      return;
+    }
+    const allowedTypes = ["application/pdf", "image/jpeg", "image/png", "image/webp"];
+    if (!allowedTypes.includes(claimEvidenceFile.type)) {
+      toast({ title: "Unsupported evidence file", description: "Choose a PDF, JPEG, PNG, or WebP image.", variant: "destructive" });
+      return;
+    }
+
+    setClaimSubmitting(true);
+    try {
+      const uploadResponse = await fetch("/api/matric-claims/uploads/request-url", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: claimEvidenceFile.name,
+          size: claimEvidenceFile.size,
+          contentType: claimEvidenceFile.type,
+          documentType: claimDocumentType,
+        }),
+      });
+      const uploadData = await uploadResponse.json() as { uploadURL?: string; objectPath?: string; error?: string };
+      if (!uploadResponse.ok || !uploadData.uploadURL || !uploadData.objectPath) {
+        throw new Error(uploadData.error || "Could not prepare the private evidence upload.");
+      }
+      const directUploadResponse = await fetch(uploadData.uploadURL, {
+        method: "PUT",
+        headers: { "Content-Type": claimEvidenceFile.type },
+        body: claimEvidenceFile,
+        credentials: "omit",
+      });
+      if (!directUploadResponse.ok) throw new Error("Evidence upload failed. Please try again.");
+
+      const claimResponse = await fetch("/api/matric-claims", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          matricNumber: claimMatricNumber,
+          institution: claimInstitution,
+          evidenceObjectPath: uploadData.objectPath,
+        }),
+      });
+      const claimData = await claimResponse.json() as { error?: string };
+      if (!claimResponse.ok) throw new Error(claimData.error || "Could not submit your claim.");
+      toast({ title: "Claim submitted for review", description: "Your account and matric details remain unchanged while the report is reviewed." });
+      setClaimEvidenceFile(null);
+      const statusResponse = await fetch("/api/matric-claims/mine", { credentials: "include" });
+      if (statusResponse.ok) {
+        const statusData = await statusResponse.json() as { claims: MatricClaimStatus[] };
+        setClaimStatuses(statusData.claims ?? []);
+      }
+    } catch (error) {
+      toast({
+        title: "Could not submit claim",
+        description: error instanceof Error ? error.message : "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setClaimSubmitting(false);
+    }
   };
 
   const handleVote = async () => {
@@ -176,22 +415,21 @@ export default function Onboarding() {
                   name="school"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>School</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value}>
-                        <FormControl>
-                          <SelectTrigger
-                            data-testid="select-school"
-                            className="bg-background/50 border-white/10"
-                          >
-                            <SelectValue placeholder="Select your school" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {SCHOOLS.map((s) => (
-                            <SelectItem key={s} value={s}>{s}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <FormControl>
+                        <SearchableSelector
+                          id="school"
+                          label="School"
+                          placeholder="Search your institution"
+                          value={field.value}
+                          options={[...CAMPUS_INSTITUTIONS.map((institution) => institution.name), NOT_LISTED]}
+                          testId="select-school"
+                          onChange={(value) => {
+                            field.onChange(value);
+                            form.setValue("campusLocation", "", { shouldValidate: true });
+                            form.setValue("faculty", "", { shouldValidate: true });
+                          }}
+                        />
+                      </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -256,22 +494,21 @@ export default function Onboarding() {
                   name="campusLocation"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Campus Location</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value}>
-                        <FormControl>
-                          <SelectTrigger
-                            data-testid="select-campus-location"
-                            className="bg-background/50 border-white/10"
-                          >
-                            <SelectValue placeholder="Select campus" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {CAMPUS_LOCATIONS.map(loc => (
-                            <SelectItem key={loc.value} value={loc.value}>{loc.label}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <FormControl>
+                        <SearchableSelector
+                          id="campus-location"
+                          label="Campus Location"
+                          placeholder={selectedSchool ? "Search campus locations" : "Select a school first"}
+                          value={field.value}
+                          options={campusOptions}
+                          disabled={!selectedSchool}
+                          testId="select-campus-location"
+                          onChange={(value) => {
+                            field.onChange(value);
+                            form.setValue("faculty", "", { shouldValidate: true });
+                          }}
+                        />
+                      </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -332,22 +569,18 @@ export default function Onboarding() {
                   name="faculty"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Faculty / Department</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value}>
-                        <FormControl>
-                          <SelectTrigger data-testid="select-faculty" className="bg-background/50 border-white/10">
-                            <SelectValue placeholder="Select Faculty" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {[
-                            "Arts", "Science", "Law", "Social Sciences", "Education",
-                            "Engineering", "Management Sciences", "Communication & Media Studies"
-                          ].map(fac => (
-                            <SelectItem key={fac} value={fac}>{fac}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <FormControl>
+                        <SearchableSelector
+                          id="faculty"
+                          label="Faculty / School / Department"
+                          placeholder={field.value ? field.value : "Select a campus first"}
+                          value={field.value}
+                          options={facultyOptions}
+                          disabled={!form.watch("campusLocation")}
+                          testId="select-faculty"
+                          onChange={field.onChange}
+                        />
+                      </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -402,6 +635,73 @@ export default function Onboarding() {
           </CardContent>
         </Card>
       </motion.div>
+      <Dialog open={claimDialogOpen} onOpenChange={setClaimDialogOpen}>
+        <DialogContent className="glass border-primary/20 sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold">Claim Account / Report Fraud</DialogTitle>
+            <DialogDescription>
+              This matric number is already registered. Send private proof for review. Filing a claim does not transfer or change either account.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="rounded-lg border border-white/10 bg-background/40 p-3 text-sm">
+              <p><span className="text-muted-foreground">Institution:</span> {claimInstitution}</p>
+              <p className="mt-1"><span className="text-muted-foreground">Matric number:</span> <span className="font-mono">{claimMatricNumber}</span></p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="claim-document-type">Evidence type</Label>
+              <Select value={claimDocumentType} onValueChange={(value) => setClaimDocumentType(value as "student-id" | "course-form")}>
+                <SelectTrigger id="claim-document-type" className="bg-background/50 border-white/10">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="student-id">Student ID</SelectItem>
+                  <SelectItem value="course-form">Course form</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="claim-evidence-file">Private proof (PDF or image, up to 10 MB)</Label>
+              <Input
+                id="claim-evidence-file"
+                type="file"
+                accept="application/pdf,image/jpeg,image/png,image/webp"
+                className="bg-background/50 border-white/10 file:mr-3 file:rounded-md file:border-0 file:bg-primary/15 file:px-3 file:py-1 file:text-xs"
+                onChange={(event) => setClaimEvidenceFile(event.target.files?.[0] ?? null)}
+              />
+              {claimEvidenceFile && <p className="text-xs text-muted-foreground">{claimEvidenceFile.name} · {(claimEvidenceFile.size / (1024 * 1024)).toFixed(2)} MB</p>}
+            </div>
+            {claimStatusError && <p role="alert" className="text-sm text-rose-300">{claimStatusError}</p>}
+            {claimStatuses.length > 0 && (
+              <div className="space-y-2 border-t border-white/10 pt-3">
+                <p className="text-sm font-semibold">Your claim status</p>
+                {claimStatuses.map((claim) => (
+                  <div key={claim.id} className="rounded-lg bg-background/40 p-3 text-sm">
+                    <div className="flex items-center justify-between gap-3">
+                      <span>{claim.institution}</span>
+                      <span className={claim.status === "pending" ? "text-amber-300" : claim.status === "approved" ? "text-emerald-300" : "text-rose-300"}>
+                        {claim.status === "pending" ? "Under review" : claim.status === "approved" ? "Reviewed" : "Not approved"}
+                      </span>
+                    </div>
+                    {claim.adminDecisionNote && <p className="mt-1 text-xs text-muted-foreground">{claim.adminDecisionNote}</p>}
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="flex justify-end gap-2 pt-1">
+              <Button type="button" variant="outline" onClick={() => setClaimDialogOpen(false)}>Close</Button>
+              <Button
+                type="button"
+                className="gradient-btn"
+                disabled={!claimEvidenceFile || claimSubmitting || claimStatuses.some((claim) => claim.status === "pending" && claim.institution.toLowerCase() === claimInstitution.toLowerCase() && claim.matricNumber.replace(/\s+/g, "").toUpperCase() === claimMatricNumber.replace(/\s+/g, "").toUpperCase())}
+                onClick={() => void submitMatricClaim()}
+              >
+                {claimSubmitting ? "Uploading securely…" : "Submit claim"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

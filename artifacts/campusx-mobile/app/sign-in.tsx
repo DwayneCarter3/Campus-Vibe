@@ -26,8 +26,8 @@ export default function SignInScreen() {
   const insets = useSafeAreaInsets();
   const { isSignedIn } = useAuth();
 
-  const { signIn, setActive: setSignInActive, isLoaded: signInLoaded } = useSignIn();
-  const { signUp, setActive: setSignUpActive, isLoaded: signUpLoaded } = useSignUp();
+  const { signIn, fetchStatus: signInFetchStatus } = useSignIn();
+  const { signUp, fetchStatus: signUpFetchStatus } = useSignUp();
 
   const [mode, setMode] = useState<Mode>("signIn");
   const [email, setEmail] = useState("");
@@ -37,6 +37,7 @@ export default function SignInScreen() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const authLoading = signInFetchStatus === "fetching" || signUpFetchStatus === "fetching";
 
   useEffect(() => {
     if (isSignedIn) router.replace("/(tabs)");
@@ -46,21 +47,31 @@ export default function SignInScreen() {
   const topPad = isWeb ? 24 : insets.top;
 
   const handleSignIn = async () => {
-    if (!signInLoaded || !email.trim() || !password) return;
+    if (!email.trim() || !password) return;
     setLoading(true);
     setError("");
     try {
-      const result = await signIn.create({ identifier: email.trim(), password });
-      if (result.status === "complete") {
-        await setSignInActive({ session: result.createdSessionId });
+      const { error: signInError } = await signIn.password({
+        emailAddress: email.trim(),
+        password,
+      });
+      if (signInError) throw signInError;
+      if (signIn.status === "complete") {
+        await signIn.finalize({
+          navigate: ({ session }) => {
+            if (session?.currentTask) return;
+            router.replace("/(tabs)");
+          },
+        });
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        router.replace("/(tabs)");
+      } else if (signIn.status === "needs_second_factor" || signIn.status === "needs_client_trust") {
+        setError("Your account needs an additional verification step. Please use the web app to finish signing in.");
       } else {
         setError("Sign-in incomplete. Please try again.");
       }
     } catch (err: any) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      const msg = err?.errors?.[0]?.longMessage || err?.errors?.[0]?.message || "Sign-in failed. Check your details.";
+      const msg = err?.longMessage || err?.message || "Sign-in failed. Check your details.";
       setError(msg);
     } finally {
       setLoading(false);
@@ -68,17 +79,25 @@ export default function SignInScreen() {
   };
 
   const handleSignUp = async () => {
-    if (!signUpLoaded || !email.trim() || !password || !fullName.trim()) return;
+    if (!email.trim() || !password || !fullName.trim()) return;
     setLoading(true);
     setError("");
     try {
-      await signUp.create({ emailAddress: email.trim(), password, firstName: fullName.trim().split(" ")[0], lastName: fullName.trim().split(" ").slice(1).join(" ") || undefined });
-      await signUp.prepareEmailAddressVerification({ strategy: "email_code" });
+      const [firstName, ...lastName] = fullName.trim().split(/\s+/);
+      const { error: signUpError } = await signUp.password({
+        emailAddress: email.trim(),
+        password,
+        firstName,
+        lastName: lastName.join(" ") || undefined,
+      });
+      if (signUpError) throw signUpError;
+      const { error: verificationError } = await signUp.verifications.sendEmailCode();
+      if (verificationError) throw verificationError;
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       setMode("verify");
     } catch (err: any) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      const msg = err?.errors?.[0]?.longMessage || err?.errors?.[0]?.message || "Sign-up failed.";
+      const msg = err?.longMessage || err?.message || "Sign-up failed.";
       setError(msg);
     } finally {
       setLoading(false);
@@ -86,21 +105,28 @@ export default function SignInScreen() {
   };
 
   const handleVerify = async () => {
-    if (!signUpLoaded || !verifyCode.trim()) return;
+    if (!verifyCode.trim()) return;
     setLoading(true);
     setError("");
     try {
-      const result = await signUp.attemptEmailAddressVerification({ code: verifyCode.trim() });
-      if (result.status === "complete") {
-        await setSignUpActive({ session: result.createdSessionId });
+      const { error: verificationError } = await signUp.verifications.verifyEmailCode({
+        code: verifyCode.trim(),
+      });
+      if (verificationError) throw verificationError;
+      if (signUp.status === "complete") {
+        await signUp.finalize({
+          navigate: ({ session }) => {
+            if (session?.currentTask) return;
+            router.replace("/onboarding");
+          },
+        });
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        router.replace("/(tabs)");
       } else {
         setError("Verification incomplete. Try again.");
       }
     } catch (err: any) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      const msg = err?.errors?.[0]?.longMessage || err?.errors?.[0]?.message || "Wrong code. Try again.";
+      const msg = err?.longMessage || err?.message || "Wrong code. Try again.";
       setError(msg);
     } finally {
       setLoading(false);
@@ -111,6 +137,19 @@ export default function SignInScreen() {
     setMode(next);
     setError("");
     setPassword("");
+  };
+
+  const resendCode = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const { error: verificationError } = await signUp.verifications.sendEmailCode();
+      if (verificationError) throw verificationError;
+    } catch (err: any) {
+      setError(err?.longMessage || err?.message || "Could not resend the code.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -129,7 +168,7 @@ export default function SignInScreen() {
             <Text style={[styles.logoText, { color: colors.primary }]}>CX</Text>
           </View>
           <Text style={[styles.appName, { color: colors.foreground }]}>CampusX</Text>
-          <Text style={[styles.tagline, { color: colors.mutedForeground }]}>LASU Ojo campus community</Text>
+          <Text style={[styles.tagline, { color: colors.mutedForeground }]}>Your campus community</Text>
         </View>
 
         {/* Form card */}
@@ -153,11 +192,11 @@ export default function SignInScreen() {
               <ActionButton
                 label="Verify Email"
                 onPress={handleVerify}
-                loading={loading}
-                disabled={!verifyCode.trim()}
+                loading={loading || authLoading}
+                disabled={!verifyCode.trim() || authLoading}
                 colors={colors}
               />
-              <TouchableOpacity onPress={() => switchMode("signUp")} style={styles.link}>
+              <TouchableOpacity onPress={resendCode} disabled={loading || authLoading} style={styles.link}>
                 <Text style={[styles.linkText, { color: colors.mutedForeground }]}>Resend code</Text>
               </TouchableOpacity>
             </>
@@ -213,7 +252,7 @@ export default function SignInScreen() {
               <ActionButton
                 label={mode === "signIn" ? "Sign In" : "Create Account"}
                 onPress={mode === "signIn" ? handleSignIn : handleSignUp}
-                loading={loading}
+                loading={loading || authLoading}
                 disabled={!email.trim() || !password || (mode === "signUp" && !fullName.trim())}
                 colors={colors}
               />
@@ -231,9 +270,10 @@ export default function SignInScreen() {
             </>
           )}
         </View>
+        {mode === "signIn" ? null : <View nativeID="clerk-captcha" />}
 
         <Text style={[styles.footer, { color: colors.mutedForeground }]}>
-          By continuing, you agree to the CampusX community guidelines for LASU Ojo students.
+          By continuing, you agree to the CampusX community guidelines for students.
         </Text>
       </ScrollView>
     </KeyboardAvoidingView>

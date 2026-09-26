@@ -1,10 +1,10 @@
 ---
 name: Verification badge tiers
-description: Public verification tiers and the rule against inferring a vendor-specific badge.
+description: Latest public badge hierarchy, including free student status and premium role tags.
 ---
 
-Basic student approval shows no adjacent checkmark; show exactly one paid-verification tier mark beside names: Green Tick for Student_Verified or Premium Blue Tick for Premium_Approved. Do not add a secondary green pill or checkmark. Gold is a visual option, not an automatically assigned business-vendor entitlement. Academic level labels may appear in public headers; CEO, Admin, and Moderator role tags must never appear on public profiles, posts, comments, or feeds.
+The latest user direction supersedes the previous no-pill/no-role rule: successful students receive a free outlined Student Verified pill. Approved paid Green Tick adds a green avatar check; approved Premium Blue Tick adds a glowing blue check and a role/status tag based on an actual API role. Do not fabricate a Vendor role or assign a visual-only gold tier as a business entitlement.
 
-**Why:** The user removed the standalone green check icon from usernames and wants one paid/premium tier mark when applicable. After initially requesting role badges in post headers, the user explicitly reversed that request and required strict public removal of all staff role tags. Staff permissions belong only in internal authorization and the Admin Dashboard.
+**Why:** The user later explicitly requested both the free green-outline pill and public CEO/Admin/Moderator/Student/Vendor role tags for premium badge holders; that newer request reverses their earlier preference.
 
-**How to apply:** Use the specific verification status, not a general isVerified boolean, to choose public marks. Public cards may show academic level, but never show a staff-role badge or infer one from a campus title. Keep role controls and moderation permissions inside the private dashboard and backend. Define and check a dedicated entitlement before assigning any vendor-specific gold badge.
+**How to apply:** Use verification status for paid tier and API-backed role for the premium role tag; a public label never grants backend permissions. Keep review pending states badge-free. Define a dedicated entitlement before introducing a Vendor/Gold badge.

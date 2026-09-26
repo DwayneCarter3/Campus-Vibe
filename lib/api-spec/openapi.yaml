@@ -25,6 +25,10 @@ tags:
     description: Admin dashboard operations
   - name: payments
     description: Paystack payments and early-bird benefit claims
+  - name: matricClaims
+    description: Private matric-account fraud claim requests and admin decisions
+  - name: ads
+    description: Paid campus ad campaigns and moderation
 
 paths:
   /healthz:
@@ -157,7 +161,7 @@ paths:
     post:
       operationId: requestPremiumBadge
       tags: [users]
-      summary: Request premium badge verification
+      summary: Deprecated legacy badge request; use /payments/initialize instead
       requestBody:
         required: true
         content:
@@ -165,12 +169,8 @@ paths:
             schema:
               $ref: "#/components/schemas/RequestBadgeBody"
       responses:
-        "200":
-          description: Badge request submitted
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/RequestBadgeResponse"
+        "410":
+          description: Legacy badge requests are disabled; use the Paystack or early-bird payment flow.
         "401":
           description: Unauthorized
 
@@ -1178,11 +1178,26 @@ paths:
         '401':
           description: Unauthorized.
 
+  /payments/products:
+    get:
+      tags: [payments]
+      operationId: listPaymentProducts
+      summary: List available products, fixed durations, and customer-payable amounts
+      responses:
+        '200':
+          description: Product catalog; amountKobo includes the current Paystack customer-paid fee.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentProductsResponse'
+
   /payments/initialize:
     post:
       tags: [payments]
       operationId: initializePayment
       summary: Initialize a Paystack payment or claim an eligible early-bird benefit
+      security:
+        - bearerAuth: []
       requestBody:
         required: true
         content:
@@ -1191,7 +1206,7 @@ paths:
               $ref: '#/components/schemas/InitializePaymentBody'
       responses:
         '200':
-          description: Payment initialized or early-bird benefit activated.
+          description: Payment initialized or an eligible early-bird benefit claimed.
           content:
             application/json:
               schema:
@@ -1208,6 +1223,8 @@ paths:
       tags: [payments]
       operationId: getPaymentStatus
       summary: Get the current status of one of the current user's payments
+      security:
+        - bearerAuth: []
       parameters:
         - name: reference
           in: path
@@ -1234,7 +1251,7 @@ paths:
         content:
           application/json:
             schema:
-              type: object
+                $ref: '#/components/schemas/PaystackWebhookInput'
       responses:
         '200':
           description: Webhook accepted.
@@ -1254,6 +1271,8 @@ paths:
       tags: [payments]
       operationId: listPayments
       summary: List the current user's payments
+      security:
+        - bearerAuth: []
       responses:
         '200':
           description: Payment history.
@@ -1261,6 +1280,122 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ListPaymentsResponse'
+
+  /ads:
+    get:
+      tags: [ads]
+      operationId: listActiveAds
+      summary: List approved, unexpired ads for the signed-in viewer's campus
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Active campaigns matching the viewer's school and campus.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActiveAdsResponse'
+        '401':
+          description: Unauthorized.
+    post:
+      tags: [ads]
+      operationId: submitAdCampaign
+      summary: Submit an ad using an owned paid, unexpired ad purchase
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdCampaignInput'
+      responses:
+        '201':
+          description: Campaign submitted for manual moderation; it is not published.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdCampaignCreated'
+        '400':
+          description: Invalid campaign content or destination.
+        '401':
+          description: Unauthorized.
+        '403':
+          description: No matching paid and unexpired ad purchase.
+        '409':
+          description: Purchase reference already used for a campaign.
+
+  /ads/mine:
+    get:
+      tags: [ads]
+      operationId: listMyAdCampaigns
+      summary: List the signed-in user's ad campaign submissions and review states
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Campaigns submitted by the current user.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MyAdCampaignsResponse'
+        '401':
+          description: Unauthorized.
+
+  /admin/ads:
+    get:
+      tags: [ads, admin]
+      operationId: listPendingAdCampaigns
+      summary: List campaigns awaiting admin moderation
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Pending ad campaigns for review.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminAdCampaignsResponse'
+        '401':
+          description: Unauthorized.
+        '403':
+          description: Admin/CEO only.
+
+  /admin/ads/{campaignId}/decision:
+    patch:
+      tags: [ads, admin]
+      operationId: decideAdCampaign
+      summary: Approve or reject a pending ad campaign
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: campaignId
+          in: path
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdCampaignDecisionInput'
+      responses:
+        '200':
+          description: Moderation decision recorded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdCampaignDecisionResult'
+        '400':
+          description: Invalid decision.
+        '401':
+          description: Unauthorized.
+        '403':
+          description: Admin/CEO only.
+        '404':
+          description: Pending campaign not found.
 
   /messages/conversations:
     get:
@@ -1473,6 +1608,173 @@ paths:
                 format: binary
         '404':
           description: Object not found.
+
+  /matric-claims/uploads/request-url:
+    post:
+      operationId: requestMatricClaimEvidenceUploadUrl
+      tags: [matricClaims]
+      summary: Request a private signed upload URL for claim evidence
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MatricClaimEvidenceUploadRequest'
+      responses:
+        '201':
+          description: Signed upload URL issued. Upload bytes directly using PUT before submitting the claim.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MatricClaimEvidenceUploadResponse'
+        '400':
+          description: Unsupported content type, document type, or size.
+        '401':
+          description: Unauthorized.
+        '429':
+          description: Per-account evidence upload rate limit exceeded.
+        '500':
+          description: Failed to issue upload URL.
+  /matric-claims:
+    post:
+      operationId: submitMatricClaim
+      tags: [matricClaims]
+      summary: Submit an authenticated matric account claim against a matching institution and matric number
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MatricClaimSubmission'
+      responses:
+        '201':
+          description: Claim submitted for review. Account ownership and matric data remain unchanged.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MatricClaimCreated'
+        '400':
+          description: Invalid claim or evidence.
+        '401':
+          description: Unauthorized.
+        '404':
+          description: No existing account matches the supplied institution and normalized matric number.
+        '409':
+          description: Claim is already pending or a matching account claim is otherwise conflicting.
+        '429':
+          description: Per-account claim submission rate limit exceeded.
+  /matric-claims/mine:
+    get:
+      operationId: listMyMatricClaims
+      tags: [matricClaims]
+      summary: List only the authenticated claimant's requests and status
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: The authenticated claimant's claims.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MyMatricClaimsResponse'
+        '401':
+          description: Unauthorized.
+  /admin/matric-claims:
+    get:
+      operationId: listAdminMatricClaims
+      tags: [matricClaims]
+      summary: List matric claims for admin/CEO review
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [pending, approved, rejected]
+      responses:
+        '200':
+          description: Claims available to an admin or CEO.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminMatricClaimsResponse'
+        '400':
+          description: Invalid status filter.
+        '401':
+          description: Unauthorized.
+        '403':
+          description: Admin/CEO access required.
+  /admin/matric-claims/{claimId}/decision:
+    patch:
+      operationId: resolveMatricClaim
+      tags: [matricClaims]
+      summary: Record a final review decision without transferring an account
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: claimId
+          in: path
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MatricClaimDecisionInput'
+      responses:
+        '200':
+          description: Decision, reviewer, note, and timestamp recorded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MatricClaimDecisionResult'
+        '400':
+          description: Invalid claim ID or decision.
+        '401':
+          description: Unauthorized.
+        '403':
+          description: Admin/CEO access required.
+        '404':
+          description: Claim not found.
+        '409':
+          description: Claim has already been decided.
+  /matric-claims/{claimId}/evidence:
+    get:
+      operationId: getMatricClaimEvidence
+      tags: [matricClaims]
+      summary: Stream evidence privately to the claimant or an admin/CEO
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: claimId
+          in: path
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        '200':
+          description: Private evidence stream, returned as an attachment with no-store caching.
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '401':
+          description: Unauthorized.
+        '403':
+          description: Only the claimant or an admin/CEO may view this evidence.
+        '404':
+          description: Claim or evidence not found.
 
   /stats/marketplace:
     get:
@@ -2633,7 +2935,48 @@ components:
 
     PaymentPackage:
       type: string
-      enum: [student_verification, premium_blue_tick, marketplace_promotion]
+      description: Stable product identifier accepted by POST /payments/initialize.
+      enum:
+        - student_verification
+        - premium_blue_tick
+        - marketplace_promotion_3_day
+        - marketplace_promotion_7_day
+        - marketplace_promotion_30_day
+        - event_performance_ad_30_day
+        - corporate_ad_30_day
+
+    PaymentProduct:
+      type: object
+      required: [packageType, label, durationDays, baseAmountKobo, amountKobo]
+      properties:
+        packageType:
+          $ref: '#/components/schemas/PaymentPackage'
+        label:
+          type: string
+        durationDays:
+          type: integer
+          description: Fixed entitlement duration; entitlements are manually renewed.
+        baseAmountKobo:
+          type: integer
+          description: Listed product price in kobo.
+        amountKobo:
+          type: integer
+          description: Paystack amount including customer-paid processing fee.
+
+    PaymentProductsResponse:
+      type: object
+      required: [currency, products, feeDisclosure]
+      properties:
+        currency:
+          type: string
+          enum: [NGN]
+        feeDisclosure:
+          type: string
+          description: Processing-fee and merchant checkout-configuration disclosure.
+        products:
+          type: array
+          items:
+            $ref: '#/components/schemas/PaymentProduct'
 
     InitializePaymentBody:
       type: object
@@ -2665,12 +3008,16 @@ components:
           type: integer
         amountKobo:
           type: integer
+        durationDays:
+          type: integer
+        packageType:
+          $ref: '#/components/schemas/PaymentPackage'
         label:
           type: string
 
     PaymentStatusResponse:
       type: object
-      required: [reference, status, packageType]
+      required: [reference, status, packageType, durationDays, baseAmountKobo, amountKobo, entitlementExpiresAt]
       properties:
         reference:
           type: string
@@ -2678,10 +3025,21 @@ components:
           type: string
         packageType:
           $ref: '#/components/schemas/PaymentPackage'
+        durationDays:
+          type: integer
+        baseAmountKobo:
+          type: integer
+          description: Listed product price in kobo.
+        amountKobo:
+          type: integer
+          description: Customer-payable amount including Paystack fee.
+        entitlementExpiresAt:
+          type: ["string", "null"]
+          format: date-time
 
     PaymentHistoryItem:
       type: object
-      required: [reference, packageType, status, amountKobo, createdAt]
+      required: [reference, packageType, status, amountKobo, baseAmountKobo, createdAt, durationDays, entitlementExpiresAt]
       properties:
         reference:
           type: string
@@ -2691,8 +3049,17 @@ components:
           type: string
         amountKobo:
           type: integer
+          description: Customer-payable amount including Paystack fee.
+        baseAmountKobo:
+          type: integer
+          description: Listed product price in kobo.
         createdAt:
           type: string
+          format: date-time
+        durationDays:
+          type: integer
+        entitlementExpiresAt:
+          type: ["string", "null"]
           format: date-time
 
     ListPaymentsResponse:
@@ -2703,6 +3070,11 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/PaymentHistoryItem'
+
+    PaystackWebhookInput:
+      type: object
+      description: Paystack-signed event payload; charge.success is reconciled against the saved amount, currency, reference, and customer.
+      additionalProperties: true
 
     ConversationSummary:
       type: object
@@ -2827,3 +3199,329 @@ components:
             $ref: '#/components/schemas/DirectMessage'
         total:
           type: integer
+
+    MatricClaimEvidenceUploadRequest:
+      type: object
+      additionalProperties: false
+      required: [name, size, contentType, documentType]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+        size:
+          type: integer
+          minimum: 1
+          maximum: 10485760
+        contentType:
+          type: string
+          enum: [application/pdf, image/jpeg, image/png, image/webp]
+        documentType:
+          type: string
+          enum: [student-id, course-form]
+
+    MatricClaimEvidenceUploadResponse:
+      type: object
+      required: [uploadURL, objectPath, expiresInSeconds, metadata]
+      properties:
+        uploadURL:
+          type: string
+          format: uri
+        objectPath:
+          type: string
+          pattern: '^/objects/[A-Za-z0-9/_-]+$'
+        expiresInSeconds:
+          type: integer
+          enum: [900]
+        metadata:
+          type: object
+          required: [name, size, contentType, documentType]
+          properties:
+            name:
+              type: string
+            size:
+              type: integer
+            contentType:
+              type: string
+              enum: [application/pdf, image/jpeg, image/png, image/webp]
+            documentType:
+              type: string
+              enum: [student-id, course-form]
+
+    MatricClaimSubmission:
+      type: object
+      additionalProperties: false
+      required: [matricNumber, institution, evidenceObjectPath]
+      properties:
+        matricNumber:
+          type: string
+          minLength: 1
+          maxLength: 100
+          description: Compared server-side after removing whitespace and normalizing case.
+        institution:
+          type: string
+          minLength: 1
+          maxLength: 200
+          description: Compared server-side case-insensitively to the existing account institution.
+        evidenceObjectPath:
+          type: string
+          pattern: '^/objects/[A-Za-z0-9/_-]+$'
+
+    MatricClaimCreated:
+      type: object
+      required: [id, status, createdAt]
+      properties:
+        id:
+          type: integer
+        status:
+          type: string
+          enum: [pending]
+        createdAt:
+          type: string
+          format: date-time
+
+    MyMatricClaimsResponse:
+      type: object
+      required: [claims]
+      properties:
+        claims:
+          type: array
+          items:
+            $ref: '#/components/schemas/MyMatricClaim'
+
+    MyMatricClaim:
+      type: object
+      required: [id, matricNumber, institution, evidenceType, status, createdAt, updatedAt]
+      properties:
+        id:
+          type: integer
+        matricNumber:
+          type: string
+        institution:
+          type: string
+        evidenceType:
+          type: string
+          enum: [student-id, course-form]
+        status:
+          type: string
+          enum: [pending, approved, rejected]
+        adminDecision:
+          type: [string, 'null']
+          enum: [approved, rejected, null]
+        adminDecisionNote:
+          type: [string, 'null']
+        decidedAt:
+          type: [string, 'null']
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    AdminMatricClaimsResponse:
+      type: object
+      required: [claims]
+      properties:
+        claims:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminMatricClaim'
+
+    AdminMatricClaim:
+      allOf:
+        - $ref: '#/components/schemas/MyMatricClaim'
+        - type: object
+          required: [claimantClerkId, existingAccountId, evidenceObjectPath]
+          properties:
+            claimantClerkId:
+              type: string
+            existingAccountId:
+              type: integer
+            evidenceObjectPath:
+              type: string
+            decidedByClerkId:
+              type: [string, 'null']
+
+    MatricClaimDecisionInput:
+      type: object
+      additionalProperties: false
+      required: [decision]
+      properties:
+        decision:
+          type: string
+          enum: [approved, rejected]
+        note:
+          type: string
+          maxLength: 2000
+
+    MatricClaimDecisionResult:
+      type: object
+      required: [id, status, adminDecision, decidedByClerkId, decidedAt]
+      properties:
+        id:
+          type: integer
+        status:
+          type: string
+          enum: [approved, rejected]
+        adminDecision:
+          type: string
+          enum: [approved, rejected]
+        adminDecisionNote:
+          type: [string, 'null']
+        decidedByClerkId:
+          type: string
+        decidedAt:
+          type: string
+          format: date-time
+
+    AdCampaignInput:
+      type: object
+      additionalProperties: false
+      required: [paymentReference, title, body, destinationUrl]
+      properties:
+        paymentReference:
+          type: string
+          minLength: 1
+          maxLength: 200
+        title:
+          type: string
+          minLength: 1
+          maxLength: 100
+        body:
+          type: string
+          minLength: 1
+          maxLength: 2000
+        destinationUrl:
+          type: string
+          format: uri
+          maxLength: 2048
+          description: Must be a public HTTPS URL; credentials and local/private destinations are rejected.
+
+    AdCampaignCreated:
+      type: object
+      required: [id, status, expiresAt]
+      properties:
+        id:
+          type: integer
+        status:
+          type: string
+          enum: [pending]
+        expiresAt:
+          type: string
+          format: date-time
+
+    ActiveAdCampaign:
+      type: object
+      required: [id, title, body, destinationUrl, packageType, expiresAt]
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        body:
+          type: string
+        destinationUrl:
+          type: string
+          format: uri
+        packageType:
+          $ref: '#/components/schemas/PaymentPackage'
+        expiresAt:
+          type: string
+          format: date-time
+
+    ActiveAdsResponse:
+      type: object
+      required: [ads]
+      properties:
+        ads:
+          type: array
+          items:
+            $ref: '#/components/schemas/ActiveAdCampaign'
+
+    MyAdCampaign:
+      type: object
+      required: [id, paymentReference, title, status, expiresAt, createdAt]
+      properties:
+        id:
+          type: integer
+        paymentReference:
+          type: string
+        title:
+          type: string
+        status:
+          type: string
+          enum: [pending, approved, rejected]
+        expiresAt:
+          type: string
+          format: date-time
+        rejectionReason:
+          type: [string, 'null']
+        createdAt:
+          type: string
+          format: date-time
+
+    MyAdCampaignsResponse:
+      type: object
+      required: [campaigns]
+      properties:
+        campaigns:
+          type: array
+          items:
+            $ref: '#/components/schemas/MyAdCampaign'
+
+    AdminAdCampaign:
+      allOf:
+        - $ref: '#/components/schemas/ActiveAdCampaign'
+        - type: object
+          required: [ownerClerkUserId, paymentReference, school, campusLocation, status, createdAt]
+          properties:
+            ownerClerkUserId:
+              type: string
+            paymentReference:
+              type: string
+            school:
+              type: string
+            campusLocation:
+              type: string
+            status:
+              type: string
+              enum: [pending]
+            createdAt:
+              type: string
+              format: date-time
+
+    AdminAdCampaignsResponse:
+      type: object
+      required: [campaigns]
+      properties:
+        campaigns:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminAdCampaign'
+
+    AdCampaignDecisionInput:
+      type: object
+      additionalProperties: false
+      required: [decision]
+      properties:
+        decision:
+          type: string
+          enum: [approved, rejected]
+        rejectionReason:
+          type: string
+          maxLength: 500
+
+    AdCampaignDecisionResult:
+      type: object
+      required: [id, status, decidedAt]
+      properties:
+        id:
+          type: integer
+        status:
+          type: string
+          enum: [approved, rejected]
+        decidedAt:
+          type: string
+          format: date-time

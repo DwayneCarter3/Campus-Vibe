@@ -1,9 +1,10 @@
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, type Request } from "express";
 import { getAuth } from "@clerk/express";
-import { eq, desc, and, sql } from "drizzle-orm";
+import { eq, desc, and, sql, isNull, ne, or } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { db, postsTable, postLikesTable, postNoCapsTable, postCommentsTable, usersTable, pollsTable, pollOptionsTable, savedPostsTable, reportsTable, uploadedMediaTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/auth";
+import { hasAdminPrivileges } from "../lib/privilege";
 import { computeCampusTitle } from "./admin";
 import { isVerifiedAccount, publicVerificationStatus } from "../lib/verification";
 import { getEffectiveLevel } from "../lib/academic-level";
@@ -14,6 +15,15 @@ import { ObjectStorageService } from "../lib/objectStorage";
 import { cursorFilterHash, decodeFeedCursor, encodeFeedCursor } from "../lib/listCursor";
 import { validateUploadedWebpImage } from "../lib/image-upload-validation";
 import { isSmallWebpDataUrl } from "../lib/blur-data-url";
+import {
+  campusScopeCondition,
+  normalizeCampusLocation,
+  normalizeSchoolLabel,
+  profilesShareCampus,
+  profilesShareSchool,
+  schoolScopeCondition,
+  type CampusScopeProfile,
+} from "./list-scope";
 import {
   ListPostsQueryParams,
   ListPostsResponse,
@@ -53,6 +63,59 @@ const objectStorageService = new ObjectStorageService();
 const originalPostAlias = alias(postsTable, "op");
 const originalUserAlias = alias(usersTable, "ou");
 
+async function getCampusScopeProfile(userId: string) {
+  const [profile] = await db
+    .select({
+      institutionId: usersTable.institutionId,
+      school: usersTable.school,
+      campusLocation: usersTable.campusLocation,
+    })
+    .from(usersTable)
+    .where(eq(usersTable.clerkUserId, userId));
+  return profile ?? null;
+}
+
+function hasCampusScope(profile: CampusScopeProfile | null): profile is CampusScopeProfile {
+  return Boolean(profile?.school.trim() && profile.campusLocation.trim());
+}
+
+async function getPostReadScope(
+  req: Request,
+  viewerId: string,
+  post: { authorId: string; originalPostId: number | null },
+) {
+  const requesterProfile = await getCampusScopeProfile(viewerId);
+  const isOwner = post.authorId === viewerId;
+  const isAdmin = await hasAdminPrivileges(req);
+  let canReadPost = isOwner || isAdmin;
+  let profileRequired = false;
+
+  if (!canReadPost) {
+    if (!hasCampusScope(requesterProfile)) {
+      profileRequired = true;
+    } else {
+      const authorProfile = await getCampusScopeProfile(post.authorId);
+      canReadPost = hasCampusScope(authorProfile)
+        && profilesShareSchool(requesterProfile, authorProfile)
+        && profilesShareCampus(requesterProfile, authorProfile);
+    }
+  }
+
+  let canViewOriginal = post.originalPostId === null || isAdmin;
+  if (post.originalPostId !== null && !isAdmin && hasCampusScope(requesterProfile)) {
+    const [originalPost] = await db
+      .select({ authorId: postsTable.authorId })
+      .from(postsTable)
+      .where(eq(postsTable.id, post.originalPostId));
+    const originalAuthor = originalPost ? await getCampusScopeProfile(originalPost.authorId) : null;
+    canViewOriginal = hasCampusScope(originalAuthor)
+      && profilesShareSchool(requesterProfile, originalAuthor)
+      && profilesShareCampus(requesterProfile, originalAuthor);
+  }
+
+  return { requesterProfile, canReadPost, canViewOriginal, profileRequired, isAdmin };
+}
+
 function getAppObjectPath(rawUrl: string | null | undefined): string | null {
   if (!rawUrl) return null;
   try {
@@ -89,7 +152,11 @@ async function validateNewPostMediaOwnership(urls: Array<string | null | undefin
     const [ownedUpload] = await db
       .select({ id: uploadedMediaTable.id })
       .from(uploadedMediaTable)
-      .where(and(eq(uploadedMediaTable.objectPath, objectPath), eq(uploadedMediaTable.uploaderId, uploaderId)));
+      .where(and(
+        eq(uploadedMediaTable.objectPath, objectPath),
+        eq(uploadedMediaTable.uploaderId, uploaderId),
+        or(isNull(uploadedMediaTable.purpose), ne(uploadedMediaTable.purpose, "matric-claim-evidence")),
+      ));
     if (!ownedUpload) return "You can only attach private media uploaded by your account.";
   }
   return null;
@@ -309,22 +376,33 @@ router.get("/posts", async (req, res): Promise<void> => {
 
   const { limit, offset, category, faculty, cursor: cursorToken } = params.data;
   const clerkUserId = getAuth(req).userId ?? undefined;
-  if (savedOnly && !clerkUserId) {
-    res.status(401).json({ error: "Sign in to view saved posts." });
+  if (!clerkUserId) {
+    res.status(401).json({ error: "Sign in to view campus posts." });
     return;
   }
-
+  const requesterProfile = await getCampusScopeProfile(clerkUserId);
+  if (!hasCampusScope(requesterProfile)) {
+    res.status(403).json({ error: "Complete your school and campus profile to view posts." });
+    return;
+  }
+  const scope: CampusScopeProfile = requesterProfile;
   const filters = [
+    schoolScopeCondition(usersTable.institutionId, usersTable.school, scope),
+    campusScopeCondition(usersTable.campusLocation, scope.campusLocation),
     category ? eq(postsTable.category, category) : undefined,
+    faculty ? sql`lower(trim(${usersTable.faculty})) = lower(trim(${faculty}))` : undefined,
     savedOnly && clerkUserId
       ? sql`exists (select 1 from saved_posts sp where sp.post_id = ${postsTable.id} and sp.user_id = ${clerkUserId})`
       : undefined,
   ];
   const filterHash = cursorFilterHash({
     category: category ?? null,
-    faculty: faculty ?? null,
+    faculty: faculty?.trim().toLowerCase() ?? null,
     savedOnly,
     viewerId: savedOnly ? clerkUserId : null,
+    institutionId: scope.institutionId,
+    school: normalizeSchoolLabel(scope.school),
+    campus: normalizeCampusLocation(scope.campusLocation),
   });
   if (cursorToken && offset > 0) {
     res.status(400).json({ error: "Cursor pagination cannot be combined with a positive offset." });
@@ -385,7 +463,15 @@ router.get("/posts", async (req, res): Promise<void> => {
     })
     .from(postsTable)
     .leftJoin(usersTable, eq(postsTable.authorId, usersTable.clerkUserId))
-    .leftJoin(originalPostAlias, eq(postsTable.originalPostId, originalPostAlias.id))
+    .leftJoin(originalPostAlias, and(
+      eq(postsTable.originalPostId, originalPostAlias.id),
+      sql`exists (
+        select 1 from users original_author
+        where original_author.clerk_user_id = ${originalPostAlias.authorId}
+          and ${schoolScopeCondition(sql`original_author.institution_id`, sql`original_author.school`, scope)}
+          and ${campusScopeCondition(sql`original_author.campus_location`, scope.campusLocation)}
+      )`,
+    ))
     .leftJoin(originalUserAlias, eq(originalPostAlias.authorId, originalUserAlias.clerkUserId))
     .where(and(...pageFilters))
     .orderBy(desc(postsTable.isFeaturedTrending), desc(postsTable.isPinnedToFeed), desc(postsTable.createdAt), desc(postsTable.id))
@@ -408,9 +494,13 @@ router.get("/posts", async (req, res): Promise<void> => {
   const [{ count }] = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(postsTable)
+    .leftJoin(usersTable, eq(postsTable.authorId, usersTable.clerkUserId))
     .where(and(...filters));
 
-  const publicPolls = await loadPublicPolls(posts.map((post) => post.originalPostId ?? post.id), clerkUserId);
+  const publicPolls = await loadPublicPolls(
+    posts.map((post) => post.opId != null ? post.originalPostId ?? post.id : post.id),
+    clerkUserId,
+  );
   const postsWithReactions = await Promise.all(
     posts.map(async (post) => {
       let isLikedByMe = false;
@@ -565,10 +655,36 @@ router.get("/posts/:postId", async (req, res): Promise<void> => {
   }
 
   const clerkUserId = getAuth(req).userId ?? undefined;
+  if (!clerkUserId) {
+    res.status(401).json({ error: "Sign in to view this post." });
+    return;
+  }
+  const [postScope] = await db
+    .select({ authorId: postsTable.authorId, originalPostId: postsTable.originalPostId })
+    .from(postsTable)
+    .where(eq(postsTable.id, params.data.postId));
+  if (!postScope) {
+    res.status(404).json({ error: "Post not found" });
+    return;
+  }
   const result = await buildPostWithMeta(params.data.postId, clerkUserId);
   if (!result) {
     res.status(404).json({ error: "Post not found" });
     return;
+  }
+
+  const readScope = await getPostReadScope(req, clerkUserId, postScope);
+  if (!readScope.canReadPost) {
+    if (readScope.profileRequired) {
+      res.status(403).json({ error: "Complete your school and campus profile to view this post." });
+      return;
+    }
+    res.status(404).json({ error: "Post not found" });
+    return;
+  }
+  if (!readScope.canViewOriginal) {
+    result.originalPost = null;
+    result.poll = null;
   }
 
   res.setHeader("Cache-Control", "private, no-store");
@@ -664,13 +780,10 @@ router.delete("/posts/:postId", requireAuth, async (req, res): Promise<void> => 
     return;
   }
 
-  const [caller] = await db
-    .select({ role: usersTable.role })
-    .from(usersTable)
-    .where(eq(usersTable.clerkUserId, userId));
-
   const isOwner = post.authorId === userId;
-  const isModerator = ["moderator", "admin", "ceo"].includes(caller?.role ?? "");
+  const [caller] = await db.select({ role: usersTable.role })
+    .from(usersTable).where(eq(usersTable.clerkUserId, userId));
+  const isModerator = caller?.role === "moderator" || await hasAdminPrivileges(req);
 
   if (!isOwner && !isModerator) {
     res.status(403).json({ error: "Forbidden" });
@@ -778,11 +891,7 @@ router.patch("/posts/:postId/feature", requireAuth, async (req, res): Promise<vo
     return;
   }
 
-  const [caller] = await db
-    .select({ role: usersTable.role, isAdmin: usersTable.isAdmin })
-    .from(usersTable)
-    .where(eq(usersTable.clerkUserId, userId));
-  if (!caller?.isAdmin && !["admin", "ceo"].includes(caller?.role ?? "")) {
+  if (!(await hasAdminPrivileges(req))) {
     res.status(403).json({ error: "Admin or CEO only." });
     return;
   }
@@ -875,8 +984,7 @@ router.patch("/posts/:postId/pin-feed", requireAuth, async (req, res): Promise<v
     return;
   }
 
-  const [caller] = await db.select({ role: usersTable.role, isAdmin: usersTable.isAdmin }).from(usersTable).where(eq(usersTable.clerkUserId, userId));
-  const hasPermission = caller?.isAdmin || ["admin", "ceo"].includes(caller?.role ?? "");
+  const hasPermission = await hasAdminPrivileges(req);
   if (!hasPermission) { res.status(403).json({ error: "Admin only" }); return; }
 
   const postId = params.data.postId;
@@ -965,8 +1073,40 @@ router.get("/posts/:postId/comments", async (req, res): Promise<void> => {
     return;
   }
 
-  const [post] = await db.select({ id: postsTable.id }).from(postsTable).where(eq(postsTable.id, params.data.postId));
+  const clerkUserId = getAuth(req).userId ?? undefined;
+  if (!clerkUserId) {
+    res.status(401).json({ error: "Sign in to view post comments." });
+    return;
+  }
+  const [post] = await db
+    .select({
+      id: postsTable.id,
+      authorId: postsTable.authorId,
+      originalPostId: postsTable.originalPostId,
+    })
+    .from(postsTable)
+    .where(eq(postsTable.id, params.data.postId));
   if (!post) {
+    res.status(404).json({ error: "Post not found" });
+    return;
+  }
+  const readScope = await getPostReadScope(req, clerkUserId, post);
+  const requesterHasProfile = Boolean(
+    readScope.requesterProfile?.school.trim() && readScope.requesterProfile.campusLocation.trim(),
+  );
+  if (!requesterHasProfile && !readScope.isAdmin) {
+    res.status(403).json({ error: "Complete your school and campus profile to view post comments." });
+    return;
+  }
+  if (!readScope.canReadPost) {
+    if (readScope.profileRequired) {
+      res.status(403).json({ error: "Complete your school and campus profile to view post comments." });
+      return;
+    }
+    res.status(404).json({ error: "Post not found" });
+    return;
+  }
+  if (!readScope.canViewOriginal) {
     res.status(404).json({ error: "Post not found" });
     return;
   }
@@ -997,6 +1137,7 @@ router.get("/posts/:postId/comments", async (req, res): Promise<void> => {
     authorVerificationStatus: publicVerificationStatus(c.authorVerificationStatus, c.authorRole),
   }));
 
+  res.setHeader("Cache-Control", "private, no-store");
   res.json(ListPostCommentsResponse.parse({ comments: mapped, total: mapped.length }));
 });
 

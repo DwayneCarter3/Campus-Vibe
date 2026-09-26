@@ -2,7 +2,7 @@ import React, { useRef, useState } from "react";
 import { Dimensions, Modal, Pressable, Text, View } from "react-native";
 import Svg, { Circle, Defs, LinearGradient, Path, Stop } from "react-native-svg";
 
-type BadgeType = "blue" | "green" | "rounded" | "gold";
+type BadgeType = "blue" | "green" | "green-circle" | "rounded" | "gold";
 type BadgeKind = "student" | "business";
 
 interface VerificationBadgeProps {
@@ -10,6 +10,8 @@ interface VerificationBadgeProps {
   fontSize?: number;
   type?: BadgeType;
   kind?: BadgeKind;
+  placement?: "inline" | "avatar";
+  glow?: boolean;
 }
 
 const SCALLOPED_EDGE = "M12 1.5 14.2 3.2 17 2.6 18.3 5.2 21.1 6.1 21 9 22.5 12 21 15 21.1 17.9 18.3 18.8 17 21.4 14.2 20.8 12 22.5 9.8 20.8 7 21.4 5.7 18.8 2.9 17.9 3 15 1.5 12 3 9 2.9 6.1 5.7 5.2 7 2.6 9.8 3.2Z";
@@ -19,12 +21,14 @@ export function VerificationBadge({
   fontSize,
   type = "blue",
   kind = "student",
+  placement = "inline",
+  glow = false,
 }: VerificationBadgeProps) {
   const anchor = useRef<View>(null);
   const [tip, setTip] = useState<{ left: number; top: number } | null>(null);
   const iconSize = Math.round((fontSize ?? { sm: 14, md: 17, lg: 22 }[size]) * (size === "lg" ? 1.1 : 1));
-  const label = type === "green" ? "Green Tick verification" : type === "blue" ? "Premium Blue Tick" : kind === "business" ? "Verified LASU CampusX Business" : "Verified Student Account";
-  const color = type === "green" ? "#22C55E" : type === "gold" ? "#FFD700" : type === "rounded" ? "#0095F6" : "#1DA1F2";
+  const label = type === "green" || type === "green-circle" ? "Green Tick verification" : type === "blue" ? "Premium Blue Tick" : kind === "business" ? "Verified LASU CampusX Business" : "Verified Student Account";
+  const color = type === "green" || type === "green-circle" ? "#22C55E" : type === "gold" ? "#FFD700" : type === "rounded" ? "#0095F6" : "#1DA1F2";
 
   const showTip = () => {
     if (tip) {
@@ -42,7 +46,16 @@ export function VerificationBadge({
 
   return (
     <>
-      <View ref={anchor} collapsable={false} style={{ marginLeft: 4, alignSelf: "center" }}>
+      <View
+        ref={anchor}
+        collapsable={false}
+        style={[
+          placement === "avatar"
+            ? { position: "absolute", right: 0, bottom: 0, marginLeft: 0, zIndex: 2 }
+            : { marginLeft: 4, alignSelf: "center" },
+          glow && { shadowColor: "#1DA1F2", shadowOpacity: 0.9, shadowRadius: 6, elevation: 5 },
+        ]}
+      >
         <Pressable
           onPress={showTip}
           accessibilityRole="button"
@@ -57,7 +70,7 @@ export function VerificationBadge({
                 <Stop offset="1" stopColor="#C79116" />
               </LinearGradient>
             </Defs>
-            {type === "rounded"
+            {type === "rounded" || type === "green-circle"
               ? <Circle cx="12" cy="12" r="10.5" fill={color} />
               : <Path d={SCALLOPED_EDGE} fill={type === "gold" ? "url(#badgeGold)" : color} />}
             <Path d="m7.8 12.1 2.9 3 5.7-6" fill="none" stroke="#fff" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round" />

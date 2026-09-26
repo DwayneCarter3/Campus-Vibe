@@ -9,3 +9,5 @@ export * from "./shuttle-status-votes";
 export * from "./messages";
 export * from "./payments";
 export * from "./cgpa-plans";
+export * from "./matric-claims";
+export * from "./ad-campaigns";

@@ -17,7 +17,14 @@ import type {
 } from "@tanstack/react-query";
 
 import type {
+  ActiveAdsResponse,
+  AdCampaignCreated,
+  AdCampaignDecisionInput,
+  AdCampaignDecisionResult,
+  AdCampaignInput,
+  AdminAdCampaignsResponse,
   AdminClaimResponse,
+  AdminMatricClaimsResponse,
   ApproveBadgeResponse,
   CgpaPlan,
   CgpaPlanInput,
@@ -34,6 +41,7 @@ import type {
   InitializePaymentBody,
   InitializePaymentResponse,
   LikeResponse,
+  ListAdminMatricClaimsParams,
   ListAdminUsersParams,
   ListAdminUsersResponse,
   ListCommentsResponse,
@@ -49,21 +57,29 @@ import type {
   ListServicesParams,
   ListServicesResponse,
   MarketplaceStats,
+  MatricClaimCreated,
+  MatricClaimDecisionInput,
+  MatricClaimDecisionResult,
+  MatricClaimEvidenceUploadRequest,
+  MatricClaimEvidenceUploadResponse,
+  MatricClaimSubmission,
+  MyAdCampaignsResponse,
+  MyMatricClaimsResponse,
   NoCapResponse,
+  PaymentProductsResponse,
   PaymentStatusResponse,
+  PaystackWebhookInput,
   PinResponse,
   Poll,
   PollVoteInput,
   Post,
   PublicUserProfile,
   ReceivePaystackWebhook200,
-  ReceivePaystackWebhookBody,
   ReportBody,
   ReportItem,
   ReportResponse,
   ReportsResponse,
   RequestBadgeBody,
-  RequestBadgeResponse,
   ResharePostBody,
   ResharePostResponse,
   ReviewReportBody,
@@ -661,7 +677,7 @@ export const useSaveMyCgpaPlan = <
 };
 
 /**
- * @summary Request premium badge verification
+ * @summary Deprecated legacy badge request; use /payments/initialize instead
  */
 export const getRequestPremiumBadgeUrl = () => {
   return `/api/users/me/request-badge`;
@@ -670,8 +686,8 @@ export const getRequestPremiumBadgeUrl = () => {
 export const requestPremiumBadge = async (
   requestBadgeBody: RequestBadgeBody,
   options?: RequestInit,
-): Promise<RequestBadgeResponse> => {
-  return customFetch<RequestBadgeResponse>(getRequestPremiumBadgeUrl(), {
+): Promise<unknown> => {
+  return customFetch<unknown>(getRequestPremiumBadgeUrl(), {
     ...options,
     method: "POST",
     headers: { "Content-Type": "application/json", ...options?.headers },
@@ -724,7 +740,7 @@ export type RequestPremiumBadgeMutationBody = BodyType<RequestBadgeBody>;
 export type RequestPremiumBadgeMutationError = ErrorType<void>;
 
 /**
- * @summary Request premium badge verification
+ * @summary Deprecated legacy badge request; use /payments/initialize instead
  */
 export const useRequestPremiumBadge = <
   TError = ErrorType<void>,
@@ -4437,6 +4453,81 @@ export const useSetUserVerification = <
 };
 
 /**
+ * @summary List available products, fixed durations, and customer-payable amounts
+ */
+export const getListPaymentProductsUrl = () => {
+  return `/api/payments/products`;
+};
+
+export const listPaymentProducts = async (
+  options?: RequestInit,
+): Promise<PaymentProductsResponse> => {
+  return customFetch<PaymentProductsResponse>(getListPaymentProductsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListPaymentProductsQueryKey = () => {
+  return [`/api/payments/products`] as const;
+};
+
+export const getListPaymentProductsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listPaymentProducts>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listPaymentProducts>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListPaymentProductsQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listPaymentProducts>>
+  > = ({ signal }) => listPaymentProducts({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listPaymentProducts>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListPaymentProductsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listPaymentProducts>>
+>;
+export type ListPaymentProductsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List available products, fixed durations, and customer-payable amounts
+ */
+
+export function useListPaymentProducts<
+  TData = Awaited<ReturnType<typeof listPaymentProducts>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listPaymentProducts>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListPaymentProductsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
  * @summary Initialize a Paystack payment or claim an eligible early-bird benefit
  */
 export const getInitializePaymentUrl = () => {
@@ -4619,7 +4710,7 @@ export const getReceivePaystackWebhookUrl = () => {
 };
 
 export const receivePaystackWebhook = async (
-  receivePaystackWebhookBody: ReceivePaystackWebhookBody,
+  paystackWebhookInput: PaystackWebhookInput,
   options?: RequestInit,
 ): Promise<ReceivePaystackWebhook200> => {
   return customFetch<ReceivePaystackWebhook200>(
@@ -4628,7 +4719,7 @@ export const receivePaystackWebhook = async (
       ...options,
       method: "POST",
       headers: { "Content-Type": "application/json", ...options?.headers },
-      body: JSON.stringify(receivePaystackWebhookBody),
+      body: JSON.stringify(paystackWebhookInput),
     },
   );
 };
@@ -4640,14 +4731,14 @@ export const getReceivePaystackWebhookMutationOptions = <
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof receivePaystackWebhook>>,
     TError,
-    { data: BodyType<ReceivePaystackWebhookBody> },
+    { data: BodyType<PaystackWebhookInput> },
     TContext
   >;
   request?: SecondParameter<typeof customFetch>;
 }): UseMutationOptions<
   Awaited<ReturnType<typeof receivePaystackWebhook>>,
   TError,
-  { data: BodyType<ReceivePaystackWebhookBody> },
+  { data: BodyType<PaystackWebhookInput> },
   TContext
 > => {
   const mutationKey = ["receivePaystackWebhook"];
@@ -4661,7 +4752,7 @@ export const getReceivePaystackWebhookMutationOptions = <
 
   const mutationFn: MutationFunction<
     Awaited<ReturnType<typeof receivePaystackWebhook>>,
-    { data: BodyType<ReceivePaystackWebhookBody> }
+    { data: BodyType<PaystackWebhookInput> }
   > = (props) => {
     const { data } = props ?? {};
 
@@ -4674,8 +4765,7 @@ export const getReceivePaystackWebhookMutationOptions = <
 export type ReceivePaystackWebhookMutationResult = NonNullable<
   Awaited<ReturnType<typeof receivePaystackWebhook>>
 >;
-export type ReceivePaystackWebhookMutationBody =
-  BodyType<ReceivePaystackWebhookBody>;
+export type ReceivePaystackWebhookMutationBody = BodyType<PaystackWebhookInput>;
 export type ReceivePaystackWebhookMutationError = ErrorType<void>;
 
 /**
@@ -4688,14 +4778,14 @@ export const useReceivePaystackWebhook = <
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof receivePaystackWebhook>>,
     TError,
-    { data: BodyType<ReceivePaystackWebhookBody> },
+    { data: BodyType<PaystackWebhookInput> },
     TContext
   >;
   request?: SecondParameter<typeof customFetch>;
 }): UseMutationResult<
   Awaited<ReturnType<typeof receivePaystackWebhook>>,
   TError,
-  { data: BodyType<ReceivePaystackWebhookBody> },
+  { data: BodyType<PaystackWebhookInput> },
   TContext
 > => {
   return useMutation(getReceivePaystackWebhookMutationOptions(options));
@@ -4775,6 +4865,408 @@ export function useListPayments<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * @summary List approved, unexpired ads for the signed-in viewer's campus
+ */
+export const getListActiveAdsUrl = () => {
+  return `/api/ads`;
+};
+
+export const listActiveAds = async (
+  options?: RequestInit,
+): Promise<ActiveAdsResponse> => {
+  return customFetch<ActiveAdsResponse>(getListActiveAdsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListActiveAdsQueryKey = () => {
+  return [`/api/ads`] as const;
+};
+
+export const getListActiveAdsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listActiveAds>>,
+  TError = ErrorType<void>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listActiveAds>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListActiveAdsQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listActiveAds>>> = ({
+    signal,
+  }) => listActiveAds({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listActiveAds>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListActiveAdsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listActiveAds>>
+>;
+export type ListActiveAdsQueryError = ErrorType<void>;
+
+/**
+ * @summary List approved, unexpired ads for the signed-in viewer's campus
+ */
+
+export function useListActiveAds<
+  TData = Awaited<ReturnType<typeof listActiveAds>>,
+  TError = ErrorType<void>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listActiveAds>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListActiveAdsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Submit an ad using an owned paid, unexpired ad purchase
+ */
+export const getSubmitAdCampaignUrl = () => {
+  return `/api/ads`;
+};
+
+export const submitAdCampaign = async (
+  adCampaignInput: AdCampaignInput,
+  options?: RequestInit,
+): Promise<AdCampaignCreated> => {
+  return customFetch<AdCampaignCreated>(getSubmitAdCampaignUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(adCampaignInput),
+  });
+};
+
+export const getSubmitAdCampaignMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof submitAdCampaign>>,
+    TError,
+    { data: BodyType<AdCampaignInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof submitAdCampaign>>,
+  TError,
+  { data: BodyType<AdCampaignInput> },
+  TContext
+> => {
+  const mutationKey = ["submitAdCampaign"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof submitAdCampaign>>,
+    { data: BodyType<AdCampaignInput> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return submitAdCampaign(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type SubmitAdCampaignMutationResult = NonNullable<
+  Awaited<ReturnType<typeof submitAdCampaign>>
+>;
+export type SubmitAdCampaignMutationBody = BodyType<AdCampaignInput>;
+export type SubmitAdCampaignMutationError = ErrorType<void>;
+
+/**
+ * @summary Submit an ad using an owned paid, unexpired ad purchase
+ */
+export const useSubmitAdCampaign = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof submitAdCampaign>>,
+    TError,
+    { data: BodyType<AdCampaignInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof submitAdCampaign>>,
+  TError,
+  { data: BodyType<AdCampaignInput> },
+  TContext
+> => {
+  return useMutation(getSubmitAdCampaignMutationOptions(options));
+};
+
+/**
+ * @summary List the signed-in user's ad campaign submissions and review states
+ */
+export const getListMyAdCampaignsUrl = () => {
+  return `/api/ads/mine`;
+};
+
+export const listMyAdCampaigns = async (
+  options?: RequestInit,
+): Promise<MyAdCampaignsResponse> => {
+  return customFetch<MyAdCampaignsResponse>(getListMyAdCampaignsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListMyAdCampaignsQueryKey = () => {
+  return [`/api/ads/mine`] as const;
+};
+
+export const getListMyAdCampaignsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listMyAdCampaigns>>,
+  TError = ErrorType<void>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listMyAdCampaigns>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListMyAdCampaignsQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listMyAdCampaigns>>
+  > = ({ signal }) => listMyAdCampaigns({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listMyAdCampaigns>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListMyAdCampaignsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listMyAdCampaigns>>
+>;
+export type ListMyAdCampaignsQueryError = ErrorType<void>;
+
+/**
+ * @summary List the signed-in user's ad campaign submissions and review states
+ */
+
+export function useListMyAdCampaigns<
+  TData = Awaited<ReturnType<typeof listMyAdCampaigns>>,
+  TError = ErrorType<void>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listMyAdCampaigns>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListMyAdCampaignsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary List campaigns awaiting admin moderation
+ */
+export const getListPendingAdCampaignsUrl = () => {
+  return `/api/admin/ads`;
+};
+
+export const listPendingAdCampaigns = async (
+  options?: RequestInit,
+): Promise<AdminAdCampaignsResponse> => {
+  return customFetch<AdminAdCampaignsResponse>(getListPendingAdCampaignsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListPendingAdCampaignsQueryKey = () => {
+  return [`/api/admin/ads`] as const;
+};
+
+export const getListPendingAdCampaignsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listPendingAdCampaigns>>,
+  TError = ErrorType<void>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listPendingAdCampaigns>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListPendingAdCampaignsQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listPendingAdCampaigns>>
+  > = ({ signal }) => listPendingAdCampaigns({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listPendingAdCampaigns>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListPendingAdCampaignsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listPendingAdCampaigns>>
+>;
+export type ListPendingAdCampaignsQueryError = ErrorType<void>;
+
+/**
+ * @summary List campaigns awaiting admin moderation
+ */
+
+export function useListPendingAdCampaigns<
+  TData = Awaited<ReturnType<typeof listPendingAdCampaigns>>,
+  TError = ErrorType<void>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listPendingAdCampaigns>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListPendingAdCampaignsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Approve or reject a pending ad campaign
+ */
+export const getDecideAdCampaignUrl = (campaignId: number) => {
+  return `/api/admin/ads/${campaignId}/decision`;
+};
+
+export const decideAdCampaign = async (
+  campaignId: number,
+  adCampaignDecisionInput: AdCampaignDecisionInput,
+  options?: RequestInit,
+): Promise<AdCampaignDecisionResult> => {
+  return customFetch<AdCampaignDecisionResult>(
+    getDecideAdCampaignUrl(campaignId),
+    {
+      ...options,
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(adCampaignDecisionInput),
+    },
+  );
+};
+
+export const getDecideAdCampaignMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof decideAdCampaign>>,
+    TError,
+    { campaignId: number; data: BodyType<AdCampaignDecisionInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof decideAdCampaign>>,
+  TError,
+  { campaignId: number; data: BodyType<AdCampaignDecisionInput> },
+  TContext
+> => {
+  const mutationKey = ["decideAdCampaign"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof decideAdCampaign>>,
+    { campaignId: number; data: BodyType<AdCampaignDecisionInput> }
+  > = (props) => {
+    const { campaignId, data } = props ?? {};
+
+    return decideAdCampaign(campaignId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DecideAdCampaignMutationResult = NonNullable<
+  Awaited<ReturnType<typeof decideAdCampaign>>
+>;
+export type DecideAdCampaignMutationBody = BodyType<AdCampaignDecisionInput>;
+export type DecideAdCampaignMutationError = ErrorType<void>;
+
+/**
+ * @summary Approve or reject a pending ad campaign
+ */
+export const useDecideAdCampaign = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof decideAdCampaign>>,
+    TError,
+    { campaignId: number; data: BodyType<AdCampaignDecisionInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof decideAdCampaign>>,
+  TError,
+  { campaignId: number; data: BodyType<AdCampaignDecisionInput> },
+  TContext
+> => {
+  return useMutation(getDecideAdCampaignMutationOptions(options));
+};
 
 /**
  * @summary List my conversations
@@ -5557,6 +6049,541 @@ export function useGetStorageObject<
   },
 ): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetStorageObjectQueryOptions(objectPath, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Request a private signed upload URL for claim evidence
+ */
+export const getRequestMatricClaimEvidenceUploadUrlUrl = () => {
+  return `/api/matric-claims/uploads/request-url`;
+};
+
+export const requestMatricClaimEvidenceUploadUrl = async (
+  matricClaimEvidenceUploadRequest: MatricClaimEvidenceUploadRequest,
+  options?: RequestInit,
+): Promise<MatricClaimEvidenceUploadResponse> => {
+  return customFetch<MatricClaimEvidenceUploadResponse>(
+    getRequestMatricClaimEvidenceUploadUrlUrl(),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(matricClaimEvidenceUploadRequest),
+    },
+  );
+};
+
+export const getRequestMatricClaimEvidenceUploadUrlMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof requestMatricClaimEvidenceUploadUrl>>,
+    TError,
+    { data: BodyType<MatricClaimEvidenceUploadRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof requestMatricClaimEvidenceUploadUrl>>,
+  TError,
+  { data: BodyType<MatricClaimEvidenceUploadRequest> },
+  TContext
+> => {
+  const mutationKey = ["requestMatricClaimEvidenceUploadUrl"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof requestMatricClaimEvidenceUploadUrl>>,
+    { data: BodyType<MatricClaimEvidenceUploadRequest> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return requestMatricClaimEvidenceUploadUrl(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RequestMatricClaimEvidenceUploadUrlMutationResult = NonNullable<
+  Awaited<ReturnType<typeof requestMatricClaimEvidenceUploadUrl>>
+>;
+export type RequestMatricClaimEvidenceUploadUrlMutationBody =
+  BodyType<MatricClaimEvidenceUploadRequest>;
+export type RequestMatricClaimEvidenceUploadUrlMutationError = ErrorType<void>;
+
+/**
+ * @summary Request a private signed upload URL for claim evidence
+ */
+export const useRequestMatricClaimEvidenceUploadUrl = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof requestMatricClaimEvidenceUploadUrl>>,
+    TError,
+    { data: BodyType<MatricClaimEvidenceUploadRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof requestMatricClaimEvidenceUploadUrl>>,
+  TError,
+  { data: BodyType<MatricClaimEvidenceUploadRequest> },
+  TContext
+> => {
+  return useMutation(
+    getRequestMatricClaimEvidenceUploadUrlMutationOptions(options),
+  );
+};
+
+/**
+ * @summary Submit an authenticated matric account claim against a matching institution and matric number
+ */
+export const getSubmitMatricClaimUrl = () => {
+  return `/api/matric-claims`;
+};
+
+export const submitMatricClaim = async (
+  matricClaimSubmission: MatricClaimSubmission,
+  options?: RequestInit,
+): Promise<MatricClaimCreated> => {
+  return customFetch<MatricClaimCreated>(getSubmitMatricClaimUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(matricClaimSubmission),
+  });
+};
+
+export const getSubmitMatricClaimMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof submitMatricClaim>>,
+    TError,
+    { data: BodyType<MatricClaimSubmission> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof submitMatricClaim>>,
+  TError,
+  { data: BodyType<MatricClaimSubmission> },
+  TContext
+> => {
+  const mutationKey = ["submitMatricClaim"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof submitMatricClaim>>,
+    { data: BodyType<MatricClaimSubmission> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return submitMatricClaim(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type SubmitMatricClaimMutationResult = NonNullable<
+  Awaited<ReturnType<typeof submitMatricClaim>>
+>;
+export type SubmitMatricClaimMutationBody = BodyType<MatricClaimSubmission>;
+export type SubmitMatricClaimMutationError = ErrorType<void>;
+
+/**
+ * @summary Submit an authenticated matric account claim against a matching institution and matric number
+ */
+export const useSubmitMatricClaim = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof submitMatricClaim>>,
+    TError,
+    { data: BodyType<MatricClaimSubmission> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof submitMatricClaim>>,
+  TError,
+  { data: BodyType<MatricClaimSubmission> },
+  TContext
+> => {
+  return useMutation(getSubmitMatricClaimMutationOptions(options));
+};
+
+/**
+ * @summary List only the authenticated claimant's requests and status
+ */
+export const getListMyMatricClaimsUrl = () => {
+  return `/api/matric-claims/mine`;
+};
+
+export const listMyMatricClaims = async (
+  options?: RequestInit,
+): Promise<MyMatricClaimsResponse> => {
+  return customFetch<MyMatricClaimsResponse>(getListMyMatricClaimsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListMyMatricClaimsQueryKey = () => {
+  return [`/api/matric-claims/mine`] as const;
+};
+
+export const getListMyMatricClaimsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listMyMatricClaims>>,
+  TError = ErrorType<void>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listMyMatricClaims>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListMyMatricClaimsQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listMyMatricClaims>>
+  > = ({ signal }) => listMyMatricClaims({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listMyMatricClaims>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListMyMatricClaimsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listMyMatricClaims>>
+>;
+export type ListMyMatricClaimsQueryError = ErrorType<void>;
+
+/**
+ * @summary List only the authenticated claimant's requests and status
+ */
+
+export function useListMyMatricClaims<
+  TData = Awaited<ReturnType<typeof listMyMatricClaims>>,
+  TError = ErrorType<void>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listMyMatricClaims>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListMyMatricClaimsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary List matric claims for admin/CEO review
+ */
+export const getListAdminMatricClaimsUrl = (
+  params?: ListAdminMatricClaimsParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/admin/matric-claims?${stringifiedParams}`
+    : `/api/admin/matric-claims`;
+};
+
+export const listAdminMatricClaims = async (
+  params?: ListAdminMatricClaimsParams,
+  options?: RequestInit,
+): Promise<AdminMatricClaimsResponse> => {
+  return customFetch<AdminMatricClaimsResponse>(
+    getListAdminMatricClaimsUrl(params),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getListAdminMatricClaimsQueryKey = (
+  params?: ListAdminMatricClaimsParams,
+) => {
+  return [`/api/admin/matric-claims`, ...(params ? [params] : [])] as const;
+};
+
+export const getListAdminMatricClaimsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listAdminMatricClaims>>,
+  TError = ErrorType<void>,
+>(
+  params?: ListAdminMatricClaimsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listAdminMatricClaims>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListAdminMatricClaimsQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listAdminMatricClaims>>
+  > = ({ signal }) =>
+    listAdminMatricClaims(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listAdminMatricClaims>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListAdminMatricClaimsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listAdminMatricClaims>>
+>;
+export type ListAdminMatricClaimsQueryError = ErrorType<void>;
+
+/**
+ * @summary List matric claims for admin/CEO review
+ */
+
+export function useListAdminMatricClaims<
+  TData = Awaited<ReturnType<typeof listAdminMatricClaims>>,
+  TError = ErrorType<void>,
+>(
+  params?: ListAdminMatricClaimsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listAdminMatricClaims>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListAdminMatricClaimsQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Record a final review decision without transferring an account
+ */
+export const getResolveMatricClaimUrl = (claimId: number) => {
+  return `/api/admin/matric-claims/${claimId}/decision`;
+};
+
+export const resolveMatricClaim = async (
+  claimId: number,
+  matricClaimDecisionInput: MatricClaimDecisionInput,
+  options?: RequestInit,
+): Promise<MatricClaimDecisionResult> => {
+  return customFetch<MatricClaimDecisionResult>(
+    getResolveMatricClaimUrl(claimId),
+    {
+      ...options,
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(matricClaimDecisionInput),
+    },
+  );
+};
+
+export const getResolveMatricClaimMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof resolveMatricClaim>>,
+    TError,
+    { claimId: number; data: BodyType<MatricClaimDecisionInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof resolveMatricClaim>>,
+  TError,
+  { claimId: number; data: BodyType<MatricClaimDecisionInput> },
+  TContext
+> => {
+  const mutationKey = ["resolveMatricClaim"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof resolveMatricClaim>>,
+    { claimId: number; data: BodyType<MatricClaimDecisionInput> }
+  > = (props) => {
+    const { claimId, data } = props ?? {};
+
+    return resolveMatricClaim(claimId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ResolveMatricClaimMutationResult = NonNullable<
+  Awaited<ReturnType<typeof resolveMatricClaim>>
+>;
+export type ResolveMatricClaimMutationBody = BodyType<MatricClaimDecisionInput>;
+export type ResolveMatricClaimMutationError = ErrorType<void>;
+
+/**
+ * @summary Record a final review decision without transferring an account
+ */
+export const useResolveMatricClaim = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof resolveMatricClaim>>,
+    TError,
+    { claimId: number; data: BodyType<MatricClaimDecisionInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof resolveMatricClaim>>,
+  TError,
+  { claimId: number; data: BodyType<MatricClaimDecisionInput> },
+  TContext
+> => {
+  return useMutation(getResolveMatricClaimMutationOptions(options));
+};
+
+/**
+ * @summary Stream evidence privately to the claimant or an admin/CEO
+ */
+export const getGetMatricClaimEvidenceUrl = (claimId: number) => {
+  return `/api/matric-claims/${claimId}/evidence`;
+};
+
+export const getMatricClaimEvidence = async (
+  claimId: number,
+  options?: RequestInit,
+): Promise<Blob> => {
+  return customFetch<Blob>(getGetMatricClaimEvidenceUrl(claimId), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetMatricClaimEvidenceQueryKey = (claimId: number) => {
+  return [`/api/matric-claims/${claimId}/evidence`] as const;
+};
+
+export const getGetMatricClaimEvidenceQueryOptions = <
+  TData = Awaited<ReturnType<typeof getMatricClaimEvidence>>,
+  TError = ErrorType<void>,
+>(
+  claimId: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getMatricClaimEvidence>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetMatricClaimEvidenceQueryKey(claimId);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getMatricClaimEvidence>>
+  > = ({ signal }) =>
+    getMatricClaimEvidence(claimId, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!claimId,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getMatricClaimEvidence>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetMatricClaimEvidenceQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getMatricClaimEvidence>>
+>;
+export type GetMatricClaimEvidenceQueryError = ErrorType<void>;
+
+/**
+ * @summary Stream evidence privately to the claimant or an admin/CEO
+ */
+
+export function useGetMatricClaimEvidence<
+  TData = Awaited<ReturnType<typeof getMatricClaimEvidence>>,
+  TError = ErrorType<void>,
+>(
+  claimId: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getMatricClaimEvidence>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetMatricClaimEvidenceQueryOptions(claimId, options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

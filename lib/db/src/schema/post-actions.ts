@@ -39,14 +39,28 @@ export const uploadedMediaTable = pgTable("uploaded_media", {
   purpose: text("purpose"),
   declaredContentType: text("declared_content_type"),
   declaredSize: integer("declared_size"),
+  evidenceDocumentType: text("evidence_document_type"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
-  check("uploaded_media_purpose_check", sql`${table.purpose} IS NULL OR ${table.purpose} IN ('post-image', 'service-image')`),
+  check("uploaded_media_purpose_check", sql`${table.purpose} IS NULL OR ${table.purpose} IN ('post-image', 'service-image', 'matric-claim-evidence')`),
   check("uploaded_media_image_metadata_check", sql`${table.purpose} IS NULL OR (
     ${table.declaredContentType} IS NOT NULL
-    AND
-    ${table.declaredContentType} = 'image/webp'
     AND ${table.declaredSize} IS NOT NULL
-    AND ${table.declaredSize} BETWEEN 1 AND 81920
+    AND (
+      (${table.purpose} IN ('post-image', 'service-image')
+        AND ${table.declaredContentType} = 'image/webp'
+        AND ${table.declaredSize} BETWEEN 1 AND 81920)
+      OR
+      (${table.purpose} = 'matric-claim-evidence'
+        AND ${table.declaredContentType} IN ('application/pdf', 'image/jpeg', 'image/png', 'image/webp')
+        AND ${table.declaredSize} BETWEEN 1 AND 10485760)
+    )
+  )`),
+  check("uploaded_media_claim_document_type_check", sql`(
+    ${table.purpose} = 'matric-claim-evidence'
+    AND ${table.evidenceDocumentType} IN ('student-id', 'course-form')
+  ) OR (
+    (${table.purpose} IS NULL OR ${table.purpose} != 'matric-claim-evidence')
+    AND ${table.evidenceDocumentType} IS NULL
   )`),
 ]);

@@ -15,6 +15,8 @@ import reportsRouter from "./reports";
 import shuttleStatusRouter from "./shuttle-status";
 import cgpaPlanRouter from "./cgpa-plan";
 import wazobiaRouter from "./wazobia";
+import matricClaimsRouter from "./matric-claims";
+import adsRouter from "./ads";
 
 const router: IRouter = Router();
 
@@ -34,5 +36,7 @@ router.use(reportsRouter);
 router.use(shuttleStatusRouter);
 router.use(cgpaPlanRouter);
 router.use(wazobiaRouter);
+router.use(matricClaimsRouter);
+router.use(adsRouter);
 
 export default router;

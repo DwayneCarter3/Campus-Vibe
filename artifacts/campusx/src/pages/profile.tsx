@@ -1,4 +1,4 @@
-import { lazy, Suspense, useState, useRef } from "react";
+import { lazy, Suspense, useState, useRef, type FormEvent } from "react";
 import {
   useGetMyProfile,
   getGetMyProfileQueryKey,
@@ -9,11 +9,13 @@ import {
   getGetUserServicesQueryKey,
   useRequestUploadUrl,
   useInitializePayment,
+  useListPaymentProducts,
+  useListPayments,
 } from "@workspace/api-client-react";
 import type { PaymentPackage, UpdateProfileBodyLevel } from "@workspace/api-client-react";
 import { useUser, useClerk } from "@clerk/react";
 import { useLocation } from "wouter";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -35,18 +37,27 @@ import {
   Loader2,
   Star,
   Settings,
-  TrendingUp,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { PostCard } from "@/components/post-card";
 import { ServiceCard } from "@/components/service-card";
 import { UserVerificationMarks } from "@/components/user-verification-marks";
+import { VerificationBadge } from "@/components/verification-badge";
 import { AvatarModal } from "@/components/avatar-modal";
 import { cn } from "@/lib/utils";
 
 const SettingsLegalPanel = lazy(() => import("@/components/settings-legal-panel"));
 
 type Tab = "posts" | "hustles";
+type MyAdCampaign = {
+  id: number;
+  paymentReference: string;
+  title: string;
+  status: "pending" | "approved" | "rejected";
+  expiresAt: string;
+  rejectionReason: string | null;
+  createdAt: string;
+};
 
 export default function MyProfilePage() {
   const clerk = useClerk();
@@ -64,10 +75,19 @@ export default function MyProfilePage() {
   const [editAvatarUrl, setEditAvatarUrl] = useState("");
   const [isAvatarUploading, setIsAvatarUploading] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [adPaymentReference, setAdPaymentReference] = useState("");
+  const [adTitle, setAdTitle] = useState("");
+  const [adBody, setAdBody] = useState("");
+  const [adDestinationUrl, setAdDestinationUrl] = useState("");
+  const [adSubmitPending, setAdSubmitPending] = useState(false);
+  const [adSubmitError, setAdSubmitError] = useState("");
+  const [adSubmitSuccess, setAdSubmitSuccess] = useState("");
   const avatarFileRef = useRef<HTMLInputElement>(null);
 
   const requestUploadUrl = useRequestUploadUrl();
   const initializePayment = useInitializePayment();
+  const { data: paymentCatalog, isLoading: paymentProductsLoading, isError: paymentProductsError } = useListPaymentProducts();
+  const { data: paymentHistory, isLoading: paymentHistoryLoading, isError: paymentHistoryError } = useListPayments();
 
   const { data: profile, isLoading } = useGetMyProfile({
     query: { queryKey: getGetMyProfileQueryKey() },
@@ -76,6 +96,18 @@ export default function MyProfilePage() {
   const updateProfile = useUpdateMyProfile();
 
   const userId = clerkUser?.id ?? "";
+  const myAdCampaignsQuery = useQuery({
+    queryKey: ["my-ad-campaigns", userId],
+    enabled: !!userId,
+    refetchOnMount: "always",
+    refetchInterval: 30_000,
+    queryFn: async ({ signal }) => {
+      const response = await fetch("/api/ads/mine", { credentials: "include", signal });
+      const result = await response.json() as { campaigns?: MyAdCampaign[]; error?: string };
+      if (!response.ok) throw new Error(result.error || "Could not load your ad campaigns.");
+      return result.campaigns ?? [];
+    },
+  });
 
   const startPayment = (packageType: PaymentPackage) => {
     initializePayment.mutate(
@@ -87,13 +119,57 @@ export default function MyProfilePage() {
             window.location.assign(result.authorizationUrl);
             return;
           }
-          alert(result.message ?? "Your CampusX benefit is now active.");
+          const isBadge = packageType === "student_verification" || packageType === "premium_blue_tick";
+          alert(isBadge
+            ? `Verification request received. The badge remains subject to admin review. ${result.message ?? ""}`
+            : result.message ?? "Your CampusX benefit is now active.");
         },
         onError: (error) => {
           alert(error instanceof Error ? error.message : "Could not start payment.");
         },
       },
     );
+  };
+
+  const eligibleAdPayments = (paymentHistory?.payments ?? []).filter((payment) =>
+    (payment.packageType === "event_performance_ad_30_day" || payment.packageType === "corporate_ad_30_day")
+    && payment.status === "paid"
+    && !!payment.entitlementExpiresAt
+    && new Date(payment.entitlementExpiresAt) > new Date()
+    && !myAdCampaignsQuery.data?.some((campaign) => campaign.paymentReference === payment.reference)
+  );
+
+  const submitAdCampaign = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (adSubmitPending) return;
+    setAdSubmitPending(true);
+    setAdSubmitError("");
+    setAdSubmitSuccess("");
+    try {
+      const response = await fetch("/api/ads", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          paymentReference: adPaymentReference,
+          title: adTitle,
+          body: adBody,
+          destinationUrl: adDestinationUrl,
+        }),
+      });
+      const result = await response.json() as { error?: string; status?: string };
+      if (!response.ok) throw new Error(result.error || "Campaign could not be submitted.");
+      setAdSubmitSuccess("Your ad is pending admin moderation. It will not appear in feeds until approved.");
+      setAdPaymentReference("");
+      setAdTitle("");
+      setAdBody("");
+      setAdDestinationUrl("");
+      await myAdCampaignsQuery.refetch();
+    } catch (error) {
+      setAdSubmitError(error instanceof Error ? error.message : "Campaign could not be submitted.");
+    } finally {
+      setAdSubmitPending(false);
+    }
   };
 
   const { data: postsData, isLoading: postsLoading } = useGetUserPosts(userId, undefined, {
@@ -204,6 +280,9 @@ export default function MyProfilePage() {
               <div className="absolute inset-0 rounded-full bg-black/0 group-hover/avatar:bg-black/20 transition-colors flex items-center justify-center">
                 <Camera className="h-5 w-5 text-white opacity-0 group-hover/avatar:opacity-80 transition-opacity" />
               </div>
+              {profile.verificationStatus === "Student_Verified" && (
+                <VerificationBadge type="green-circle" className="absolute -right-0.5 -bottom-0.5 bg-background rounded-full ring-2 ring-background" />
+              )}
             </div>
 
             <div className="flex-1 min-w-0">
@@ -211,7 +290,7 @@ export default function MyProfilePage() {
                 <h1 className="text-xl font-bold inline-flex items-center gap-1.5">
                   {profile.fullName}
                 </h1>
-                <UserVerificationMarks status={profile.verificationStatus} />
+                <UserVerificationMarks status={profile.verificationStatus} role={profile.role} />
               </div>
               {(profile.username || profile.department) && (
                 <p className="text-xs text-muted-foreground mb-2">
@@ -329,32 +408,12 @@ export default function MyProfilePage() {
                  <p className="text-[11px] text-muted-foreground">
                    {["pending", "Student_Pending", "pending_promo", "pending_paid", "Premium_Pending_Approval"].includes(profile.verificationStatus)
                     ? "Your badge request is pending admin review."
-                     : profile.promoExpiresAt
+                      : profile.promoExpiresAt && new Date(profile.promoExpiresAt) > new Date()
                        ? "Request your free blue verification badge while your launch perk is active."
-                       : "The launch perk has ended. Request a paid verification tier to renew."}
+                        : "Choose Student Verified, Green Tick, or Premium below. Paid badges require admin review."}
                 </p>
               </div>
             </div>
-            {profile.verificationStatus === "none" && (
-              <div className="flex shrink-0 gap-2">
-                <Button
-                  size="sm"
-                  className="text-xs bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/30"
-                  onClick={() => startPayment("student_verification")}
-                  disabled={initializePayment.isPending}
-                >
-                  {initializePayment.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : profile.promoExpiresAt ? "Claim Free" : "Verify · ₦1,500"}
-                </Button>
-                <Button
-                  size="sm"
-                  className="text-xs bg-blue-600/80 hover:bg-blue-600 text-white shadow-[0_0_14px_rgba(37,99,235,0.3)]"
-                  onClick={() => startPayment("premium_blue_tick")}
-                  disabled={initializePayment.isPending}
-                >
-                  Premium · ₦5,000
-                </Button>
-              </div>
-            )}
              {["pending", "Student_Pending", "pending_promo", "pending_paid", "Premium_Pending_Approval"].includes(profile.verificationStatus) && (
               <Badge className="shrink-0 text-[11px] bg-amber-500/15 text-amber-400 border border-amber-500/25">Pending</Badge>
             )}
@@ -371,28 +430,135 @@ export default function MyProfilePage() {
           </div>
         )}
 
-        {servicesData?.services && servicesData.services.length > 0 && (
-          <div className="rounded-2xl border border-violet-500/25 bg-violet-500/5 p-4 flex items-center justify-between gap-4">
-            <div className="flex items-center gap-3 min-w-0">
-              <div className="h-8 w-8 rounded-full bg-violet-500/15 border border-violet-500/25 flex items-center justify-center shrink-0">
-                <TrendingUp className="h-4 w-4 text-violet-300" />
-              </div>
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-violet-200">Promote your Hustle</p>
-                <p className="text-[11px] text-muted-foreground">Boost marketplace visibility for 30 days · ₦1,500</p>
-              </div>
+        <section className="rounded-2xl border border-white/10 bg-background/30 p-5 space-y-4">
+            <div>
+              <h2 className="text-sm font-bold">Verification &amp; promotion plans</h2>
+              <p className="text-xs text-muted-foreground mt-1">
+                All plans expire after their stated duration. Renew manually—there is no auto-billing.
+              </p>
+              {paymentCatalog?.feeDisclosure && <p className="text-xs text-muted-foreground mt-1">{paymentCatalog.feeDisclosure}</p>}
             </div>
-            <Button
-              size="sm"
-              variant="outline"
-              className="shrink-0 border-violet-400/30 text-violet-200 hover:bg-violet-500/15 text-xs"
-              onClick={() => startPayment("marketplace_promotion")}
-              disabled={initializePayment.isPending}
-            >
-              Promote
-            </Button>
+            {paymentProductsLoading && <p className="text-xs text-muted-foreground">Loading current prices…</p>}
+            {paymentProductsError && <p role="alert" className="text-xs text-destructive">Could not load current prices. Please try again later.</p>}
+            {paymentCatalog?.products && (
+              <div className="grid gap-3 sm:grid-cols-2">
+                {paymentCatalog.products.map((product) => {
+                  const isBadge = product.packageType === "student_verification" || product.packageType === "premium_blue_tick";
+                  const basePrice = (product.baseAmountKobo / 100).toLocaleString("en-NG", { maximumFractionDigits: 2 });
+                  const payablePrice = (product.amountKobo / 100).toLocaleString("en-NG", { maximumFractionDigits: 2 });
+                  const eligibleFreeStudent =
+                    product.packageType === "student_verification" &&
+                    profile.registrationRank <= 100 &&
+                    !!profile.promoExpiresAt &&
+                    new Date(profile.promoExpiresAt) > new Date();
+                  const planTitle = eligibleFreeStudent
+                    ? "FREE Student Verified"
+                    : product.packageType === "student_verification"
+                      ? "Green Tick"
+                      : product.packageType === "premium_blue_tick"
+                        ? "Premium Blue Tick"
+                        : product.label;
+                  return (
+                    <div key={product.packageType} className="rounded-xl border border-white/10 bg-background/40 p-4 flex flex-col gap-3">
+                      <div>
+                        <p className="text-sm font-semibold">{planTitle}</p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {eligibleFreeStudent
+                            ? "First-100 early-bird claim may be free; otherwise this is the paid plan."
+                            : `₦${basePrice} · ${product.durationDays} days`}
+                        </p>
+                        <p className="text-[11px] text-muted-foreground mt-1">
+                          {eligibleFreeStudent
+                            ? "Eligible claims are capped and remain pending admin approval."
+                            : `Paystack customer total: ₦${payablePrice}.`}
+                        </p>
+                        {isBadge && <p className="text-[11px] text-sky-300 mt-1">Badge activation requires admin review; no badge is applied by this screen.</p>}
+                        {isBadge && !hasMatric && <p className="text-[11px] text-amber-300 mt-1">Add your matric number before requesting a verification badge.</p>}
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="mt-auto"
+                        disabled={initializePayment.isPending || (isBadge && !hasMatric)}
+                        onClick={() => startPayment(product.packageType)}
+                      >
+                        {eligibleFreeStudent ? "Claim Student Verified" : isBadge ? "Choose verification" : "Choose plan"}
+                      </Button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+        </section>
+
+        <section className="rounded-2xl border border-primary/20 bg-primary/[0.04] p-5 space-y-4">
+          <div>
+            <h2 className="text-sm font-bold">Create an event or corporate ad</h2>
+            <p className="text-xs text-muted-foreground mt-1">
+              Submit one campaign per paid ad purchase. A moderator must approve it before it appears as Sponsored in campus feeds.
+            </p>
           </div>
-        )}
+          {myAdCampaignsQuery.isError && <p role="alert" className="text-xs text-destructive">Could not load your campaign history. You can still submit a campaign; refresh to see its saved status.</p>}
+          {myAdCampaignsQuery.data && myAdCampaignsQuery.data.length > 0 && (
+            <div className="space-y-2" aria-label="Your ad campaigns">
+              <h3 className="text-xs font-semibold text-muted-foreground">Your campaigns</h3>
+              {myAdCampaignsQuery.data.map((campaign) => (
+                <div key={campaign.id} className="rounded-xl border border-white/10 bg-background/30 p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-sm font-semibold break-words">{campaign.title}</span>
+                    <Badge variant={campaign.status === "approved" ? "default" : "secondary"} className={campaign.status === "rejected" ? "border border-rose-500/20 bg-rose-500/10 text-rose-200" : campaign.status === "pending" ? "border border-amber-500/20 bg-amber-500/10 text-amber-200" : ""}>
+                      {campaign.status === "approved" ? "Approved" : campaign.status === "rejected" ? "Rejected" : "Pending review"}
+                    </Badge>
+                  </div>
+                  <p className="mt-1 text-[11px] text-muted-foreground">
+                    Purchase {campaign.paymentReference} · expires {new Date(campaign.expiresAt).toLocaleDateString()}
+                  </p>
+                  {campaign.rejectionReason && <p className="mt-2 text-xs text-rose-200">Review note: {campaign.rejectionReason}</p>}
+                </div>
+              ))}
+            </div>
+          )}
+          <form className="space-y-3" onSubmit={(event) => void submitAdCampaign(event)}>
+            <div className="space-y-1.5">
+              <Label htmlFor="ad-payment-reference">Paid ad purchase</Label>
+            {paymentHistoryError && <p role="alert" className="text-xs text-destructive">Could not load your payment history. Refresh and try again.</p>}
+              <select
+                id="ad-payment-reference"
+                required
+                value={adPaymentReference}
+                onChange={(event) => setAdPaymentReference(event.target.value)}
+                className="w-full rounded-md border border-white/10 bg-background px-3 py-2 text-sm"
+              >
+                <option value="">
+                  {paymentHistoryLoading ? "Loading payment history…" : paymentHistoryError ? "Payment history unavailable" : eligibleAdPayments.length ? "Choose an eligible purchase" : "No paid, unexpired ad purchases"}
+                </option>
+                {eligibleAdPayments.map((payment) => (
+                  <option key={payment.reference} value={payment.reference}>
+                    {payment.packageType === "corporate_ad_30_day" ? "Corporate Ad" : "Event / Performance Ad"} · {payment.reference} · expires {new Date(payment.entitlementExpiresAt!).toLocaleDateString()}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="ad-title">Campaign title</Label>
+              <Input id="ad-title" required maxLength={100} value={adTitle} onChange={(event) => setAdTitle(event.target.value)} placeholder="e.g. Campus music night" />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="ad-body">Campaign message</Label>
+              <Textarea id="ad-body" required maxLength={2000} value={adBody} onChange={(event) => setAdBody(event.target.value)} placeholder="Tell students what the event or offer is about." className="bg-background/40 border-white/10" />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="ad-destination">Destination website</Label>
+              <Input id="ad-destination" required type="url" maxLength={2048} value={adDestinationUrl} onChange={(event) => setAdDestinationUrl(event.target.value)} placeholder="https://example.com/event" />
+              <p className="text-[11px] text-muted-foreground">Use a public HTTPS address. Campaigns are scoped to your profile's school and campus.</p>
+            </div>
+            {adSubmitError && <p role="alert" className="text-sm text-destructive">{adSubmitError}</p>}
+            {adSubmitSuccess && <p role="status" className="text-sm text-emerald-300">{adSubmitSuccess}</p>}
+            <Button type="submit" size="sm" disabled={adSubmitPending || paymentHistoryLoading || paymentHistoryError || myAdCampaignsQuery.isLoading || eligibleAdPayments.length === 0}>
+              {adSubmitPending ? "Submitting…" : "Submit for moderation"}
+            </Button>
+          </form>
+        </section>
 
         {settingsOpen ? (
           <Suspense fallback={<div className="h-24 rounded-2xl border border-white/10 bg-background/30" />}>
