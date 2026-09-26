@@ -210,13 +210,13 @@ router.get("/admin/pending-verifications", requireAuth, async (req, res): Promis
     verificationStatus: u.verificationStatus,
     badgeType:
       u.verificationStatus === "Gold_Pending_Approval"
-        ? "Gold / Yellow Tick (Paystack)"
+        ? "Gold / Elite (Paystack)"
         : u.verificationStatus === "Student_Pending"
           ? "Free Green Tick (First 100 · 30 days from approval)"
         : u.verificationStatus === "Premium_Pending_Approval"
-        ? "Premium Blue Tick (Paystack)"
+        ? "Premium (Blue Tick, Paystack)"
         : u.verificationStatus === "pending_paid"
-          ? "Paid User (Paystack)"
+          ? "Regular (Green Tick, Paystack)"
           : u.verificationStatus === "pending_promo"
             ? "Promo User (Free)"
             : "Student Verification",

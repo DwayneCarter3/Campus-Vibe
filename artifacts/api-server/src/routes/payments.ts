@@ -18,19 +18,19 @@ const PAYMENT_PACKAGES = {
   student_verification: {
     baseAmountKobo: 150_000,
     durationDays: 30,
-    label: "Green Tick (30 days)",
-    entitlement: "badge",
-  },
-  premium_blue_tick: {
-    baseAmountKobo: 500_000,
-    durationDays: 30,
-    label: "Premium Blue Tick (30 days)",
+    label: "Regular (Green Tick) — 30 days",
     entitlement: "badge",
   },
   gold_yellow_tick: {
-    baseAmountKobo: 300_000,
+    baseAmountKobo: 350_000,
     durationDays: 30,
-    label: "Gold / Yellow Tick (30 days)",
+    label: "Gold / Elite (Gold Tick) — 30 days",
+    entitlement: "badge",
+  },
+  premium_blue_tick: {
+    baseAmountKobo: 600_000,
+    durationDays: 30,
+    label: "Premium (Blue Tick) — highest verification tier, 30 days",
     entitlement: "badge",
   },
   marketplace_promotion_3_day: {

@@ -40,12 +40,14 @@ import {
   Camera,
   Loader2,
   Star,
+  BadgeCheck,
   Settings,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { PostCard } from "@/components/post-card";
 import { ServiceCard } from "@/components/service-card";
 import { UserVerificationMarks } from "@/components/user-verification-marks";
+import { VerificationBadge } from "@/components/verification-badge";
 import { AvatarModal } from "@/components/avatar-modal";
 import { cn } from "@/lib/utils";
 
@@ -462,7 +464,7 @@ export default function MyProfilePage() {
             <div>
               <h2 className="text-base font-bold text-emerald-200">Claim Free Verified Tick (First 100 Users)</h2>
               <p className="text-xs text-muted-foreground mt-1">
-                Free Green Tick for the first 100 student claimants. Approval is required; your 30 days begin at activation.
+                Free Regular (Green) Tick for the first 100 student claimants. Approval is required; your 30 days begin at activation.
               </p>
             </div>
             {freeTickPromo && <span className="rounded-full border border-emerald-300/30 bg-emerald-400/10 px-3 py-1 text-xs font-bold text-emerald-200">
@@ -486,12 +488,12 @@ export default function MyProfilePage() {
           {freeTickPromo?.founder && (
             <div className="border-t border-emerald-300/20 pt-3">
               <p className="text-sm font-semibold text-emerald-100">Founder lifetime verification</p>
-              <p className="text-xs text-muted-foreground mt-1 mb-3">Choose any tick for free. Your selection never needs renewal.</p>
+              <p className="text-xs text-muted-foreground mt-1 mb-3">Choose any tier for free. Your selection never needs renewal.</p>
               <div className="flex flex-wrap gap-2">
-                {([["student", "Green"], ["premium", "Blue"], ["gold", "Gold"]] as const).map(([tier, label]) => (
+                {([["student", "Regular", "text-emerald-400"], ["gold", "Gold / Elite", "text-yellow-400"], ["premium", "Premium", "text-sky-400"]] as const).map(([tier, label, color]) => (
                   <Button key={tier} size="sm" variant="outline" disabled={setFounderBadgeTier.isPending}
                     onClick={() => chooseFounderTier(tier)}>
-                    {label} Tick
+                    {label} <BadgeCheck className={`h-4 w-4 ml-1 ${color}`} aria-hidden="true" />
                   </Button>
                 ))}
               </div>
@@ -502,7 +504,7 @@ export default function MyProfilePage() {
 
         <section className="rounded-2xl border border-white/10 bg-background/30 p-5 space-y-4">
             <div>
-              <h2 className="text-sm font-bold">Verification &amp; promotion plans</h2>
+              <h2 className="text-sm font-bold">Verification tiers &amp; pricing</h2>
               <p className="text-xs text-muted-foreground mt-1">
                 {freeTickPromo?.founder ? "Your founder tick is free for life. Other listed plans retain their standard durations." : "All plans expire after their stated duration. Renew manually—there is no auto-billing."}
               </p>
@@ -518,12 +520,15 @@ export default function MyProfilePage() {
                   const basePrice = (product.baseAmountKobo / 100).toLocaleString("en-NG", { maximumFractionDigits: 2 });
                   const payablePrice = (product.amountKobo / 100).toLocaleString("en-NG", { maximumFractionDigits: 2 });
                   const planTitle = packageType === "student_verification"
-                    ? "Green Tick"
+                    ? "Regular"
                     : packageType === "gold_yellow_tick"
-                      ? "Gold Tick"
+                      ? "Gold / Elite"
                       : packageType === "premium_blue_tick"
-                        ? "Blue Tick"
+                        ? "Premium"
                         : product.label;
+                  const badgeType = packageType === "student_verification"
+                    ? "green" : packageType === "gold_yellow_tick"
+                      ? "gold" : packageType === "premium_blue_tick" ? "blue" : null;
                   const tierColor = packageType === "student_verification"
                     ? "text-emerald-300"
                     : packageType === "gold_yellow_tick"
@@ -534,7 +539,12 @@ export default function MyProfilePage() {
                   return (
                     <div key={product.packageType} className="rounded-xl border border-white/10 bg-background/40 p-4 flex flex-col gap-3">
                       <div>
-                        <p className={`text-sm font-semibold ${tierColor}`}>{planTitle}</p>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <p className={`text-sm font-semibold ${tierColor}`}>{planTitle}</p>
+                          {badgeType && <VerificationBadge type={badgeType} />}
+                          {packageType === "premium_blue_tick" && <Badge className="bg-sky-500/15 text-sky-200 border border-sky-400/30 text-[10px]">Highest tier</Badge>}
+                        </div>
+                        {packageType === "premium_blue_tick" && <p className="text-[11px] text-sky-200 mt-1">Top-tier verification status.</p>}
                         <p className="text-xs text-muted-foreground mt-1">
                           {`₦${basePrice} · ${product.durationDays} days`}
                         </p>

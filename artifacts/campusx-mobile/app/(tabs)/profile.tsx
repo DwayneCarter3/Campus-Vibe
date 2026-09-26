@@ -373,7 +373,7 @@ export default function ProfileScreen() {
         <View style={[styles.actionCard, { backgroundColor: "#10B98112", borderColor: "#10B98155", alignItems: "stretch", gap: 8 }]}>
           <Text style={[styles.actionTitle, { color: "#6EE7B7" }]}>Claim Free Verified Tick (First 100 Users)</Text>
           <Text style={[styles.actionSub, { color: colors.mutedForeground }]}>
-            Free Green Tick for the first 100 student claimants. Review required; 30 days start on approval.
+            Free Regular (Green) Tick for the first 100 student claimants. Review required; 30 days start on approval.
           </Text>
           {freeTickPromo && (
             <Text style={{ color: "#6EE7B7", fontSize: 13, fontWeight: "800" }}>
@@ -400,12 +400,13 @@ export default function ProfileScreen() {
           {freeTickPromo?.founder && (
             <View style={{ borderTopWidth: 1, borderTopColor: "#10B98144", paddingTop: 10, gap: 7 }}>
               <Text style={{ color: "#D1FAE5", fontWeight: "700" }}>Founder lifetime verification</Text>
-              <Text style={{ color: colors.mutedForeground, fontSize: 12 }}>Choose any tick for free, with no renewal.</Text>
+              <Text style={{ color: colors.mutedForeground, fontSize: 12 }}>Choose any tier for free, with no renewal.</Text>
               <View style={{ flexDirection: "row", gap: 8, flexWrap: "wrap" }}>
-                {([["student", "Green"], ["premium", "Blue"], ["gold", "Gold"]] as const).map(([tier, label]) => (
+                {([["student", "Regular", "#34D399"], ["gold", "Gold / Elite", "#FACC15"], ["premium", "Premium", "#60A5FA"]] as const).map(([tier, label, color]) => (
                   <TouchableOpacity key={tier} onPress={() => chooseFounderTier(tier)} disabled={setFounderBadgeTier.isPending}
-                    style={{ borderColor: "#10B98170", borderWidth: 1, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8 }}>
-                    <Text style={{ color: "#D1FAE5", fontSize: 12, fontWeight: "700" }}>{label} Tick</Text>
+                    style={{ borderColor: "#10B98170", borderWidth: 1, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, flexDirection: "row", alignItems: "center" }}>
+                    <Text style={{ color: "#D1FAE5", fontSize: 12, fontWeight: "700" }}>{label}</Text>
+                    <Feather name="check-circle" size={14} color={color} style={{ marginLeft: 5 }} />
                   </TouchableOpacity>
                 ))}
               </View>
@@ -472,10 +473,13 @@ export default function ProfileScreen() {
 
         <View style={[styles.actionCard, { backgroundColor: colors.card, borderColor: colors.border, alignItems: "stretch" }]}>
             <View style={{ marginBottom: 4 }}>
-              <Text style={[styles.actionTitle, { color: colors.foreground }]}>Verification, boosts &amp; ads</Text>
+              <Text style={[styles.actionTitle, { color: colors.foreground }]}>Verification tiers &amp; pricing</Text>
               <Text style={[styles.actionSub, { color: colors.mutedForeground }]}>
                 {freeTickPromo?.founder ? "Your founder tick is free for life; other plans keep their regular durations." : "Fixed-duration plans. Renew manually after expiry; there is no auto-billing."}
               </Text>
+              {paymentCatalog?.feeDisclosure && (
+                <Text style={[styles.actionSub, { color: colors.mutedForeground }]}>{paymentCatalog.feeDisclosure}</Text>
+              )}
             </View>
             {paymentProductsLoading && <ActivityIndicator color={colors.primary} />}
             {paymentProductsError && (
@@ -489,11 +493,11 @@ export default function ProfileScreen() {
               const basePrice = (product.baseAmountKobo / 100).toLocaleString("en-NG", { maximumFractionDigits: 2 });
               const payablePrice = (product.amountKobo / 100).toLocaleString("en-NG", { maximumFractionDigits: 2 });
               const planTitle = packageType === "student_verification"
-                ? "Green Tick"
+                ? "Regular"
                 : packageType === "gold_yellow_tick"
-                  ? "Gold Tick"
+                  ? "Gold / Elite"
                   : packageType === "premium_blue_tick"
-                    ? "Blue Tick"
+                    ? "Premium"
                     : product.label;
               const tierColor = packageType === "student_verification"
                 ? "#34D399"
@@ -513,9 +517,13 @@ export default function ProfileScreen() {
                   style={[styles.actionCard, { backgroundColor: colors.surface, borderColor: colors.border, marginHorizontal: -6, marginVertical: 4 }]}
                 >
                   <View style={{ flex: 1 }}>
-                    <Text style={[styles.actionTitle, { color: colors.foreground }]}>
-                      <Text style={[styles.actionTitle, { color: tierColor }]}>{planTitle}</Text>{` · ₦${basePrice} / ${product.durationDays} days`}
-                    </Text>
+                    <View style={{ flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 3 }}>
+                      <Text style={[styles.actionTitle, { color: tierColor }]}>{planTitle}</Text>
+                      {isBadge && <Feather name="check-circle" size={16} color={tierColor} />}
+                      {packageType === "premium_blue_tick" && <Text style={{ color: "#93C5FD", fontSize: 10, fontWeight: "800" }}>HIGHEST TIER</Text>}
+                    </View>
+                    <Text style={[styles.actionSub, { color: colors.foreground }]}>{`₦${basePrice} · ${product.durationDays} days`}</Text>
+                    {packageType === "premium_blue_tick" && <Text style={[styles.actionSub, { color: "#93C5FD" }]}>Top-tier verification status.</Text>}
                     <Text style={[styles.actionSub, { color: colors.mutedForeground }]}>
                       {freeTickPromo?.founder && isBadge
                         ? "Free for the verified founder, for life. No payment or renewal."
