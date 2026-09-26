@@ -17,11 +17,9 @@ const router: IRouter = Router();
 
 router.get("/messages/conversations", requireAuth, async (req, res): Promise<void> => {
   const userId = (req as any).userId as string;
-  const [account] = await db.select({ role: usersTable.role }).from(usersTable)
-    .where(eq(usersTable.clerkUserId, userId)).limit(1);
-  if (account?.role === "student") {
-    await ensureWazobiaConversation(userId);
-  }
+  // Initialize the reserved bot for every signed-in account when DMs open.
+  // The helper is idempotent, so existing conversations and welcome messages remain intact.
+  await ensureWazobiaConversation(userId);
   const language = await getWazobiaLanguage(userId);
 
   const conversations = await db
@@ -82,6 +80,12 @@ router.get("/messages/conversations", requireAuth, async (req, res): Promise<voi
     })
   );
 
+  // WAZOBIA stays discoverable even when other conversations are more recent.
+  // Stable sorting preserves recency among every other contact.
+  enriched.sort((a, b) =>
+    Number(b.otherUserId === WAZOBIA_BOT_ID) - Number(a.otherUserId === WAZOBIA_BOT_ID)
+  );
+  res.set("Cache-Control", "private, no-store");
   res.json({ conversations: enriched });
 });
 
