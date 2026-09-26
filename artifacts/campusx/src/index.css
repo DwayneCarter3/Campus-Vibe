@@ -67,31 +67,33 @@
 }
 
 :root {
-  --background: 240 10% 4%;
-  --foreground: 0 0% 95%;
-  --border: 240 5% 20%;
-  --input: 240 5% 15%;
-  --ring: 330 100% 60%;
-  --card: 240 8% 9%;
-  --card-foreground: 0 0% 95%;
-  --card-border: 240 5% 20%;
-  --popover: 240 8% 9%;
-  --popover-foreground: 0 0% 95%;
-  --popover-border: 240 5% 20%;
-  --primary: 330 100% 60%;
+  --background: 210 40% 98%;
+  --foreground: 222 47% 11%;
+  --border: 214 32% 91%;
+  --input: 210 40% 96%;
+  --ring: 331 100% 59%;
+  --card: 0 0% 100%;
+  --card-foreground: 222 47% 11%;
+  --card-border: 214 32% 91%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 222 47% 11%;
+  --popover-border: 214 32% 91%;
+  --primary: 331 100% 59%;
   --primary-foreground: 0 0% 100%;
-  --secondary: 240 5% 15%;
-  --secondary-foreground: 0 0% 95%;
-  --muted: 240 5% 15%;
-  --muted-foreground: 240 5% 55%;
-  --accent: 25 100% 55%;
+  --secondary: 210 40% 96%;
+  --secondary-foreground: 222 47% 11%;
+  --muted: 210 40% 96%;
+  --muted-foreground: 215 19% 35%;
+  --accent: 25 100% 50%;
   --accent-foreground: 0 0% 100%;
   --destructive: 0 84.2% 60.2%;
   --destructive-foreground: 210 40% 98%;
+  --canvas-background: linear-gradient(145deg, #f8fafc 0%, #f1f5f9 55%, #f8f4f9 100%);
   --radius: 0.5rem;
 }
 
 .dark {
+  --canvas-background: hsl(var(--background));
   --background: 240 10% 4%;
   --foreground: 0 0% 95%;
   --border: 240 5% 20%;
@@ -124,12 +126,41 @@
   }
 }
 
+.app-canvas {
+  background: var(--canvas-background);
+}
+
 .glass {
-  @apply bg-white/5 backdrop-blur-md border border-white/10;
+  background: rgba(255, 255, 255, 0.75);
+  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03);
+}
+.dark .glass {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.1);
+  box-shadow: none;
+}
+
+/* Existing dark-only utility borders and washes need visible light equivalents. */
+:root:not(.dark) :is(.border-white\/5, .border-white\/10, .border-white\/15, .border-white\/20, .border-white\/25):not(.glass) {
+  border-color: rgba(203, 213, 225, 0.8);
+}
+:root:not(.dark) :is(.bg-white\/5, .bg-white\/10):not(.glass) {
+  background-color: rgba(255, 255, 255, 0.65);
 }
 .gradient-text {
-  @apply bg-gradient-to-r from-pink-400 to-orange-400 bg-clip-text text-transparent;
+  background-image: linear-gradient(90deg, #ff2e93, #ff6b00);
+  background-clip: text;
+  color: transparent;
 }
 .gradient-btn {
-  @apply bg-gradient-to-r from-pink-500 to-orange-500 text-white font-semibold hover:from-pink-600 hover:to-orange-600 transition-all;
+  background-image: linear-gradient(90deg, #ff2e93, #ff6b00);
+  color: white;
+  font-weight: 600;
+  transition: filter 180ms ease, box-shadow 180ms ease;
+}
+.gradient-btn:hover {
+  filter: brightness(0.94);
 }

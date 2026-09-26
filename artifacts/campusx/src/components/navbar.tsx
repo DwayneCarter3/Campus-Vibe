@@ -3,6 +3,7 @@ import { Show, useUser } from "@clerk/react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { NotificationBell } from "@/components/notification-bell";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { StudentSearch } from "@/components/student-search";
 import { Calculator, MessageCircle, Shield } from "lucide-react";
 import { useGetMyProfile, getGetMyProfileQueryKey, useListConversations, getListConversationsQueryKey } from "@workspace/api-client-react";
@@ -81,6 +82,7 @@ export function Navbar() {
             )}
 
             <NotificationBell />
+            <ThemeToggle />
 
             <Link href="/profile">
               <Avatar className="h-8 w-8 border border-primary/20 hover:border-primary/50 transition-colors cursor-pointer">
@@ -90,6 +92,7 @@ export function Navbar() {
             </Link>
           </Show>
           <Show when="signed-out">
+            <ThemeToggle />
             <Link href="/sign-in" className="text-sm font-medium text-muted-foreground hover:text-foreground">
               Sign In
             </Link>

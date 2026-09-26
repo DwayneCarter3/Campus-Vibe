@@ -1,0 +1,28 @@
+Update Registration Form, Complete Institution Support, and Badge Hierarchy UI:
+
+1. FULL OFFICIAL INSTITUTION NAMES & SEARCHABLE DROPDOWN:
+   - Seed `institutions.json` with complete official names (e.g., "Lagos State University", "Lagos State University of Education", "Lagos State University of Science and Technology", "University of Lagos", "University of Ibadan", "Obafemi Awolowo University", "University of Ilorin", "University of Benin", "University of Jos", "Ambrose Alli University", "Olabisi Onabanjo University", "University of Nigeria, Nsukka", "Ahmadu Bello University", "Covenant University", "Yaba College of Technology", "Ogun State Institute of Technology", "Federal Polytechnic, Ilaro", "Auchi Polytechnic", "Moshood Abiola Polytechnic", "Kaduna Polytechnic").
+   - Provide a clean Search Bar / Autocomplete selector field.
+
+2. DYNAMIC CASCADING SELECTORS:
+   - Dynamically update dependent dropdowns ("Campus Location" and "Faculty / Department / School") matching only the selected school.
+
+3. STRICT EMAIL, MATRICULATION NUMBER & FRAUD RECOVERY:
+   - Enforce global email uniqueness and (institution_id + matric_number) uniqueness in Postgres.
+   - If a matriculation number is taken, provide a "Claim Account / Report Fraud" modal where students can upload Student ID / Course Form proof for Admin review.
+   - Assign successful student sign-ups the FREE system status "Student Verified" rendered as a green pill outline badge next to their profile name.
+
+4. BADGE HIERARCHY & PAYSTACK PROMOTION (FIRST 100 USERS PROMO):
+   - Track promo count via a dynamic database counter for claimed badges/promotions.
+   - First 100 Users Rule: If counter <= 100, bypass Paystack payment for Green Tick and Blue Tick badges, routing them to the Admin Dashboard as 'Pending_Approval'.
+   - Post-Promo Rule (User 101+): Require live Paystack payment for:
+     a) Free/Default: 'Student Verified' Pill Badge (FREE upon ID validation).
+     b) Green Tick Badge (₦1,500/month): Circular green tick avatar overlay icon next to the user profile image.
+     c) Premium Blue Tick Badge (₦5,000/month): Glowing blue badge + custom status tag (e.g., CEO, Vendor, Admin, Moderator, Student) next to name.
+     d) Marketplace Listings Boosts: ₦500 for 3 days, ₦1,000 for 1 week, ₦3,000 for 1 month.
+     e) Event & Performance Ads: ₦8,000 / month.
+     f) Corporate Brand Ads: ₦10,000 / month.
+   - Securely pull PAYSTACK_LIVE_PUBLIC_KEY and PAYSTACK_LIVE_SECRET_KEY via process.env. Charge Paystack transaction fees directly to the customer checkout.
+
+5. DATABASE STORAGE & CONTENT ROUTING:
+   - Save user profiles in Postgres and route campus feeds, marketplace items, and local features strictly based on the user's saved school and campus 

@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/reac
 import { ClerkProvider, Show, useClerk } from "@clerk/react";
 import { publishableKeyFromHost } from "@clerk/react/internal";
 import { shadcn } from "@clerk/themes";
+import { ThemeProvider } from "next-themes";
 
 import { Toaster } from "@/components/ui/toaster";
 
@@ -51,23 +52,23 @@ const clerkAppearance = {
   },
   variables: {
     colorPrimary: "#f5286e",
-    colorBackground: "#0a0a0f",
-    colorForeground: "#f0f0f5",
-    colorInput: "#15151f",
-    colorInputForeground: "#f0f0f5",
-    colorNeutral: "#333345",
-    colorMutedForeground: "#8c8c9e",
+    colorBackground: "hsl(var(--card))",
+    colorForeground: "hsl(var(--foreground))",
+    colorInput: "hsl(var(--input))",
+    colorInputForeground: "hsl(var(--foreground))",
+    colorNeutral: "hsl(var(--border))",
+    colorMutedForeground: "hsl(var(--muted-foreground))",
     colorDanger: "#ef4444",
     fontFamily: "'Space Grotesk', sans-serif",
     borderRadius: "0.5rem",
   },
   elements: {
     rootBox: "w-full flex justify-center",
-    cardBox: "bg-[#0a0a0f] rounded-2xl w-[440px] max-w-full overflow-hidden border border-white/10 shadow-xl",
+    cardBox: "bg-card rounded-2xl w-[440px] max-w-full overflow-hidden border border-border shadow-xl",
     card: "!shadow-none !border-0 !bg-transparent !rounded-none",
     footer: "!shadow-none !border-0 !bg-transparent !rounded-none",
-    headerTitle: "text-[#f0f0f5]",
-    headerSubtitle: "text-[#8c8c9e]",
+    headerTitle: "text-foreground",
+    headerSubtitle: "text-muted-foreground",
     socialButtonsBlockButtonText: "text-[#f0f0f5]",
     formFieldLabel: "text-[#f0f0f5]",
     footerActionLink: "text-[#f5286e] hover:text-[#f5286e]/80",
@@ -185,12 +186,14 @@ function ClerkProviderWithRoutes() {
 
 function App() {
   return (
-    <TooltipProvider>
-      <WouterRouter base={basePath}>
-        <ClerkProviderWithRoutes />
-      </WouterRouter>
-      <Toaster />
-    </TooltipProvider>
+    <ThemeProvider attribute="class" defaultTheme="system" enableSystem storageKey="campusx-theme">
+      <TooltipProvider>
+        <WouterRouter base={basePath}>
+          <ClerkProviderWithRoutes />
+        </WouterRouter>
+        <Toaster />
+      </TooltipProvider>
+    </ThemeProvider>
   );
 }
 

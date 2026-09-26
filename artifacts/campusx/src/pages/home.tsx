@@ -22,7 +22,7 @@ export default function Home() {
         </h1>
         
         <p className="text-xl text-muted-foreground max-w-[600px] mx-auto text-balance mt-6">
-          A dark, electric social hub where LASU students post gist, find services, and connect. Urgent, social, and unmistakably collegiate.
+          A vibrant, electric social hub where LASU students post gist, find services, and connect. Urgent, social, and unmistakably collegiate.
         </p>
         
         <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-8">
