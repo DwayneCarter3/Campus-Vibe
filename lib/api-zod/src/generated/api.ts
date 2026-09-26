@@ -15,6 +15,58 @@ export const HealthCheckResponse = zod.object({
 });
 
 /**
+ * @summary Get the current shuttle queue status
+ */
+export const GetShuttleStatusResponse = zod.object({
+  status: zod
+    .union([
+      zod.literal("fast_moving"),
+      zod.literal("long_queue"),
+      zod.literal("gridlock"),
+      zod.literal(null),
+    ])
+    .nullable(),
+  voteCount: zod.number(),
+  updatedAt: zod.coerce.date().nullable(),
+  myVote: zod
+    .union([
+      zod.literal("fast_moving"),
+      zod.literal("long_queue"),
+      zod.literal("gridlock"),
+      zod.literal(null),
+    ])
+    .nullable(),
+});
+
+/**
+ * @summary Cast or update the authenticated user's shuttle status vote
+ */
+export const VoteShuttleStatusBody = zod.object({
+  status: zod.enum(["fast_moving", "long_queue", "gridlock"]),
+});
+
+export const VoteShuttleStatusResponse = zod.object({
+  status: zod
+    .union([
+      zod.literal("fast_moving"),
+      zod.literal("long_queue"),
+      zod.literal("gridlock"),
+      zod.literal(null),
+    ])
+    .nullable(),
+  voteCount: zod.number(),
+  updatedAt: zod.coerce.date().nullable(),
+  myVote: zod
+    .union([
+      zod.literal("fast_moving"),
+      zod.literal("long_queue"),
+      zod.literal("gridlock"),
+      zod.literal(null),
+    ])
+    .nullable(),
+});
+
+/**
  * @summary Get current user profile (includes private fields)
  */
 export const GetMyProfileResponse = zod.object({
@@ -301,6 +353,9 @@ export const GetUserServicesResponse = zod.object({
       description: zod.string(),
       category: zod.string(),
       price: zod.string().nullable(),
+      isFlashSale: zod.boolean(),
+      originalPrice: zod.string().nullable(),
+      flashExpiresAt: zod.coerce.date().nullable(),
       contactInfo: zod.string(),
       isActive: zod.boolean(),
       isSavedByMe: zod.boolean(),
@@ -731,6 +786,7 @@ export const ListServicesQueryParams = zod.object({
   offset: zod.coerce.number().default(listServicesQueryOffsetDefault),
   savedOnly: zod.coerce.boolean().optional(),
   category: zod.coerce.string().nullish(),
+  flashSale: zod.coerce.boolean().optional(),
 });
 
 export const ListServicesResponse = zod.object({
@@ -751,6 +807,9 @@ export const ListServicesResponse = zod.object({
       description: zod.string(),
       category: zod.string(),
       price: zod.string().nullable(),
+      isFlashSale: zod.boolean(),
+      originalPrice: zod.string().nullable(),
+      flashExpiresAt: zod.coerce.date().nullable(),
       contactInfo: zod.string(),
       isActive: zod.boolean(),
       isSavedByMe: zod.boolean(),
@@ -770,6 +829,8 @@ export const CreateServiceBody = zod.object({
   description: zod.string(),
   category: zod.string(),
   price: zod.string().nullish(),
+  isFlashSale: zod.boolean().optional(),
+  originalPrice: zod.string().nullish(),
   contactInfo: zod.string(),
 });
 
@@ -796,6 +857,9 @@ export const GetServiceResponse = zod.object({
   description: zod.string(),
   category: zod.string(),
   price: zod.string().nullable(),
+  isFlashSale: zod.boolean(),
+  originalPrice: zod.string().nullable(),
+  flashExpiresAt: zod.coerce.date().nullable(),
   contactInfo: zod.string(),
   isActive: zod.boolean(),
   isSavedByMe: zod.boolean(),
@@ -816,6 +880,8 @@ export const UpdateServiceBody = zod.object({
   description: zod.string().optional(),
   category: zod.string().optional(),
   price: zod.string().nullish(),
+  isFlashSale: zod.boolean().optional(),
+  originalPrice: zod.string().nullish(),
   contactInfo: zod.string().optional(),
   isActive: zod.boolean().optional(),
 });
@@ -836,6 +902,9 @@ export const UpdateServiceResponse = zod.object({
   description: zod.string(),
   category: zod.string(),
   price: zod.string().nullable(),
+  isFlashSale: zod.boolean(),
+  originalPrice: zod.string().nullable(),
+  flashExpiresAt: zod.coerce.date().nullable(),
   contactInfo: zod.string(),
   isActive: zod.boolean(),
   isSavedByMe: zod.boolean(),

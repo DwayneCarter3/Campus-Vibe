@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { Service, ReportBodyReason } from "@workspace/api-client-react";
 import { useUpdateService, useDeleteService, useToggleSaveService, useReportService, useToggleFeatureService, usePinServiceToProfile, useGetMyProfile, getGetMyProfileQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -67,7 +67,8 @@ export function ServiceCard({ service, index = 0, currentUserId, directView = fa
     try { return JSON.parse(sessionStorage.getItem("campusx-hidden-listings") || "[]").includes(service.id); } catch { return false; }
   });
   const [reason, setReason] = useState<ReportBodyReason>("Spam");
-  const [draft, setDraft] = useState({ title: service.title, description: service.description, category: service.category, price: service.price ?? "", contactInfo: service.contactInfo });
+  const [draft, setDraft] = useState({ title: service.title, description: service.description, category: service.category, price: service.price ?? "", contactInfo: service.contactInfo, isFlashSale: Boolean(service.originalPrice && service.flashExpiresAt), originalPrice: service.originalPrice ?? "" });
+  const [countdownNow, setCountdownNow] = useState(Date.now());
   const queryClient = useQueryClient();
   const { data: profile } = useGetMyProfile({ query: { queryKey: getGetMyProfileQueryKey(), retry: false } });
   const updateService = useUpdateService();
@@ -80,6 +81,43 @@ export function ServiceCard({ service, index = 0, currentUserId, directView = fa
   const whatsappUrl = formatWhatsAppUrl(service.contactInfo, service.title);
   const categoryColor = CATEGORY_COLORS[service.category] ?? "bg-primary/15 text-primary border-primary/25";
   const startConversation = useStartConversation();
+  useEffect(() => {
+    const timer = window.setInterval(() => setCountdownNow(Date.now()), 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
+  const saleExpiresAt = service.flashExpiresAt ? new Date(service.flashExpiresAt).getTime() : 0;
+  useEffect(() => {
+    if (!Number.isFinite(saleExpiresAt) || saleExpiresAt <= Date.now()) return;
+    const expiryTimer = window.setTimeout(() => setCountdownNow(Date.now()), saleExpiresAt - Date.now());
+    return () => window.clearTimeout(expiryTimer);
+  }, [saleExpiresAt]);
+  const flashSaleActive = Boolean(service.isFlashSale && service.originalPrice && service.price && saleExpiresAt > countdownNow);
+  const flashSaleExpired = Boolean(service.isFlashSale && service.originalPrice && service.price && saleExpiresAt > 0 && saleExpiresAt <= countdownNow);
+  const secondsRemaining = flashSaleActive ? Math.max(0, Math.floor((saleExpiresAt - countdownNow) / 1000)) : 0;
+  const countdownLabel = `${Math.floor(secondsRemaining / 3600)}h ${Math.floor((secondsRemaining % 3600) / 60)}m`;
+  const saveEdit = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (draft.isFlashSale) {
+      const currentPrice = Number(draft.price.replace(/[^\d.]/g, ""));
+      const originalPrice = Number(draft.originalPrice.replace(/[^\d.]/g, ""));
+      if (!Number.isFinite(currentPrice) || currentPrice <= 0 || !Number.isFinite(originalPrice) || originalPrice <= currentPrice) {
+        toast({ title: "Enter a positive sale price below the original price.", variant: "destructive" });
+        return;
+      }
+    }
+    updateService.mutate({
+      serviceId: service.id,
+      data: {
+        title: draft.title,
+        description: draft.description,
+        category: draft.category,
+        price: draft.price || null,
+        contactInfo: draft.contactInfo,
+        isFlashSale: draft.isFlashSale,
+        originalPrice: draft.isFlashSale ? draft.originalPrice || null : null,
+      },
+    }, { onSuccess: () => { setDialog(null); refresh(); toast({ title: "Listing updated" }); }, onError: failed });
+  };
 
   const isMyService = service.providerId === (currentUserId ?? profile?.clerkUserId);
   const canModerate = profile?.role === "ceo" || profile?.role === "admin";
@@ -152,12 +190,20 @@ export function ServiceCard({ service, index = 0, currentUserId, directView = fa
             <div className="flex items-center gap-1">
               {service.isFeatured && <Sparkles className="h-4 w-4 text-amber-400" aria-label="Featured listing" />}
               {service.isPinnedToProfile && <Pin className="h-4 w-4 text-primary" aria-label="Pinned to profile" />}
-              {service.price && <span className="text-sm font-bold text-accent shrink-0">{service.price}</span>}
+              {flashSaleActive ? (
+                <div className="flex flex-col items-end gap-0.5">
+                  <span data-testid={`badge-flash-sale-countdown-${service.id}`} className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold text-amber-300"><Sparkles className="h-3 w-3" />Expires in {countdownLabel}</span>
+                  <span className="text-sm font-bold text-accent">{service.price}</span>
+                  <span className="text-[11px] text-muted-foreground line-through">{service.originalPrice}</span>
+                </div>
+              ) : flashSaleExpired ? (
+                <Badge data-testid={`badge-flash-sale-expired-${service.id}`} className="h-auto border border-white/10 bg-white/5 text-[10px] text-muted-foreground">Flash sale ended</Badge>
+              ) : service.price && <span className="text-sm font-bold text-accent shrink-0">{service.price}</span>}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild><button data-testid={`button-listing-more-${service.id}`} aria-label={`More options for ${service.title}`} className="p-1.5 rounded-lg text-muted-foreground hover:bg-white/10 hover:text-foreground"><MoreVertical className="h-4 w-4" /></button></DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="min-w-48 bg-[#1d202c] border-white/10 text-foreground">
                   {isMyService ? <>
-                    <DropdownMenuItem onSelect={() => { setDraft({ title: service.title, description: service.description, category: service.category, price: service.price ?? "", contactInfo: service.contactInfo }); setDialog("edit"); }}><Pencil className="h-4 w-4 mr-2" />Edit listing</DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => { setDraft({ title: service.title, description: service.description, category: service.category, price: service.price ?? "", contactInfo: service.contactInfo, isFlashSale: Boolean(service.originalPrice && service.flashExpiresAt && new Date(service.flashExpiresAt).getTime() > Date.now()), originalPrice: service.originalPrice ?? "" }); setDialog("edit"); }}><Pencil className="h-4 w-4 mr-2" />Edit listing</DropdownMenuItem>
                     <DropdownMenuItem disabled={busy} onSelect={() => pinService.mutate({ serviceId: service.id }, { onSuccess: () => { refresh(); toast({ title: service.isPinnedToProfile ? "Removed from profile" : "Pinned to profile" }); }, onError: failed })}><Pin className="h-4 w-4 mr-2" />{service.isPinnedToProfile ? "Unpin from Profile" : "Pin to Profile"}</DropdownMenuItem>
                     <DropdownMenuItem onSelect={() => setDialog("delete")} className="text-rose-400"><Trash2 className="h-4 w-4 mr-2" />Delete listing</DropdownMenuItem>
                   </> : <>
@@ -286,9 +332,11 @@ export function ServiceCard({ service, index = 0, currentUserId, directView = fa
       <Dialog open={dialog === "edit"} onOpenChange={(open) => !open && setDialog(null)}>
         <DialogContent className="glass border-white/10 sm:max-w-lg max-h-[90dvh] overflow-y-auto">
           <DialogTitle>Edit listing</DialogTitle>
-          <form className="space-y-4" onSubmit={(e) => { e.preventDefault(); updateService.mutate({ serviceId: service.id, data: { ...draft, price: draft.price || null } }, { onSuccess: () => { setDialog(null); refresh(); toast({ title: "Listing updated" }); }, onError: failed }); }}>
+          <form className="space-y-4" onSubmit={saveEdit}>
             {(["title", "category", "price", "contactInfo"] as const).map((key) => <label key={key} className="block text-sm font-medium capitalize">{key === "contactInfo" ? "WhatsApp number" : key}<Input data-testid={`input-listing-${key}-${service.id}`} className="mt-1.5 bg-background/50 border-white/10" value={draft[key]} onChange={(e) => setDraft({ ...draft, [key]: e.target.value })} required={key !== "price"} minLength={key === "title" ? 3 : undefined} /></label>)}
             <label className="block text-sm font-medium">Description<Textarea data-testid={`input-listing-description-${service.id}`} className="mt-1.5 bg-background/50 border-white/10" value={draft.description} onChange={(e) => setDraft({ ...draft, description: e.target.value })} required minLength={10} /></label>
+            <label className="flex items-center gap-2 rounded-xl border border-amber-400/20 bg-amber-500/[0.06] p-3 text-sm font-medium"><input data-testid={`input-listing-flash-sale-${service.id}`} type="checkbox" checked={draft.isFlashSale} onChange={(e) => setDraft({ ...draft, isFlashSale: e.target.checked })} className="h-4 w-4 accent-amber-400" />⚡ Mark as a Flash Sale</label>
+            {draft.isFlashSale && <label className="block text-sm font-medium">Original Price (₦)<Input data-testid={`input-listing-original-price-${service.id}`} inputMode="decimal" className="mt-1.5 bg-background/50 border-white/10" value={draft.originalPrice} onChange={(e) => setDraft({ ...draft, originalPrice: e.target.value })} required /></label>}
             <Button type="submit" className="w-full gradient-btn" disabled={busy}>{updateService.isPending ? "Saving…" : "Save changes"}</Button>
           </form>
         </DialogContent>

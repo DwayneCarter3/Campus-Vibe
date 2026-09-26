@@ -23,7 +23,6 @@ import type {
   ConversationDetail,
   CreateCommentBody,
   CreatePostBody,
-  CreateServiceBody,
   DirectMessage,
   FeatureResponse,
   FeedStats,
@@ -70,14 +69,17 @@ import type {
   SearchStudentsParams,
   SendMessageBody,
   Service,
+  ServiceInput,
+  ServiceUpdate,
   SetUserVerificationBody,
   SetUserVerificationResponse,
+  ShuttleStatus,
+  ShuttleVoteInput,
   StartConversationBody,
   StudentSearchResponse,
   TrackWhatsappClick200,
   UpdatePostBody,
   UpdateProfileBody,
-  UpdateServiceBody,
   UpdateUserRoleBody,
   UpdateUserRoleResponse,
   UploadUrlRequest,
@@ -168,6 +170,167 @@ export function useHealthCheck<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * @summary Get the current shuttle queue status
+ */
+export const getGetShuttleStatusUrl = () => {
+  return `/api/shuttle-status`;
+};
+
+export const getShuttleStatus = async (
+  options?: RequestInit,
+): Promise<ShuttleStatus> => {
+  return customFetch<ShuttleStatus>(getGetShuttleStatusUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetShuttleStatusQueryKey = () => {
+  return [`/api/shuttle-status`] as const;
+};
+
+export const getGetShuttleStatusQueryOptions = <
+  TData = Awaited<ReturnType<typeof getShuttleStatus>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getShuttleStatus>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetShuttleStatusQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getShuttleStatus>>
+  > = ({ signal }) => getShuttleStatus({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getShuttleStatus>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetShuttleStatusQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getShuttleStatus>>
+>;
+export type GetShuttleStatusQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get the current shuttle queue status
+ */
+
+export function useGetShuttleStatus<
+  TData = Awaited<ReturnType<typeof getShuttleStatus>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getShuttleStatus>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetShuttleStatusQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Cast or update the authenticated user's shuttle status vote
+ */
+export const getVoteShuttleStatusUrl = () => {
+  return `/api/shuttle-status/vote`;
+};
+
+export const voteShuttleStatus = async (
+  shuttleVoteInput: ShuttleVoteInput,
+  options?: RequestInit,
+): Promise<ShuttleStatus> => {
+  return customFetch<ShuttleStatus>(getVoteShuttleStatusUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(shuttleVoteInput),
+  });
+};
+
+export const getVoteShuttleStatusMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof voteShuttleStatus>>,
+    TError,
+    { data: BodyType<ShuttleVoteInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof voteShuttleStatus>>,
+  TError,
+  { data: BodyType<ShuttleVoteInput> },
+  TContext
+> => {
+  const mutationKey = ["voteShuttleStatus"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof voteShuttleStatus>>,
+    { data: BodyType<ShuttleVoteInput> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return voteShuttleStatus(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type VoteShuttleStatusMutationResult = NonNullable<
+  Awaited<ReturnType<typeof voteShuttleStatus>>
+>;
+export type VoteShuttleStatusMutationBody = BodyType<ShuttleVoteInput>;
+export type VoteShuttleStatusMutationError = ErrorType<void>;
+
+/**
+ * @summary Cast or update the authenticated user's shuttle status vote
+ */
+export const useVoteShuttleStatus = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof voteShuttleStatus>>,
+    TError,
+    { data: BodyType<ShuttleVoteInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof voteShuttleStatus>>,
+  TError,
+  { data: BodyType<ShuttleVoteInput> },
+  TContext
+> => {
+  return useMutation(getVoteShuttleStatusMutationOptions(options));
+};
 
 /**
  * @summary Get current user profile (includes private fields)
@@ -2018,14 +2181,14 @@ export const getCreateServiceUrl = () => {
 };
 
 export const createService = async (
-  createServiceBody: CreateServiceBody,
+  serviceInput: ServiceInput,
   options?: RequestInit,
 ): Promise<Service> => {
   return customFetch<Service>(getCreateServiceUrl(), {
     ...options,
     method: "POST",
     headers: { "Content-Type": "application/json", ...options?.headers },
-    body: JSON.stringify(createServiceBody),
+    body: JSON.stringify(serviceInput),
   });
 };
 
@@ -2036,14 +2199,14 @@ export const getCreateServiceMutationOptions = <
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof createService>>,
     TError,
-    { data: BodyType<CreateServiceBody> },
+    { data: BodyType<ServiceInput> },
     TContext
   >;
   request?: SecondParameter<typeof customFetch>;
 }): UseMutationOptions<
   Awaited<ReturnType<typeof createService>>,
   TError,
-  { data: BodyType<CreateServiceBody> },
+  { data: BodyType<ServiceInput> },
   TContext
 > => {
   const mutationKey = ["createService"];
@@ -2057,7 +2220,7 @@ export const getCreateServiceMutationOptions = <
 
   const mutationFn: MutationFunction<
     Awaited<ReturnType<typeof createService>>,
-    { data: BodyType<CreateServiceBody> }
+    { data: BodyType<ServiceInput> }
   > = (props) => {
     const { data } = props ?? {};
 
@@ -2070,7 +2233,7 @@ export const getCreateServiceMutationOptions = <
 export type CreateServiceMutationResult = NonNullable<
   Awaited<ReturnType<typeof createService>>
 >;
-export type CreateServiceMutationBody = BodyType<CreateServiceBody>;
+export type CreateServiceMutationBody = BodyType<ServiceInput>;
 export type CreateServiceMutationError = ErrorType<void>;
 
 /**
@@ -2083,14 +2246,14 @@ export const useCreateService = <
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof createService>>,
     TError,
-    { data: BodyType<CreateServiceBody> },
+    { data: BodyType<ServiceInput> },
     TContext
   >;
   request?: SecondParameter<typeof customFetch>;
 }): UseMutationResult<
   Awaited<ReturnType<typeof createService>>,
   TError,
-  { data: BodyType<CreateServiceBody> },
+  { data: BodyType<ServiceInput> },
   TContext
 > => {
   return useMutation(getCreateServiceMutationOptions(options));
@@ -2192,14 +2355,14 @@ export const getUpdateServiceUrl = (serviceId: number) => {
 
 export const updateService = async (
   serviceId: number,
-  updateServiceBody: UpdateServiceBody,
+  serviceUpdate: ServiceUpdate,
   options?: RequestInit,
 ): Promise<Service> => {
   return customFetch<Service>(getUpdateServiceUrl(serviceId), {
     ...options,
     method: "PATCH",
     headers: { "Content-Type": "application/json", ...options?.headers },
-    body: JSON.stringify(updateServiceBody),
+    body: JSON.stringify(serviceUpdate),
   });
 };
 
@@ -2210,14 +2373,14 @@ export const getUpdateServiceMutationOptions = <
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof updateService>>,
     TError,
-    { serviceId: number; data: BodyType<UpdateServiceBody> },
+    { serviceId: number; data: BodyType<ServiceUpdate> },
     TContext
   >;
   request?: SecondParameter<typeof customFetch>;
 }): UseMutationOptions<
   Awaited<ReturnType<typeof updateService>>,
   TError,
-  { serviceId: number; data: BodyType<UpdateServiceBody> },
+  { serviceId: number; data: BodyType<ServiceUpdate> },
   TContext
 > => {
   const mutationKey = ["updateService"];
@@ -2231,7 +2394,7 @@ export const getUpdateServiceMutationOptions = <
 
   const mutationFn: MutationFunction<
     Awaited<ReturnType<typeof updateService>>,
-    { serviceId: number; data: BodyType<UpdateServiceBody> }
+    { serviceId: number; data: BodyType<ServiceUpdate> }
   > = (props) => {
     const { serviceId, data } = props ?? {};
 
@@ -2244,7 +2407,7 @@ export const getUpdateServiceMutationOptions = <
 export type UpdateServiceMutationResult = NonNullable<
   Awaited<ReturnType<typeof updateService>>
 >;
-export type UpdateServiceMutationBody = BodyType<UpdateServiceBody>;
+export type UpdateServiceMutationBody = BodyType<ServiceUpdate>;
 export type UpdateServiceMutationError = ErrorType<void>;
 
 /**
@@ -2257,14 +2420,14 @@ export const useUpdateService = <
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof updateService>>,
     TError,
-    { serviceId: number; data: BodyType<UpdateServiceBody> },
+    { serviceId: number; data: BodyType<ServiceUpdate> },
     TContext
   >;
   request?: SecondParameter<typeof customFetch>;
 }): UseMutationResult<
   Awaited<ReturnType<typeof updateService>>,
   TError,
-  { serviceId: number; data: BodyType<UpdateServiceBody> },
+  { serviceId: number; data: BodyType<ServiceUpdate> },
   TContext
 > => {
   return useMutation(getUpdateServiceMutationOptions(options));

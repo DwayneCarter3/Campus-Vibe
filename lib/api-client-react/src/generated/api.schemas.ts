@@ -401,6 +401,11 @@ export interface Service {
   category: string;
   /** @nullable */
   price: string | null;
+  isFlashSale: boolean;
+  /** @nullable */
+  originalPrice: string | null;
+  /** @nullable */
+  flashExpiresAt: string | null;
   contactInfo: string;
   isActive: boolean;
   isSavedByMe: boolean;
@@ -414,23 +419,78 @@ export interface ListServicesResponse {
   total: number;
 }
 
-export interface CreateServiceBody {
+export interface ServiceInput {
   title: string;
   description: string;
   category: string;
   /** @nullable */
   price?: string | null;
+  isFlashSale?: boolean;
+  /** @nullable */
+  originalPrice?: string | null;
   contactInfo: string;
 }
 
-export interface UpdateServiceBody {
+export interface ServiceUpdate {
   title?: string;
   description?: string;
   category?: string;
   /** @nullable */
   price?: string | null;
+  isFlashSale?: boolean;
+  /** @nullable */
+  originalPrice?: string | null;
   contactInfo?: string;
   isActive?: boolean;
+}
+
+/**
+ * @nullable
+ */
+export type ShuttleStatusStatus =
+  | (typeof ShuttleStatusStatus)[keyof typeof ShuttleStatusStatus]
+  | null;
+
+export const ShuttleStatusStatus = {
+  fast_moving: "fast_moving",
+  long_queue: "long_queue",
+  gridlock: "gridlock",
+} as const;
+
+/**
+ * @nullable
+ */
+export type ShuttleStatusMyVote =
+  | (typeof ShuttleStatusMyVote)[keyof typeof ShuttleStatusMyVote]
+  | null;
+
+export const ShuttleStatusMyVote = {
+  fast_moving: "fast_moving",
+  long_queue: "long_queue",
+  gridlock: "gridlock",
+} as const;
+
+export interface ShuttleStatus {
+  /** @nullable */
+  status: ShuttleStatusStatus;
+  voteCount: number;
+  /** @nullable */
+  updatedAt: string | null;
+  /** @nullable */
+  myVote: ShuttleStatusMyVote;
+}
+
+export type ShuttleVoteInputStatus =
+  (typeof ShuttleVoteInputStatus)[keyof typeof ShuttleVoteInputStatus];
+
+export const ShuttleVoteInputStatus = {
+  fast_moving: "fast_moving",
+  long_queue: "long_queue",
+  gridlock: "gridlock",
+} as const;
+
+export interface ShuttleVoteInput {
+  status: ShuttleVoteInputStatus;
 }
 
 export interface FacultyCount {
@@ -702,6 +762,7 @@ export type ListServicesParams = {
    * @nullable
    */
   category?: string | null;
+  flashSale?: boolean;
 };
 
 export type ListNotificationsParams = {

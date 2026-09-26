@@ -5,5 +5,6 @@ export * from "./post-actions";
 export * from "./services";
 export * from "./notifications";
 export * from "./school-votes";
+export * from "./shuttle-status-votes";
 export * from "./messages";
 export * from "./payments";

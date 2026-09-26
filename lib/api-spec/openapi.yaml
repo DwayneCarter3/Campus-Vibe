@@ -40,6 +40,43 @@ paths:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
 
+  /shuttle-status:
+    get:
+      operationId: getShuttleStatus
+      tags: [services]
+      summary: Get the current shuttle queue status
+      responses:
+        "200":
+          description: Current shuttle status and vote summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShuttleStatus"
+  /shuttle-status/vote:
+    post:
+      operationId: voteShuttleStatus
+      tags: [services]
+      summary: Cast or update the authenticated user's shuttle status vote
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ShuttleVoteInput"
+      responses:
+        "200":
+          description: Updated shuttle status and vote summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShuttleStatus"
+        "400":
+          description: Invalid vote
+        "401":
+          description: Unauthorized
+
   /users/me:
     get:
       operationId: getMyProfile
@@ -531,6 +568,10 @@ paths:
           in: query
           schema:
             type: ["string", "null"]
+        - name: flashSale
+          in: query
+          schema:
+            type: boolean
       responses:
         "200":
           description: List of services
@@ -547,7 +588,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/CreateServiceBody"
+              $ref: "#/components/schemas/ServiceInput"
       responses:
         "201":
           description: Created service
@@ -595,7 +636,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/UpdateServiceBody"
+              $ref: "#/components/schemas/ServiceUpdate"
       responses:
         "200":
           description: Updated service
@@ -1969,6 +2010,13 @@ components:
           type: string
         price:
           type: ["string", "null"]
+        isFlashSale:
+          type: boolean
+        originalPrice:
+          type: ["string", "null"]
+        flashExpiresAt:
+          type: ["string", "null"]
+          format: date-time
         contactInfo:
           type: string
         isActive:
@@ -1998,6 +2046,9 @@ components:
         - description
         - category
         - price
+        - isFlashSale
+        - originalPrice
+        - flashExpiresAt
         - contactInfo
         - isActive
         - isSavedByMe
@@ -2018,7 +2069,7 @@ components:
         - services
         - total
 
-    CreateServiceBody:
+    ServiceInput:
       type: object
       properties:
         title:
@@ -2028,6 +2079,10 @@ components:
         category:
           type: string
         price:
+          type: ["string", "null"]
+        isFlashSale:
+          type: boolean
+        originalPrice:
           type: ["string", "null"]
         contactInfo:
           type: string
@@ -2037,7 +2092,7 @@ components:
         - category
         - contactInfo
 
-    UpdateServiceBody:
+    ServiceUpdate:
       type: object
       properties:
         title:
@@ -2048,10 +2103,38 @@ components:
           type: string
         price:
           type: ["string", "null"]
+        isFlashSale:
+          type: boolean
+        originalPrice:
+          type: ["string", "null"]
         contactInfo:
           type: string
         isActive:
           type: boolean
+
+    ShuttleStatus:
+      type: object
+      properties:
+        status:
+          type: ["string", "null"]
+          enum: [fast_moving, long_queue, gridlock, null]
+        voteCount:
+          type: integer
+        updatedAt:
+          type: ["string", "null"]
+          format: date-time
+        myVote:
+          type: ["string", "null"]
+          enum: [fast_moving, long_queue, gridlock, null]
+      required: [status, voteCount, updatedAt, myVote]
+
+    ShuttleVoteInput:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [fast_moving, long_queue, gridlock]
+      required: [status]
 
     FeedStats:
       type: object

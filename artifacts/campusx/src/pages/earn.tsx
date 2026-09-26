@@ -13,7 +13,7 @@ import { ServiceCard } from "@/components/service-card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Plus, Search, ShieldAlert, X, Bookmark, ShoppingBag } from "lucide-react";
+import { Plus, Search, ShieldAlert, X, Bookmark, ShoppingBag, Zap } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -53,6 +53,7 @@ const FILTER_TABS: { id: string | null; label: string; emoji: string; dbValue?: 
   { id: "food",       label: "Food",     emoji: "🍔", dbValue: "Food & Snacks" },
   { id: "services",   label: "Services", emoji: "✂️", dbValue: "Freelance Services" },
   { id: "fashion",    label: "Fashion",  emoji: "👗", dbValue: "Fashion & Tailoring" },
+  { id: "flash-sale", label: "Flash Sale", emoji: "⚡" },
 ];
 
 const FORM_CATEGORIES = [
@@ -79,6 +80,18 @@ const serviceSchema = z.object({
   description: z.string().min(10, "Description must be at least 10 characters"),
   category: z.string().min(1, "Please select a category"),
   contactInfo: z.string().min(7, "Enter your WhatsApp number"),
+  isFlashSale: z.boolean(),
+  originalPrice: z.string().optional(),
+}).superRefine((values, context) => {
+  if (!values.isFlashSale) return;
+  const currentPrice = Number((values.price ?? "").replace(/[^\d.]/g, ""));
+  const originalPrice = Number((values.originalPrice ?? "").replace(/[^\d.]/g, ""));
+  if (!Number.isFinite(currentPrice) || currentPrice <= 0) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["price"], message: "Enter a positive sale price." });
+  }
+  if (!Number.isFinite(originalPrice) || originalPrice <= 0 || originalPrice <= currentPrice) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["originalPrice"], message: "Original price must be greater than the sale price." });
+  }
 });
 
 // ─── Page ────────────────────────────────────────────────────────────────────
@@ -89,7 +102,7 @@ export default function EarnPage() {
   const locationSearch = useSearch();
   const listingParam = new URLSearchParams(locationSearch).get("listing");
   const listingId = listingParam && /^[1-9]\d*$/.test(listingParam) ? Number(listingParam) : 0;
-  const { data: linkedService, isLoading: linkedLoading, isError: linkedError, refetch: retryLinked } = useGetService(listingId, { query: { queryKey: getGetServiceQueryKey(listingId), enabled: !!listingId } });
+  const { data: linkedService, isLoading: linkedLoading, isError: linkedError, refetch: retryLinked } = useGetService(listingId, { query: { queryKey: getGetServiceQueryKey(listingId), enabled: !!listingId, refetchInterval: 60_000 } });
   const [search, setSearch] = useState("");
   const [dialogMode, setDialogMode] = useState<"form" | "verify" | null>(null);
   const queryClient = useQueryClient();
@@ -100,17 +113,18 @@ export default function EarnPage() {
 
   const activeCategory = FILTER_TABS.find((t) => t.id === activeTab)?.dbValue ?? undefined;
   const savedOnly = activeTab === "saved" ? true : undefined;
+  const flashSale = activeTab === "flash-sale" ? true : undefined;
 
   const { data, isLoading, refetch } = useListServices(
-    { category: activeCategory, savedOnly },
-    { query: { queryKey: getListServicesQueryKey({ category: activeCategory, savedOnly }) } }
+    { category: activeCategory, savedOnly, flashSale },
+    { query: { queryKey: getListServicesQueryKey({ category: activeCategory, savedOnly, flashSale }), refetchInterval: 60_000 } }
   );
 
   const createService = useCreateService();
 
   const form = useForm<z.infer<typeof serviceSchema>>({
     resolver: zodResolver(serviceSchema),
-    defaultValues: { title: "", price: "", description: "", category: "", contactInfo: "" },
+    defaultValues: { title: "", price: "", description: "", category: "", contactInfo: "", isFlashSale: false, originalPrice: "" },
   });
 
   // Client-side keyword search across title, description, provider name
@@ -132,7 +146,15 @@ export default function EarnPage() {
   };
 
   const onSubmit = (values: z.infer<typeof serviceSchema>) => {
-    createService.mutate({ data: values }, {
+    createService.mutate({ data: {
+      title: values.title,
+      price: values.price || undefined,
+      description: values.description,
+      category: values.category,
+      contactInfo: values.contactInfo,
+      isFlashSale: values.isFlashSale,
+      originalPrice: values.isFlashSale ? values.originalPrice || null : null,
+    } }, {
       onSuccess: () => {
         setDialogMode(null);
         form.reset();
@@ -204,7 +226,7 @@ export default function EarnPage() {
         <p className="text-xs text-muted-foreground mb-4">
           {isFiltered
             ? `${filtered.length} result${filtered.length !== 1 ? "s" : ""} for "${search}"`
-            : `${data?.total ?? 0} listing${(data?.total ?? 0) !== 1 ? "s" : ""} available`}
+            : `${data?.total ?? 0} ${flashSale ? "flash sale " : ""}listing${(data?.total ?? 0) !== 1 ? "s" : ""} available`}
         </p>
       )}
 
@@ -352,6 +374,26 @@ export default function EarnPage() {
                     </FormItem>
                   )} />
                 </div>
+
+                <FormField control={form.control} name="isFlashSale" render={({ field }) => (
+                  <FormItem className="rounded-xl border border-amber-400/20 bg-amber-500/[0.06] p-3">
+                    <label className="flex cursor-pointer items-center gap-3">
+                      <FormControl><input data-testid="input-create-flash-sale" type="checkbox" checked={field.value} onChange={field.onChange} className="h-4 w-4 accent-amber-400" /></FormControl>
+                      <span className="text-sm font-semibold text-amber-100">⚡ Mark as a Flash Sale</span>
+                    </label>
+                    <p className="ml-7 text-xs text-muted-foreground">Create a limited-time discounted listing.</p>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+                {form.watch("isFlashSale") && (
+                  <FormField control={form.control} name="originalPrice" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-sm font-medium">Original Price (₦)</FormLabel>
+                      <FormControl><Input data-testid="input-create-original-price" inputMode="decimal" placeholder="₦8,000" className="bg-background/40 border-amber-400/20 h-10" {...field} /></FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )} />
+                )}
 
                 {/* Description */}
                 <FormField control={form.control} name="description" render={({ field }) => (

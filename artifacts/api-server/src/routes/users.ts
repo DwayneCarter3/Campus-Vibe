@@ -593,6 +593,9 @@ router.get("/users/:userId/services", async (req, res): Promise<void> => {
       description: servicesTable.description,
       category: servicesTable.category,
       price: servicesTable.price,
+      originalPrice: servicesTable.originalPrice,
+      isFlashSale: servicesTable.isFlashSale,
+      flashExpiresAt: servicesTable.flashExpiresAt,
       contactInfo: servicesTable.contactInfo,
       isActive: servicesTable.isActive,
       isFeatured: servicesTable.isFeatured,
@@ -609,7 +612,11 @@ router.get("/users/:userId/services", async (req, res): Promise<void> => {
     })
     .from(servicesTable)
     .leftJoin(usersTable, eq(servicesTable.providerId, usersTable.clerkUserId))
-    .where(and(eq(servicesTable.providerId, userId), eq(servicesTable.isActive, true)))
+    .where(and(
+      eq(servicesTable.providerId, userId),
+      eq(servicesTable.isActive, true),
+      sql`(${servicesTable.isFlashSale} = false OR ${servicesTable.flashExpiresAt} > ${new Date()})`,
+    ))
     .orderBy(desc(servicesTable.isPinnedToProfile), desc(servicesTable.createdAt))
     .limit(limit)
     .offset(offset);
@@ -617,7 +624,11 @@ router.get("/users/:userId/services", async (req, res): Promise<void> => {
   const [{ count }] = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(servicesTable)
-    .where(and(eq(servicesTable.providerId, userId), eq(servicesTable.isActive, true)));
+    .where(and(
+      eq(servicesTable.providerId, userId),
+      eq(servicesTable.isActive, true),
+      sql`(${servicesTable.isFlashSale} = false OR ${servicesTable.flashExpiresAt} > ${new Date()})`,
+    ));
 
   const enriched = await Promise.all(services.map(async (s) => {
     const { providerVerificationStatus, providerRole, providerMatricNumber, ...rest } = s;
@@ -629,6 +640,7 @@ router.get("/users/:userId/services", async (req, res): Promise<void> => {
       : false;
     return {
       ...rest,
+      flashExpiresAt: s.flashExpiresAt?.toISOString() ?? null,
       isSavedByMe,
       providerName: s.providerName ?? "Unknown",
       providerFaculty: s.providerFaculty ?? "Unknown",

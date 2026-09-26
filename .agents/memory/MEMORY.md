@@ -17,3 +17,4 @@
 - [Anonymous post privacy](anonymous-post-privacy.md) — mask even the creator's public response and embedded originals; use a separate ownership flag for actions.
 - [Safe media cleanup](safe-media-cleanup.md) — delete only verified uploader-owned objects with no remaining references; untracked legacy media is not safely attributable.
 - [Boolean query coercion](boolean-query-coercion.md) — zod.coerce.boolean treats the query string "false" as true; parse query booleans strictly before using them.
+- [Shuttle status majority](shuttle-status-majority.md) — a crowd status requires more than half of active unique reports; ties/pluralities show no clear majority.

@@ -2,7 +2,7 @@ import React from "react";
 import { ActivityIndicator, Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Feather } from "@expo/vector-icons";
-import { useGetService } from "@workspace/api-client-react";
+import { useGetService, getGetServiceQueryKey } from "@workspace/api-client-react";
 import { useColors } from "@/hooks/useColors";
 import { UserVerificationMarks } from "@/components/UserVerificationMarks";
 
@@ -11,7 +11,9 @@ export default function ListingDetailsScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const serviceId = Number(id);
-  const { data: service, isLoading, isError } = useGetService(serviceId);
+  const { data: service, isLoading, isError } = useGetService(serviceId, {
+    query: { queryKey: getGetServiceQueryKey(serviceId), refetchInterval: 60_000 },
+  });
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -27,7 +29,7 @@ export default function ListingDetailsScreen() {
         <View style={styles.centered}>
           <Feather name="alert-circle" size={36} color={colors.mutedForeground} />
           <Text style={[styles.title, { color: colors.foreground }]}>Listing unavailable</Text>
-          <Text style={[styles.body, { color: colors.mutedForeground }]}>This listing may have been removed or is no longer available.</Text>
+          <Text style={[styles.body, { color: colors.mutedForeground }]}>This listing may have expired, been removed, or is no longer available.</Text>
         </View>
       ) : (
         <ScrollView contentContainerStyle={styles.content}>

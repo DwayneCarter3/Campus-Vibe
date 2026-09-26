@@ -102,7 +102,7 @@ export default function MyProfilePage() {
   });
 
   const { data: servicesData, isLoading: servicesLoading } = useGetUserServices(userId, undefined, {
-    query: { queryKey: getGetUserServicesQueryKey(userId), enabled: !!userId && activeTab === "hustles" },
+    query: { queryKey: getGetUserServicesQueryKey(userId), enabled: !!userId && activeTab === "hustles", refetchInterval: 60_000 },
   });
 
   const handleLogout = async () => {

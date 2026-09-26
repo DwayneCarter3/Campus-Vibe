@@ -12,6 +12,7 @@ import adminRouter from "./admin";
 import messagesRouter from "./messages";
 import paymentsRouter from "./payments";
 import reportsRouter from "./reports";
+import shuttleStatusRouter from "./shuttle-status";
 
 const router: IRouter = Router();
 
@@ -28,5 +29,6 @@ router.use(adminRouter);
 router.use(messagesRouter);
 router.use(paymentsRouter);
 router.use(reportsRouter);
+router.use(shuttleStatusRouter);
 
 export default router;

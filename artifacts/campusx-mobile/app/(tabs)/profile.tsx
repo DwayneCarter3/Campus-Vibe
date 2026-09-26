@@ -67,7 +67,13 @@ export default function ProfileScreen() {
 
   const clerkUserId = clerkUser?.id ?? "";
   const { data: postsData } = useGetUserPosts(clerkUserId, {}, { query: { queryKey: getGetUserPostsQueryKey(clerkUserId, {}), enabled: !!clerkUserId } });
-  const { data: servicesData } = useGetUserServices(clerkUserId, {}, { query: { queryKey: getGetUserServicesQueryKey(clerkUserId, {}), enabled: !!clerkUserId } });
+  const { data: servicesData } = useGetUserServices(clerkUserId, {}, {
+    query: {
+      queryKey: getGetUserServicesQueryKey(clerkUserId, {}),
+      enabled: !!clerkUserId,
+      refetchInterval: 60_000,
+    },
+  });
 
   const myPosts = postsData?.posts ?? [];
   const myServices = servicesData?.services ?? [];

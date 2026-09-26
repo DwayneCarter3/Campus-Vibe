@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from "react";
-import { useListPosts, useCreatePost, getListPostsQueryKey, useGetMyProfile, getGetMyProfileQueryKey, requestUploadUrl as requestUploadUrlApi } from "@workspace/api-client-react";
+import { useListPosts, useCreatePost, getListPostsQueryKey, useGetMyProfile, getGetMyProfileQueryKey, requestUploadUrl as requestUploadUrlApi, useGetShuttleStatus, getGetShuttleStatusQueryKey, useVoteShuttleStatus } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { PostCard } from "@/components/post-card";
@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { Sparkles, Radio, Camera, Video, X, Loader2, Ghost, BarChart3, Plus, Trash2, Bookmark, Megaphone } from "lucide-react";
+import { Sparkles, Radio, Camera, Video, X, Loader2, Ghost, BarChart3, Plus, Trash2, Bookmark, Megaphone, Bus, Clock } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
@@ -20,6 +20,21 @@ type MediaUpload = {
   url: string;
   previewUrl: string;
 };
+
+const SHUTTLE_VOTE_OPTIONS = [
+  { status: "fast_moving" as const, label: "Fast Moving 🟢", active: "border-emerald-400 bg-emerald-500/20 text-emerald-200" },
+  { status: "long_queue" as const, label: "Long Queue 🟡", active: "border-amber-400 bg-amber-500/20 text-amber-100" },
+  { status: "gridlock" as const, label: "Gridlock/No Shuttles 🔴", active: "border-rose-400 bg-rose-500/20 text-rose-100" },
+];
+
+function formatUpdatedAgo(updatedAt: string | null | undefined): string {
+  if (!updatedAt) return "just now";
+  const minutes = Math.max(0, Math.floor((Date.now() - new Date(updatedAt).getTime()) / 60_000));
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  return `${hours}h ${minutes % 60}m ago`;
+}
 
 const HIDDEN_POSTS_KEY = "campusx-hidden-posts";
 function getHiddenPostIds(): Set<number> {
@@ -62,6 +77,18 @@ export default function FeedPage() {
   const { data, isLoading, isError, refetch } = useListPosts({ category: savedOnly ? undefined : activeCategory, savedOnly }, {
     query: { queryKey: getListPostsQueryKey({ category: savedOnly ? undefined : activeCategory, savedOnly }), refetchInterval: 10_000 }
   });
+  const showShuttleStatus = !savedOnly && activeCategory === "Shuttle Updates";
+  const shuttleQueryKey = getGetShuttleStatusQueryKey();
+  const { data: shuttleStatus } = useGetShuttleStatus({
+    query: { queryKey: shuttleQueryKey, enabled: showShuttleStatus, refetchInterval: 15_000 },
+  });
+  const voteShuttle = useVoteShuttleStatus();
+
+  const submitShuttleVote = (status: "fast_moving" | "long_queue" | "gridlock") => {
+    voteShuttle.mutate({ data: { status } }, {
+      onSuccess: () => queryClient.invalidateQueries({ queryKey: shuttleQueryKey }),
+    });
+  };
 
   const createPost = useCreatePost();
   const [content, setContent] = useState("");
@@ -478,6 +505,54 @@ export default function FeedPage() {
       </motion.div>
 
       {/* Feed Header */}
+      {showShuttleStatus && (
+        <section data-testid="card-shuttle-live-status" className="mb-6 overflow-hidden rounded-2xl border border-orange-400/30 bg-gradient-to-br from-orange-500/15 via-amber-500/[0.08] to-transparent shadow-[0_12px_40px_rgba(249,115,22,0.08)]">
+          <div className="p-4 sm:p-5">
+            <div className="flex items-start gap-3">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-orange-300/25 bg-orange-400/15 text-orange-200"><Bus className="h-5 w-5" /></div>
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="text-base font-extrabold tracking-tight sm:text-lg">Ojo Gate Shuttle Status</h2>
+                  <Badge className="h-auto rounded-full border-0 bg-emerald-500/15 px-2 py-0.5 text-[10px] text-emerald-300"><span className="mr-1 inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" /> LIVE</Badge>
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground">Help fellow students know what to expect at the gate.</p>
+                {shuttleStatus && shuttleStatus.voteCount > 0 ? (
+                  <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+                    <span className="font-semibold text-foreground">{shuttleStatus.status ? <>Majority: {SHUTTLE_VOTE_OPTIONS.find((option) => option.status === shuttleStatus.status)?.label}</> : "No clear majority yet"}</span>
+                    <span className="inline-flex items-center gap-1 text-muted-foreground"><Clock className="h-3 w-3" /> {shuttleStatus.updatedAt ? `Updated ${formatUpdatedAgo(shuttleStatus.updatedAt)}` : "Update time unavailable"}</span>
+                    <span className="text-muted-foreground">by {shuttleStatus.voteCount} {shuttleStatus.voteCount === 1 ? "student" : "students"} (30m window)</span>
+                  </div>
+                ) : (
+                  <p data-testid="text-shuttle-empty" className="mt-3 text-xs font-medium text-orange-100/80">No recent shuttle updates — be the first to report.</p>
+                )}
+              </div>
+            </div>
+            <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
+              {SHUTTLE_VOTE_OPTIONS.map((option) => {
+                const selected = shuttleStatus?.myVote === option.status;
+                return (
+                  <button
+                    key={option.status}
+                    type="button"
+                    data-testid={`button-shuttle-vote-${option.status}`}
+                    aria-pressed={selected}
+                    disabled={voteShuttle.isPending}
+                    onClick={() => submitShuttleVote(option.status)}
+                    className={cn(
+                      "min-h-11 rounded-xl border px-3 py-2.5 text-xs font-bold transition-all disabled:cursor-wait disabled:opacity-60",
+                      selected ? option.active : "border-white/10 bg-black/10 text-foreground/85 hover:border-white/25 hover:bg-white/[0.06]"
+                    )}
+                  >
+                    {option.label}{selected && <span className="ml-1.5 text-[10px]">✓ Your vote</span>}
+                  </button>
+                );
+              })}
+            </div>
+            {voteShuttle.isError && <p role="alert" className="mt-2 text-xs text-destructive">Couldn't record your update. Please try again.</p>}
+          </div>
+        </section>
+      )}
+
       <div className="flex items-center gap-2 mb-4">
         <h2 className="font-bold text-base">
            {savedOnly ? "Saved Gist" : activeCategory ? activeCategory === "Amebo Hot" ? "Amebo Hot Posts" : `${activeCategory} Gist` : "Campus Gist"}

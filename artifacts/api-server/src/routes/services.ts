@@ -28,6 +28,32 @@ import {
 } from "@workspace/api-zod";
 
 const router: IRouter = Router();
+const FLASH_SALE_DURATION_MS = 24 * 60 * 60 * 1000;
+
+function normalizePrice(value: string | null | undefined): string | null {
+  if (typeof value !== "string") return null;
+  const strippedCurrency = value.trim().replace(/^₦\s*/u, "");
+  if (!/^(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?$/.test(strippedCurrency)) return null;
+  const normalized = strippedCurrency.replaceAll(",", "");
+  const amount = Number(normalized);
+  return Number.isFinite(amount) && amount > 0 ? normalized : null;
+}
+
+function normalizeFlashSale(
+  price: string | null | undefined,
+  originalPrice: string | null | undefined,
+): { price: string; originalPrice: string } | null {
+  const normalizedPrice = normalizePrice(price);
+  const normalizedOriginalPrice = normalizePrice(originalPrice);
+  if (
+    normalizedPrice === null ||
+    normalizedOriginalPrice === null ||
+    Number(normalizedOriginalPrice) <= Number(normalizedPrice)
+  ) {
+    return null;
+  }
+  return { price: normalizedPrice, originalPrice: normalizedOriginalPrice };
+}
 
 async function getProviderTitle(providerId: string, role: string) {
   const [{ count }] = await db
@@ -56,6 +82,9 @@ async function buildServiceWithMeta(serviceId: number, viewerId?: string) {
       description: servicesTable.description,
       category: servicesTable.category,
       price: servicesTable.price,
+      originalPrice: servicesTable.originalPrice,
+      isFlashSale: servicesTable.isFlashSale,
+      flashExpiresAt: servicesTable.flashExpiresAt,
       contactInfo: servicesTable.contactInfo,
       isActive: servicesTable.isActive,
       isFeatured: servicesTable.isFeatured,
@@ -81,6 +110,7 @@ async function buildServiceWithMeta(serviceId: number, viewerId?: string) {
 
   return {
     ...rest,
+    flashExpiresAt: service.flashExpiresAt?.toISOString() ?? null,
     providerName: service.providerName ?? "Unknown",
     providerFaculty: service.providerFaculty ?? "Unknown",
     providerLevel: getEffectiveLevel(service.providerLevel, providerMatricNumber),
@@ -100,9 +130,15 @@ router.get("/services", async (req, res): Promise<void> => {
     res.status(400).json({ error: "savedOnly must be true or false" });
     return;
   }
+  const flashSaleQuery = req.query.flashSale;
+  if (flashSaleQuery !== undefined && flashSaleQuery !== "true" && flashSaleQuery !== "false") {
+    res.status(400).json({ error: "flashSale must be true or false" });
+    return;
+  }
   const params = ListServicesQueryParams.safeParse({
     ...req.query,
     savedOnly: undefined,
+    flashSale: undefined,
   });
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
@@ -111,13 +147,20 @@ router.get("/services", async (req, res): Promise<void> => {
 
   const { limit, offset, category } = params.data;
   const savedOnly = savedOnlyQuery === "true";
+  const flashSaleOnly = flashSaleQuery === "true";
   const viewerId = getAuth(req)?.userId;
   if (savedOnly && !viewerId) {
     res.status(401).json({ error: "Authentication required to view saved services" });
     return;
   }
 
-  const conditions = [eq(servicesTable.isActive, true)];
+  const conditions = [
+    eq(servicesTable.isActive, true),
+    sql`(${servicesTable.isFlashSale} = false OR ${servicesTable.flashExpiresAt} > ${new Date()})`,
+  ];
+  if (flashSaleOnly) {
+    conditions.push(sql`${servicesTable.isFlashSale} = true AND ${servicesTable.flashExpiresAt} > ${new Date()}`);
+  }
   if (category) {
     conditions.push(eq(servicesTable.category, category));
   }
@@ -136,6 +179,9 @@ router.get("/services", async (req, res): Promise<void> => {
       description: servicesTable.description,
       category: servicesTable.category,
       price: servicesTable.price,
+      originalPrice: servicesTable.originalPrice,
+      isFlashSale: servicesTable.isFlashSale,
+      flashExpiresAt: servicesTable.flashExpiresAt,
       contactInfo: servicesTable.contactInfo,
       isActive: servicesTable.isActive,
       isFeatured: servicesTable.isFeatured,
@@ -167,6 +213,7 @@ router.get("/services", async (req, res): Promise<void> => {
     const role = s.providerRole ?? "student";
     return {
       ...rest,
+      flashExpiresAt: s.flashExpiresAt?.toISOString() ?? null,
       providerName: s.providerName ?? "Unknown",
       providerFaculty: s.providerFaculty ?? "Unknown",
       providerLevel: getEffectiveLevel(s.providerLevel, providerMatricNumber),
@@ -191,9 +238,33 @@ router.post("/services", requireAuth, async (req, res): Promise<void> => {
     return;
   }
 
+  const flashSale = parsed.data.isFlashSale
+    ? normalizeFlashSale(parsed.data.price, parsed.data.originalPrice)
+    : null;
+  if (parsed.data.isFlashSale && !flashSale) {
+    res.status(400).json({ error: "Flash sales require a positive price and an original price greater than the sale price" });
+    return;
+  }
+
+  const { isFlashSale, ...serviceFields } = parsed.data;
   const [service] = await db
     .insert(servicesTable)
-    .values({ ...parsed.data, providerId: userId })
+    .values(isFlashSale
+      ? {
+          ...serviceFields,
+          price: flashSale!.price,
+          providerId: userId,
+          isFlashSale: true,
+          originalPrice: flashSale!.originalPrice,
+          flashExpiresAt: new Date(Date.now() + FLASH_SALE_DURATION_MS),
+        }
+      : {
+          ...serviceFields,
+          providerId: userId,
+          isFlashSale: false,
+          originalPrice: null,
+          flashExpiresAt: null,
+        })
     .returning();
 
   const result = await buildServiceWithMeta(service.id, userId);
@@ -209,7 +280,10 @@ router.get("/services/:serviceId", async (req, res): Promise<void> => {
   }
 
   const result = await buildServiceWithMeta(params.data.serviceId, getAuth(req)?.userId ?? undefined);
-  if (!result) {
+  if (
+    !result ||
+    (result.isFlashSale && (!result.flashExpiresAt || new Date(result.flashExpiresAt) <= new Date()))
+  ) {
     res.status(404).json({ error: "Service not found" });
     return;
   }
@@ -243,7 +317,48 @@ router.patch("/services/:serviceId", requireAuth, async (req, res): Promise<void
     return;
   }
 
-  await db.update(servicesTable).set(parsed.data).where(eq(servicesTable.id, params.data.serviceId));
+  const { isFlashSale: requestedFlashSale, originalPrice: requestedOriginalPrice, ...serviceFields } = parsed.data;
+  const now = new Date();
+  if (requestedFlashSale === false) {
+    await db.update(servicesTable).set({
+      ...serviceFields,
+      isFlashSale: false,
+      originalPrice: null,
+      flashExpiresAt: null,
+    }).where(eq(servicesTable.id, params.data.serviceId));
+  } else {
+    const nextIsFlashSale = requestedFlashSale ?? service.isFlashSale;
+    if (nextIsFlashSale) {
+      const nextPrice = parsed.data.price !== undefined ? parsed.data.price : service.price;
+      const nextOriginalPrice = requestedOriginalPrice !== undefined ? requestedOriginalPrice : service.originalPrice;
+      const flashSale = normalizeFlashSale(nextPrice, nextOriginalPrice);
+      if (!flashSale) {
+        res.status(400).json({ error: "Flash sales require a positive price and an original price greater than the sale price" });
+        return;
+      }
+      const activeExpiry = service.isFlashSale && service.flashExpiresAt && service.flashExpiresAt > now;
+      await db.update(servicesTable).set({
+        ...serviceFields,
+        price: flashSale.price,
+        isFlashSale: true,
+        originalPrice: flashSale.originalPrice,
+        flashExpiresAt: activeExpiry
+          ? service.flashExpiresAt
+          : new Date(now.getTime() + FLASH_SALE_DURATION_MS),
+      }).where(eq(servicesTable.id, params.data.serviceId));
+    } else {
+      if (requestedOriginalPrice != null) {
+        res.status(400).json({ error: "originalPrice can only be set on a flash sale" });
+        return;
+      }
+      await db.update(servicesTable).set({
+        ...serviceFields,
+        isFlashSale: false,
+        originalPrice: null,
+        flashExpiresAt: null,
+      }).where(eq(servicesTable.id, params.data.serviceId));
+    }
+  }
   const result = await buildServiceWithMeta(params.data.serviceId, userId);
   res.json(UpdateServiceResponse.parse(result));
 });

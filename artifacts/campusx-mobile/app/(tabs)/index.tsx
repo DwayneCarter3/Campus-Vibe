@@ -40,6 +40,9 @@ import {
   useToggleFeaturePost,
   usePinPostToProfile,
   getGetPostQueryKey,
+  useGetShuttleStatus,
+  getGetShuttleStatusQueryKey,
+  useVoteShuttleStatus,
   Post,
   Poll,
 } from "@workspace/api-client-react";
@@ -63,6 +66,104 @@ type FeedCategory = Post["category"];
 
 const hiddenPostIds = new Set<number>();
 const REPORT_REASONS = ["Spam", "Harassment", "Fake Listing", "Inappropriate Content"] as const;
+const SHUTTLE_VOTES = [
+  { value: "fast_moving", label: "Fast Moving 🟢", color: "#22C55E" },
+  { value: "long_queue", label: "Long Queue 🟡", color: "#EAB308" },
+  { value: "gridlock", label: "Gridlock/No Shuttles 🔴", color: "#EF4444" },
+] as const;
+
+function ShuttleStatusBanner() {
+  const colors = useColors();
+  const queryClient = useQueryClient();
+  const queryKey = getGetShuttleStatusQueryKey();
+  const { data: shuttle, isLoading, isError } = useGetShuttleStatus({
+    query: { queryKey, refetchInterval: 15_000 },
+  });
+  const [voteError, setVoteError] = useState("");
+  const vote = useVoteShuttleStatus({
+    mutation: {
+      onSuccess: () => {
+        setVoteError("");
+        void queryClient.invalidateQueries({ queryKey });
+      },
+      onError: (error) => setVoteError(error.message),
+    },
+  });
+  const currentStatus = shuttle?.status;
+  const statusOption = SHUTTLE_VOTES.find((option) => option.value === currentStatus);
+  const updatedAgo = shuttle?.updatedAt
+    ? formatDistanceToNow(new Date(shuttle.updatedAt), { addSuffix: true })
+    : null;
+
+  return (
+    <View style={[styles.shuttleCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+      <View style={styles.shuttleHeadingRow}>
+        <View style={[styles.shuttleIcon, { backgroundColor: colors.primary + "20" }]}>
+          <Feather name="truck" size={18} color={colors.primary} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.shuttleTitle, { color: colors.foreground }]}>Ojo Gate Shuttle Status</Text>
+          <Text style={[styles.shuttleCaption, { color: colors.mutedForeground }]}>Live student check-in · refreshes every 15s</Text>
+        </View>
+        {vote.isPending ? <ActivityIndicator color={colors.primary} size="small" /> : null}
+      </View>
+
+      {isLoading ? (
+        <View style={styles.shuttleLoading}><ActivityIndicator color={colors.primary} size="small" /><Text style={{ color: colors.mutedForeground, fontSize: 12 }}>Checking the gate…</Text></View>
+      ) : isError ? (
+        <Text style={[styles.shuttleEmpty, { color: colors.mutedForeground }]}>Couldn't load shuttle status. We'll try again in 15 seconds.</Text>
+      ) : (
+        <>
+          <View style={[styles.shuttleCurrent, { backgroundColor: statusOption ? statusOption.color + "18" : colors.surface }]}>
+            <View style={[styles.shuttleLiveDot, { backgroundColor: statusOption?.color ?? colors.mutedForeground }]} />
+            <Text style={[styles.shuttleCurrentText, { color: statusOption?.color ?? colors.mutedForeground }]}>
+              {statusOption ? statusOption.label : shuttle?.voteCount ? "No clear majority yet" : "No student updates yet"}
+            </Text>
+          </View>
+          {updatedAgo && shuttle?.voteCount ? (
+            <Text style={[styles.shuttleUpdated, { color: colors.mutedForeground }]}>
+              {statusOption ? "Majority · " : ""}updated {updatedAgo} by {shuttle.voteCount} {shuttle.voteCount === 1 ? "student" : "students"}
+            </Text>
+          ) : (
+            <Text style={[styles.shuttleUpdated, { color: colors.mutedForeground }]}>Be the first student to share a status.</Text>
+          )}
+          <View style={styles.shuttleVoteList}>
+            {SHUTTLE_VOTES.map((option) => {
+              const isOwnVote = shuttle?.myVote === option.value;
+              return (
+                <TouchableOpacity
+                  key={option.value}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: isOwnVote, disabled: vote.isPending }}
+                  disabled={vote.isPending}
+                  onPress={() => {
+                    setVoteError("");
+                    vote.mutate({ data: { status: option.value } });
+                  }}
+                  style={[
+                    styles.shuttleVoteButton,
+                    { borderColor: isOwnVote ? option.color : colors.border },
+                    isOwnVote && { backgroundColor: option.color + "18" },
+                  ]}
+                >
+                  <Text style={[styles.shuttleVoteText, { color: isOwnVote ? option.color : colors.foreground }]}>{option.label}</Text>
+                  {isOwnVote ? <Feather name="check" size={15} color={option.color} /> : null}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+          {shuttle?.myVote ? (
+            <Text style={[styles.shuttleFeedback, { color: colors.primary }]}>Your vote is counted. Thanks for the update.</Text>
+          ) : null}
+          {vote.isPending ? (
+            <Text style={[styles.shuttleFeedback, { color: colors.mutedForeground }]}>Sending your vote…</Text>
+          ) : null}
+          {voteError ? <Text style={[styles.shuttleFeedback, { color: colors.destructive ?? "#EF4444" }]}>{voteError}</Text> : null}
+        </>
+      )}
+    </View>
+  );
+}
 
 function mediaUri(path: string): string {
   if (!path.startsWith("/") || Platform.OS === "web") return path;
@@ -832,6 +933,7 @@ export default function AmeboFeed() {
           data={posts}
           keyExtractor={(item) => String(item.id)}
           renderItem={({ item }) => <PostCard post={item} onHide={() => setHiddenRevision((revision) => revision + 1)} />}
+          ListHeaderComponent={!savedOnly && activeCategory === "Shuttle Updates" ? <ShuttleStatusBanner /> : null}
           contentContainerStyle={[styles.listContent, { paddingBottom: 100 + bottomPad }]}
           showsVerticalScrollIndicator={false}
           refreshControl={
@@ -882,6 +984,21 @@ const styles = StyleSheet.create({
   notificationBadgeText: { color: "#fff", fontSize: 9, fontWeight: "700" },
   composeBtn: { width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center" },
   listContent: { paddingTop: 12, paddingHorizontal: 16, gap: 12 },
+  shuttleCard: { borderRadius: 16, borderWidth: 1, padding: 15, marginBottom: 4 },
+  shuttleHeadingRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+  shuttleIcon: { width: 38, height: 38, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+  shuttleTitle: { fontSize: 15, fontWeight: "700" },
+  shuttleCaption: { fontSize: 11, marginTop: 3 },
+  shuttleEmpty: { fontSize: 12, marginTop: 14 },
+  shuttleLoading: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 20 },
+  shuttleCurrent: { flexDirection: "row", alignItems: "center", gap: 8, alignSelf: "flex-start", borderRadius: 20, paddingHorizontal: 11, paddingVertical: 7, marginTop: 14 },
+  shuttleLiveDot: { width: 8, height: 8, borderRadius: 4 },
+  shuttleCurrentText: { fontSize: 12, fontWeight: "700" },
+  shuttleUpdated: { fontSize: 11, marginTop: 8 },
+  shuttleVoteList: { gap: 7, marginTop: 13 },
+  shuttleVoteButton: { minHeight: 42, borderWidth: 1, borderRadius: 10, paddingHorizontal: 11, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  shuttleVoteText: { fontSize: 12, fontWeight: "600" },
+  shuttleFeedback: { fontSize: 11, marginTop: 8 },
   centered: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12 },
   card: { borderRadius: 16, borderWidth: 1, padding: 16, overflow: "hidden" },
   cardHeader: { flexDirection: "row", alignItems: "flex-start", gap: 12 },

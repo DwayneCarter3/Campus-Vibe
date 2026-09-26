@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -53,6 +53,33 @@ const CATEGORY_ICONS: Record<string, string> = {
   Services: "briefcase",
   Others: "package",
 };
+
+function numericPrice(value: string): number | null {
+  const normalized = value.trim().replace(/[₦,\s]/g, "");
+  if (!/^\d+(?:\.\d{1,2})?$/.test(normalized)) return null;
+  const amount = Number(normalized);
+  return Number.isFinite(amount) && amount > 0 ? amount : null;
+}
+
+function FlashSaleCountdown({ expiresAt, color }: { expiresAt: string; color: string }) {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 60_000);
+    return () => clearInterval(timer);
+  }, []);
+  const remaining = Math.max(0, new Date(expiresAt).getTime() - now);
+  const totalMinutes = Math.floor(remaining / 60_000);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return (
+    <View style={{ flexDirection: "row", alignItems: "center", gap: 4, marginTop: 3 }}>
+      <Feather name="clock" size={11} color={color} />
+      <Text style={{ color, fontSize: 11, fontWeight: "600" }}>
+        {remaining > 0 ? `Expires in ${hours}h ${minutes}m` : "Sale ended"}
+      </Text>
+    </View>
+  );
+}
 
 function ServiceCard({
   service,
@@ -207,9 +234,17 @@ function ServiceCard({
     <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
       <View style={styles.cardTop}>
         <View style={[styles.cardTitleRow, { justifyContent: "space-between" }]}>
-          <View style={[styles.categoryBadge, { backgroundColor: colors.primary + "20" }]}>
-            <Feather name={CATEGORY_ICONS[service.category] as any || "package"} size={11} color={colors.primary} />
-            <Text style={[styles.categoryText, { color: colors.primary }]}>{service.category}</Text>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 7 }}>
+            <View style={[styles.categoryBadge, { backgroundColor: colors.primary + "20" }]}>
+              <Feather name={CATEGORY_ICONS[service.category] as any || "package"} size={11} color={colors.primary} />
+              <Text style={[styles.categoryText, { color: colors.primary }]}>{service.category}</Text>
+            </View>
+            {service.isFlashSale && (
+              <View style={[styles.categoryBadge, { backgroundColor: colors.accent + "20" }]}>
+                <Feather name="zap" size={11} color={colors.accent} />
+                <Text style={[styles.categoryText, { color: colors.accent }]}>Flash Sale</Text>
+              </View>
+            )}
           </View>
           <TouchableOpacity
             onPress={() => setMenuVisible(true)}
@@ -234,7 +269,15 @@ function ServiceCard({
               <UserVerificationMarks status={service.providerVerificationStatus} />
             </View>
             <Text style={[styles.priceText, { color: colors.mutedForeground }]}>{service.providerLevel}</Text>
-            {service.price ? (
+            {service.isFlashSale && service.price && service.originalPrice && service.flashExpiresAt ? (
+              <View style={{ marginTop: 3 }}>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 7 }}>
+                  <Text style={[styles.priceText, { color: colors.accent }]}>{service.price}</Text>
+                  <Text style={[styles.oldPriceText, { color: colors.mutedForeground }]}>{service.originalPrice}</Text>
+                </View>
+                <FlashSaleCountdown expiresAt={service.flashExpiresAt} color={colors.accent} />
+              </View>
+            ) : service.price ? (
               <Text style={[styles.priceText, { color: colors.accent }]}>{service.price}</Text>
             ) : null}
           </View>
@@ -399,15 +442,22 @@ function EditServiceModal({
   service: Service;
   pending: boolean;
   onClose: () => void;
-  onSave: (data: { title: string; description: string; category: string; price: string | null; contactInfo: string }) => void;
+  onSave: (data: { title: string; description: string; category: string; price: string | null; contactInfo: string; isFlashSale: boolean; originalPrice: string | null }) => void;
 }) {
   const colors = useColors();
   const [title, setTitle] = useState(service.title);
   const [description, setDescription] = useState(service.description);
   const [category, setCategory] = useState(service.category);
   const [price, setPrice] = useState(service.price ?? "");
+  const [isFlashSale, setIsFlashSale] = useState(service.isFlashSale ?? false);
+  const [originalPrice, setOriginalPrice] = useState(service.originalPrice ?? "");
   const [contactInfo, setContactInfo] = useState(service.contactInfo);
-  const isValid = !!title.trim() && !!description.trim() && !!contactInfo.trim();
+  const priceAmount = numericPrice(price);
+  const originalAmount = numericPrice(originalPrice);
+  const flashSaleError = isFlashSale && (!priceAmount || !originalAmount || originalAmount <= (priceAmount ?? 0))
+    ? "Enter numeric prices and make the original price higher than the sale price."
+    : "";
+  const isValid = !!title.trim() && !!description.trim() && !!contactInfo.trim() && !flashSaleError;
   return (
     <Modal visible animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
@@ -416,7 +466,15 @@ function EditServiceModal({
             <TouchableOpacity onPress={onClose}><Text style={[styles.cancelText, { color: colors.mutedForeground }]}>Cancel</Text></TouchableOpacity>
             <Text style={[styles.modalTitle, { color: colors.foreground }]}>Edit Listing</Text>
             <TouchableOpacity
-              onPress={() => onSave({ title: title.trim(), description: description.trim(), category, price: price.trim() || null, contactInfo: contactInfo.trim() })}
+              onPress={() => onSave({
+                title: title.trim(),
+                description: description.trim(),
+                category,
+                price: price.trim() || null,
+                contactInfo: contactInfo.trim(),
+                isFlashSale,
+                originalPrice: isFlashSale ? originalPrice.trim() : null,
+              })}
               disabled={!isValid || pending}
               style={[styles.submitBtn, { backgroundColor: isValid && !pending ? colors.primary : colors.muted }]}
             >
@@ -446,6 +504,31 @@ function EditServiceModal({
               <Text style={[styles.label, { color: colors.mutedForeground }]}>PRICE</Text>
               <TextInput style={[styles.input, { color: colors.foreground }]} value={price} onChangeText={setPrice} maxLength={30} />
             </View>
+            <TouchableOpacity
+              accessibilityRole="switch"
+              accessibilityLabel="Enable flash sale"
+              accessibilityState={{ checked: isFlashSale }}
+              onPress={() => setIsFlashSale((enabled: boolean) => !enabled)}
+              style={[styles.flashToggle, { borderColor: isFlashSale ? colors.accent : colors.border, backgroundColor: isFlashSale ? colors.accent + "14" : colors.surface }]}
+            >
+              <Feather name="zap" size={16} color={isFlashSale ? colors.accent : colors.mutedForeground} />
+              <Text style={[styles.flashToggleLabel, { color: isFlashSale ? colors.accent : colors.foreground }]}>Flash Sale ⚡</Text>
+              <Feather name={isFlashSale ? "check-circle" : "circle"} size={17} color={isFlashSale ? colors.accent : colors.mutedForeground} />
+            </TouchableOpacity>
+            {isFlashSale && (
+              <View style={[styles.formGroup, { borderColor: flashSaleError ? (colors.destructive ?? "#EF4444") : colors.border }]}>
+                <Text style={[styles.label, { color: colors.mutedForeground }]}>ORIGINAL PRICE *</Text>
+                <TextInput
+                  style={[styles.input, { color: colors.foreground }]}
+                  value={originalPrice}
+                  onChangeText={setOriginalPrice}
+                  placeholder="e.g. 5000"
+                  placeholderTextColor={colors.mutedForeground}
+                  keyboardType="decimal-pad"
+                />
+                {flashSaleError ? <Text style={[styles.flashError, { color: colors.destructive ?? "#EF4444" }]}>{flashSaleError}</Text> : null}
+              </View>
+            )}
             <View style={[styles.formGroup, { borderColor: colors.border }]}>
               <Text style={[styles.label, { color: colors.mutedForeground }]}>WHATSAPP NUMBER</Text>
               <TextInput style={[styles.input, { color: colors.foreground }]} value={contactInfo} onChangeText={setContactInfo} keyboardType="phone-pad" maxLength={14} />
@@ -464,18 +547,25 @@ function AddServiceModal({ visible, onClose }: { visible: boolean; onClose: () =
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [price, setPrice] = useState("");
+  const [isFlashSale, setIsFlashSale] = useState(false);
+  const [originalPrice, setOriginalPrice] = useState("");
   const [whatsapp, setWhatsapp] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("Services");
   const [showCategoryPicker, setShowCategoryPicker] = useState(false);
 
-  const isValid = title.trim() && description.trim() && whatsapp.trim();
+  const priceAmount = numericPrice(price);
+  const originalAmount = numericPrice(originalPrice);
+  const flashSaleError = isFlashSale && (!priceAmount || !originalAmount || originalAmount <= (priceAmount ?? 0))
+    ? "Enter numeric prices and make the original price higher than the sale price."
+    : "";
+  const isValid = !!title.trim() && !!description.trim() && !!whatsapp.trim() && !flashSaleError;
 
   const createService = useCreateService({
     mutation: {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: getListServicesQueryKey() });
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        setTitle(""); setDescription(""); setPrice(""); setWhatsapp("");
+        setTitle(""); setDescription(""); setPrice(""); setOriginalPrice(""); setIsFlashSale(false); setWhatsapp("");
         setSelectedCategory("Services");
         onClose();
       },
@@ -492,6 +582,8 @@ function AddServiceModal({ visible, onClose }: { visible: boolean; onClose: () =
         category: selectedCategory,
         price: price.trim() || undefined,
         contactInfo: whatsapp.trim(),
+        isFlashSale,
+        originalPrice: isFlashSale ? originalPrice.trim() : null,
       },
     });
   };
@@ -543,6 +635,32 @@ function AddServiceModal({ visible, onClose }: { visible: boolean; onClose: () =
               </View>
             </View>
 
+            <TouchableOpacity
+              accessibilityRole="switch"
+              accessibilityLabel="Enable flash sale"
+              accessibilityState={{ checked: isFlashSale }}
+              onPress={() => setIsFlashSale((enabled: boolean) => !enabled)}
+              style={[styles.flashToggle, { borderColor: isFlashSale ? colors.accent : colors.border, backgroundColor: isFlashSale ? colors.accent + "14" : colors.surface }]}
+            >
+              <Feather name="zap" size={16} color={isFlashSale ? colors.accent : colors.mutedForeground} />
+              <Text style={[styles.flashToggleLabel, { color: isFlashSale ? colors.accent : colors.foreground }]}>Flash Sale ⚡</Text>
+              <Feather name={isFlashSale ? "check-circle" : "circle"} size={17} color={isFlashSale ? colors.accent : colors.mutedForeground} />
+            </TouchableOpacity>
+            {isFlashSale && (
+              <View style={[styles.formGroup, { borderColor: flashSaleError ? (colors.destructive ?? "#EF4444") : colors.border }]}>
+                <Text style={[styles.label, { color: colors.mutedForeground }]}>ORIGINAL PRICE *</Text>
+                <TextInput
+                  style={[styles.input, { color: colors.foreground }]}
+                  value={originalPrice}
+                  onChangeText={setOriginalPrice}
+                  placeholder="e.g. 5000"
+                  placeholderTextColor={colors.mutedForeground}
+                  keyboardType="decimal-pad"
+                />
+                {flashSaleError ? <Text style={[styles.flashError, { color: colors.destructive ?? "#EF4444" }]}>{flashSaleError}</Text> : null}
+              </View>
+            )}
+
             <View style={[styles.formGroup, { borderColor: colors.border }]}>
               <Text style={[styles.label, { color: colors.mutedForeground }]}>CATEGORY *</Text>
               <TouchableOpacity onPress={() => setShowCategoryPicker(!showCategoryPicker)} style={[styles.categorySelector, { backgroundColor: colors.surface, borderColor: colors.border }]}>
@@ -575,15 +693,27 @@ export default function HustleMarketplace() {
   const { user: clerkUser } = useUser();
   const [activeCategory, setActiveCategory] = useState("All");
   const [savedOnly, setSavedOnly] = useState(false);
+  const [flashSaleOnly, setFlashSaleOnly] = useState(false);
   const [hiddenIds, setHiddenIds] = useState<number[]>([]);
   const [addOpen, setAddOpen] = useState(false);
 
   const { data: profile } = useGetMyProfile();
   const isAdmin = profile?.role === "admin" || profile?.role === "ceo" || clerkUser?.primaryEmailAddress?.emailAddress === "dwaynecartergabriel@gmail.com";
-  const { data, isLoading, isError, refetch, isRefetching } = useListServices(savedOnly ? { savedOnly: true } : undefined);
+  const serviceParams = {
+    ...(savedOnly ? { savedOnly: true } : {}),
+    ...(flashSaleOnly ? { flashSale: true } : {}),
+  };
+  const queryParams = savedOnly || flashSaleOnly ? serviceParams : undefined;
+  const { data, isLoading, isError, refetch, isRefetching } = useListServices(queryParams, {
+    query: {
+      queryKey: getListServicesQueryKey(queryParams),
+      refetchInterval: 60_000,
+    },
+  });
   const allServices = data?.services ?? [];
   const filtered = allServices
     .filter((service) => !hiddenIds.includes(service.id))
+    .filter((service) => !flashSaleOnly || (service.isFlashSale && service.flashExpiresAt && new Date(service.flashExpiresAt).getTime() > Date.now()))
     .filter((service) => activeCategory === "All" || service.category === activeCategory);
 
   const isWeb = Platform.OS === "web";
@@ -605,6 +735,15 @@ export default function HustleMarketplace() {
 
       <View style={[styles.categoriesWrapper, { borderBottomColor: colors.border }]}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categories}>
+          <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityState={{ selected: flashSaleOnly }}
+            onPress={() => setFlashSaleOnly((current) => !current)}
+            style={[styles.categoryChip, { borderColor: flashSaleOnly ? colors.accent : colors.border }, flashSaleOnly && { backgroundColor: colors.accent + "18" }]}
+          >
+            <Feather name="zap" size={13} color={flashSaleOnly ? colors.accent : colors.mutedForeground} />
+            <Text style={[styles.chipText, { color: flashSaleOnly ? colors.accent : colors.mutedForeground }]}>Flash Sale ⚡</Text>
+          </TouchableOpacity>
           <TouchableOpacity
             onPress={() => setSavedOnly((current) => !current)}
             style={[styles.categoryChip, { borderColor: savedOnly ? colors.primary : colors.border }, savedOnly && { backgroundColor: colors.primary + "18" }]}
@@ -658,9 +797,9 @@ export default function HustleMarketplace() {
             <View style={styles.emptyState}>
               <Feather name="shopping-bag" size={40} color={colors.border} />
               <Text style={[styles.emptyTitle, { color: colors.foreground }]}>
-                {savedOnly ? "No saved listings" : activeCategory === "All" ? "No listings yet" : `No ${activeCategory} listings`}
+                {flashSaleOnly ? "No active flash sales" : savedOnly ? "No saved listings" : activeCategory === "All" ? "No listings yet" : `No ${activeCategory} listings`}
               </Text>
-              <Text style={[styles.emptySub, { color: colors.mutedForeground }]}>{savedOnly ? "Save a listing to find it here." : "Be the first to list your hustle!"}</Text>
+              <Text style={[styles.emptySub, { color: colors.mutedForeground }]}>{flashSaleOnly ? "Check back soon for fresh deals." : savedOnly ? "Save a listing to find it here." : "Be the first to list your hustle!"}</Text>
             </View>
           }
         />
@@ -704,6 +843,7 @@ const styles = StyleSheet.create({
   avatarSmText: { fontSize: 14, fontWeight: "700" },
   authorName: { fontSize: 13, fontWeight: "600" },
   priceText: { fontSize: 15, fontWeight: "700" },
+  oldPriceText: { fontSize: 12, textDecorationLine: "line-through" },
   actionBtns: { flexDirection: "row", alignItems: "center", gap: 8 },
   dmBtn: { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center", borderWidth: 1 },
   whatsappBtn: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20 },
@@ -724,6 +864,9 @@ const styles = StyleSheet.create({
   formGroup: { marginBottom: 16, borderWidth: 1, borderRadius: 12, padding: 14 },
   formRow: { flexDirection: "row", gap: 12, marginBottom: 16 },
   formGroupHalf: { flex: 1, borderWidth: 1, borderRadius: 12, padding: 14 },
+  flashToggle: { minHeight: 48, borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, flexDirection: "row", alignItems: "center", gap: 9, marginBottom: 16 },
+  flashToggleLabel: { flex: 1, fontSize: 14, fontWeight: "700" },
+  flashError: { fontSize: 11, lineHeight: 16, marginTop: 7 },
   label: { fontSize: 11, fontWeight: "700", letterSpacing: 0.5, marginBottom: 6 },
   input: { fontSize: 15 },
   textArea: { minHeight: 80, textAlignVertical: "top" },

@@ -39,7 +39,7 @@ export default function UserProfilePage() {
   });
 
   const { data: servicesData, isLoading: servicesLoading } = useGetUserServices(userId, undefined, {
-    query: { queryKey: getGetUserServicesQueryKey(userId), enabled: !!userId && activeTab === "hustles" },
+    query: { queryKey: getGetUserServicesQueryKey(userId), enabled: !!userId && activeTab === "hustles", refetchInterval: 60_000 },
   });
 
   // Redirect to own profile if viewing yourself
