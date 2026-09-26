@@ -3,6 +3,8 @@ import {
   useListServices,
   getListServicesQueryKey,
   useCreateService,
+  useGetService,
+  getGetServiceQueryKey,
   useGetMyProfile,
   getGetMyProfileQueryKey,
 } from "@workspace/api-client-react";
@@ -11,7 +13,7 @@ import { ServiceCard } from "@/components/service-card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Plus, Search, ShieldAlert, X } from "lucide-react";
+import { Plus, Search, ShieldAlert, X, Bookmark, ShoppingBag } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -39,7 +41,7 @@ import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
-import { Link } from "wouter";
+import { Link, useLocation, useSearch } from "wouter";
 import { PullToRefresh } from "@/components/pull-to-refresh";
 
 // ─── Categories ─────────────────────────────────────────────────────────────
@@ -83,6 +85,11 @@ const serviceSchema = z.object({
 
 export default function EarnPage() {
   const [activeTab, setActiveTab] = useState<string | null>(null);
+  const [, setLocation] = useLocation();
+  const locationSearch = useSearch();
+  const listingParam = new URLSearchParams(locationSearch).get("listing");
+  const listingId = listingParam && /^[1-9]\d*$/.test(listingParam) ? Number(listingParam) : 0;
+  const { data: linkedService, isLoading: linkedLoading, isError: linkedError, refetch: retryLinked } = useGetService(listingId, { query: { queryKey: getGetServiceQueryKey(listingId), enabled: !!listingId } });
   const [search, setSearch] = useState("");
   const [dialogMode, setDialogMode] = useState<"form" | "verify" | null>(null);
   const queryClient = useQueryClient();
@@ -92,10 +99,11 @@ export default function EarnPage() {
   });
 
   const activeCategory = FILTER_TABS.find((t) => t.id === activeTab)?.dbValue ?? undefined;
+  const savedOnly = activeTab === "saved" ? true : undefined;
 
   const { data, isLoading, refetch } = useListServices(
-    { category: activeCategory },
-    { query: { queryKey: getListServicesQueryKey({ category: activeCategory }) } }
+    { category: activeCategory, savedOnly },
+    { query: { queryKey: getListServicesQueryKey({ category: activeCategory, savedOnly }) } }
   );
 
   const createService = useCreateService();
@@ -188,6 +196,7 @@ export default function EarnPage() {
             </button>
           );
         })}
+        <button data-testid="tab-saved" onClick={() => { if (!profile) { setLocation("/sign-in"); return; } setActiveTab("saved"); }} className={cn("flex items-center gap-1.5 px-4 py-2 rounded-full border text-sm font-medium whitespace-nowrap transition-all shrink-0", activeTab === "saved" ? "bg-primary text-primary-foreground border-primary" : "bg-white/5 border-white/10 text-muted-foreground hover:border-primary/30 hover:text-foreground")}><Bookmark className="h-4 w-4" /> Saved listings</button>
       </div>
 
       {/* Result count */}
@@ -206,7 +215,7 @@ export default function EarnPage() {
             <Skeleton key={i} className="h-[320px] w-full rounded-2xl" />
           ))
         ) : filtered.length === 0 ? (
-          <EmptyState query={search} onPost={handleFabClick} />
+          activeTab === "saved" && !search ? <div className="col-span-full text-center py-20 rounded-2xl border border-dashed border-white/10 bg-white/[.02]"><Bookmark className="h-10 w-10 mx-auto mb-4 text-primary/60" /><h3 className="font-bold text-lg">No saved listings yet</h3><p className="text-sm text-muted-foreground mt-1">Save listings from the three-dot menu to find them here.</p><Button className="mt-5" variant="outline" onClick={() => setActiveTab(null)}>Browse marketplace</Button></div> : <EmptyState query={search} onPost={handleFabClick} />
         ) : (
           <AnimatePresence mode="popLayout">
             {filtered.map((service, i) => (
@@ -224,6 +233,14 @@ export default function EarnPage() {
           </AnimatePresence>
         )}
       </div>
+      <Dialog open={!!listingParam} onOpenChange={(open) => { if (!open) setLocation("/earn"); }}>
+        <DialogContent className="glass border-white/10 sm:max-w-md max-h-[90dvh] overflow-y-auto">
+          <DialogTitle className="text-lg font-bold">Marketplace listing</DialogTitle>
+          {linkedLoading && <Skeleton className="h-72 rounded-2xl" />}
+          {(!listingId || linkedError) && <div className="py-8 text-center"><ShoppingBag className="h-9 w-9 mx-auto text-muted-foreground/50 mb-3" /><p className="font-medium">This listing is unavailable.</p><p className="text-sm text-muted-foreground mt-1">It may have been removed or the link may be incorrect.</p><Button variant="outline" className="mt-4" onClick={() => retryLinked()}>Try again</Button></div>}
+          {linkedService && <ServiceCard service={linkedService} currentUserId={profile?.clerkUserId} directView />}
+        </DialogContent>
+      </Dialog>
 
       {/* Floating Action Button */}
       <motion.button

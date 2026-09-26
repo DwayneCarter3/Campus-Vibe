@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { formatDistanceToNow } from "date-fns";
 import { Link } from "wouter";
-import { Trash2, MapPin, MessageCircle, Send, MoreHorizontal, Pin, Repeat2, Ghost } from "lucide-react";
+import { Trash2, MapPin, MessageCircle, Send, MoreVertical, Pin, Repeat2, Ghost, Pencil, Bookmark, Link2, EyeOff, Flag, Star } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -16,6 +16,13 @@ import {
 } from "@/components/ui/dropdown-menu";
 import {
   useDeletePost,
+  useUpdatePost,
+  useToggleSavePost,
+  useReportPost,
+  useToggleFeaturePost,
+  useGetMyProfile,
+  getGetMyProfileQueryKey,
+  getGetPostQueryKey,
   useLikePost,
   useNoCapPost,
   useListPostComments,
@@ -36,21 +43,33 @@ import { AvatarModal } from "@/components/avatar-modal";
 import { UserVerificationMarks } from "@/components/user-verification-marks";
 import { getPostCategoryMeta } from "@/components/post-categories";
 import { PollCard } from "@/components/poll-card";
+import { useToast } from "@/hooks/use-toast";
+import type { ReportBodyReason } from "@workspace/api-client-react";
 
 interface PostCardProps {
   post: Post;
   isAdmin?: boolean;
   isModerator?: boolean;
   moderationMode?: boolean;
+  onHide?: (id: number) => void;
+  onDeleted?: () => void;
 }
 
-export function PostCard({ post, isAdmin, isModerator, moderationMode = false }: PostCardProps) {
+const reportReasons: ReportBodyReason[] = ["Spam", "Harassment", "Fake Listing", "Inappropriate Content"];
+
+export function PostCard({ post, isAdmin, isModerator, moderationMode = false, onHide, onDeleted }: PostCardProps) {
   const category = getPostCategoryMeta(post.category);
   const { user } = useUser();
   const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const { data: myProfile } = useGetMyProfile({ query: { queryKey: getGetMyProfileQueryKey() } });
   const likePost = useLikePost();
   const noCapPost = useNoCapPost();
   const deletePost = useDeletePost();
+  const updatePost = useUpdatePost();
+  const savePost = useToggleSavePost();
+  const reportPost = useReportPost();
+  const featurePost = useToggleFeaturePost();
   const createComment = useCreatePostComment();
   const pinToProfile = usePinPostToProfile();
   const pinToFeed = usePinPostToFeed();
@@ -63,6 +82,12 @@ export function PostCard({ post, isAdmin, isModerator, moderationMode = false }:
   const [reshareQuoteText, setReshareQuoteText] = useState("");
   const [commentText, setCommentText] = useState("");
   const [avatarModalOpen, setAvatarModalOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editText, setEditText] = useState(post.content);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
+  const [reportReason, setReportReason] = useState<ReportBodyReason | null>(null);
+  const [hidden, setHidden] = useState(false);
   const commentsEndRef = useRef<HTMLDivElement>(null);
 
   const { data: commentsData } = useListPostComments(post.id, {
@@ -79,7 +104,8 @@ export function PostCard({ post, isAdmin, isModerator, moderationMode = false }:
   }, [commentsData?.comments.length, commentsOpen]);
 
   const isOwner = post.isOwnedByMe;
-  const canModerate = moderationMode && (isAdmin || isModerator);
+  const isPrivileged = myProfile?.role === "ceo" || myProfile?.role === "admin";
+  const canModerate = moderationMode && (isAdmin || isModerator || isPrivileged || myProfile?.role === "moderator");
   const isAnon = post.isAnonymous;
   const isMyAnonPost = isAnon && isOwner;
 
@@ -117,33 +143,79 @@ export function PostCard({ post, isAdmin, isModerator, moderationMode = false }:
     });
   };
 
+  const invalidatePost = () => {
+    queryClient.invalidateQueries({ queryKey: getListPostsQueryKey() });
+    queryClient.invalidateQueries({ queryKey: getGetPostQueryKey(post.id) });
+    if (isOwner && user?.id) queryClient.invalidateQueries({ queryKey: getGetUserPostsQueryKey(user.id) });
+    if (!isAnon) queryClient.invalidateQueries({ queryKey: getGetUserPostsQueryKey(post.authorId) });
+  };
+
+  const fail = (message: string) => toast({ title: message, variant: "destructive" });
+
   const handleDelete = () => {
-    if (confirm("Delete this post?")) {
-      deletePost.mutate({ postId: post.id }, {
-        onSuccess: () => {
-          queryClient.invalidateQueries({ queryKey: getListPostsQueryKey() });
-          if (user?.id === post.authorId || isOwner) {
-            queryClient.invalidateQueries({ queryKey: getGetUserPostsQueryKey(user?.id ?? post.authorId) });
-          }
-        }
-      });
-    }
+    deletePost.mutate({ postId: post.id }, {
+      onSuccess: () => {
+        setDeleteOpen(false);
+        invalidatePost();
+        onDeleted?.();
+        toast({ title: "Post deleted" });
+      },
+      onError: () => fail("Couldn't delete post. Try again."),
+    });
   };
 
   const handlePinToProfile = () => {
     pinToProfile.mutate({ postId: post.id }, {
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: getGetUserPostsQueryKey(user?.id ?? post.authorId) });
-        queryClient.invalidateQueries({ queryKey: getListPostsQueryKey() });
-      },
+      onSuccess: () => { invalidatePost(); toast({ title: post.isPinnedToProfile ? "Unpinned from profile" : "Pinned to profile" }); },
+      onError: () => fail("Couldn't update profile pin. Try again."),
     });
   };
 
   const handlePinToFeed = () => {
     pinToFeed.mutate({ postId: post.id }, {
       onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: getListPostsQueryKey() });
+        invalidatePost();
       },
+      onError: () => fail("Couldn't update feed pin. Try again."),
+    });
+  };
+
+  const handleEdit = () => {
+    const content = editText.trim();
+    if (!content || content.length > 500 || updatePost.isPending) return;
+    updatePost.mutate({ postId: post.id, data: { content } }, {
+      onSuccess: () => { setEditOpen(false); invalidatePost(); toast({ title: "Post updated" }); },
+      onError: () => fail("Couldn't update post. Try again."),
+    });
+  };
+
+  const handleSave = () => {
+    savePost.mutate({ postId: post.id }, {
+      onSuccess: (result) => { invalidatePost(); toast({ title: result.saved ? "Post saved" : "Post removed from saved" }); },
+      onError: () => fail("Couldn't update saved posts. Try again."),
+    });
+  };
+
+  const handleCopy = async () => {
+    try {
+      const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+      await navigator.clipboard.writeText(`${window.location.origin}${base}/post/${post.id}`);
+      toast({ title: "Link copied!" });
+    } catch { fail("Couldn't copy link. Try again."); }
+  };
+
+  const handleReport = () => {
+    if (!reportReason || reportPost.isPending) return;
+    reportPost.mutate({ postId: post.id, data: { reason: reportReason } }, {
+      onSuccess: () => { setReportOpen(false); setReportReason(null); invalidatePost(); toast({ title: "Report submitted" }); },
+      onError: () => fail("Couldn't submit report. Try again."),
+    });
+  };
+
+  const handleFeature = () => {
+    featurePost.mutate({ postId: post.id }, {
+      onSuccess: (result) => { invalidatePost(); toast({ title: result.featured ? "Featured on Trending Gist" : "Removed from Trending Gist" }); },
+      onError: () => fail("Couldn't update featured post. Try again."),
     });
   };
 
@@ -185,6 +257,8 @@ export function PostCard({ post, isAdmin, isModerator, moderationMode = false }:
       </button>
     );
   };
+
+  if (hidden) return null;
 
   return (
     <>
@@ -261,19 +335,25 @@ export function PostCard({ post, isAdmin, isModerator, moderationMode = false }:
                   )}
                 </div>
 
-                {(isOwner || canModerate) && (
-                  <DropdownMenu>
+                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="h-7 w-7 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+                         data-testid={`button-more-post-${post.id}`}
+                         aria-label="More post actions"
+                         className="h-8 w-8 text-muted-foreground hover:text-foreground transition-colors shrink-0"
                       >
-                        <MoreHorizontal className="h-3.5 w-3.5" />
+                         <MoreVertical className="h-4 w-4" />
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className="glass border-white/10 min-w-[160px]">
-                      {isOwner && !isAnon && (
+                       {isOwner && (
+                         <DropdownMenuItem onClick={() => { setEditText(post.content); setEditOpen(true); }} className="gap-2 text-xs cursor-pointer" data-testid={`button-edit-post-${post.id}`}>
+                           <Pencil className="h-3.5 w-3.5" /> Edit Post
+                         </DropdownMenuItem>
+                       )}
+                       {isOwner && !isAnon && (
                         <DropdownMenuItem
                           onClick={handlePinToProfile}
                           disabled={pinToProfile.isPending}
@@ -283,7 +363,7 @@ export function PostCard({ post, isAdmin, isModerator, moderationMode = false }:
                           {post.isPinnedToProfile ? "Unpin from Profile" : "Pin to Profile"}
                         </DropdownMenuItem>
                       )}
-                      {moderationMode && isAdmin && (
+                       {moderationMode && (isAdmin || isPrivileged) && (
                         <DropdownMenuItem
                           onClick={handlePinToFeed}
                           disabled={pinToFeed.isPending}
@@ -293,22 +373,42 @@ export function PostCard({ post, isAdmin, isModerator, moderationMode = false }:
                           {post.isPinnedToFeed ? "Unpin from Feed" : "Pin to Feed"}
                         </DropdownMenuItem>
                       )}
-                      {(isOwner || canModerate) && (
+                       {!isOwner && (
+                         <>
+                           <DropdownMenuItem onClick={handleSave} disabled={savePost.isPending} className="gap-2 text-xs cursor-pointer" data-testid={`button-save-post-${post.id}`}>
+                             <Bookmark className="h-3.5 w-3.5" /> {post.isSavedByMe ? "Unsave Post" : "Save Post"}
+                           </DropdownMenuItem>
+                           <DropdownMenuItem onClick={handleCopy} className="gap-2 text-xs cursor-pointer" data-testid={`button-copy-post-${post.id}`}>
+                             <Link2 className="h-3.5 w-3.5" /> Copy Link
+                           </DropdownMenuItem>
+                           <DropdownMenuItem onClick={() => { onHide?.(post.id); setHidden(true); }} className="gap-2 text-xs cursor-pointer" data-testid={`button-hide-post-${post.id}`}>
+                             <EyeOff className="h-3.5 w-3.5" /> Hide Post
+                           </DropdownMenuItem>
+                           <DropdownMenuItem onClick={() => setReportOpen(true)} className="gap-2 text-xs cursor-pointer" data-testid={`button-report-post-${post.id}`}>
+                             <Flag className="h-3.5 w-3.5" /> Report Post
+                           </DropdownMenuItem>
+                         </>
+                       )}
+                       {isPrivileged && (
+                         <DropdownMenuItem onClick={handleFeature} disabled={featurePost.isPending} className="gap-2 text-xs cursor-pointer" data-testid={`button-feature-post-${post.id}`}>
+                           <Star className="h-3.5 w-3.5" /> {post.isFeaturedTrending ? "Remove from Trending Gist" : "Feature on Trending Gist"}
+                         </DropdownMenuItem>
+                       )}
+                       {(isOwner || canModerate || isPrivileged) && (
                         <>
                           <DropdownMenuSeparator className="bg-white/5" />
                           <DropdownMenuItem
                             data-testid={`btn-delete-post-${post.id}`}
-                            onClick={handleDelete}
+                             onClick={() => setDeleteOpen(true)}
                             className="gap-2 text-xs text-destructive focus:text-destructive cursor-pointer"
                           >
                             <Trash2 className="h-3.5 w-3.5" />
-                            Delete Post
+                             {isPrivileged && !isOwner ? "Delete Post (Admin)" : "Delete Post"}
                           </DropdownMenuItem>
                         </>
-                      )}
+                       )}
                     </DropdownMenuContent>
                   </DropdownMenu>
-                )}
               </div>
 
               {category && (
@@ -318,7 +418,7 @@ export function PostCard({ post, isAdmin, isModerator, moderationMode = false }:
               )}
 
               {/* Pin badges */}
-              {(post.isPinnedToFeed || post.isPinnedToProfile) && (
+               {(post.isPinnedToFeed || post.isPinnedToProfile || post.isFeaturedTrending) && (
                 <div className="flex gap-1.5 mt-2 flex-wrap">
                   {post.isPinnedToFeed && (
                     <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-primary/20 text-primary border border-primary/30">
@@ -330,6 +430,11 @@ export function PostCard({ post, isAdmin, isModerator, moderationMode = false }:
                       <Pin className="h-2.5 w-2.5" /> Pinned to Profile
                     </span>
                   )}
+                   {post.isFeaturedTrending && (
+                     <span data-testid={`badge-featured-post-${post.id}`} className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/25">
+                       <Star className="h-2.5 w-2.5" /> Featured on Trending Gist
+                     </span>
+                   )}
                 </div>
               )}
 
@@ -347,7 +452,7 @@ export function PostCard({ post, isAdmin, isModerator, moderationMode = false }:
                       {post.originalPost.isAnonymous
                         ? <span className="text-xs font-semibold truncate">{post.originalPost.authorName}</span>
                         : <Link href={`/profile/${post.originalPost.authorId}`} className="text-xs font-semibold hover:text-primary transition-colors truncate">{post.originalPost.authorName}</Link>}
-                      <UserVerificationMarks status={post.originalPost.authorVerificationStatus} />
+                       {!post.originalPost.isAnonymous && <UserVerificationMarks status={post.originalPost.authorVerificationStatus} />}
                       <span className="text-[10px] text-muted-foreground ml-auto shrink-0">
                         {formatDistanceToNow(new Date(post.originalPost.createdAt), { addSuffix: true })}
                       </span>
@@ -474,7 +579,7 @@ export function PostCard({ post, isAdmin, isModerator, moderationMode = false }:
                     </AvatarFallback>
                   </Avatar>
                   <span className="text-xs font-semibold truncate">{post.originalPost?.authorName ?? post.authorName}</span>
-                  <UserVerificationMarks status={post.originalPost?.authorVerificationStatus ?? post.authorVerificationStatus} />
+                   {!(post.originalPost?.isAnonymous ?? post.isAnonymous) && <UserVerificationMarks status={post.originalPost?.authorVerificationStatus ?? post.authorVerificationStatus} />}
                 </div>
                 <p className="text-xs text-foreground/70 line-clamp-3 leading-relaxed">
                   {post.originalPost?.content || post.content || <span className="italic text-muted-foreground">No text</span>}
@@ -558,7 +663,44 @@ export function PostCard({ post, isAdmin, isModerator, moderationMode = false }:
         </AnimatePresence>
       </motion.div>
 
-      {!isAnon && (
+       <Dialog open={editOpen} onOpenChange={setEditOpen}>
+         <DialogContent className="glass border-white/10 sm:max-w-[480px]">
+           <DialogHeader><DialogTitle>Edit Post</DialogTitle></DialogHeader>
+           <p className="text-xs text-muted-foreground">Edit the text of your post. Media and polls stay as they are.</p>
+           <Textarea data-testid={`input-edit-post-${post.id}`} maxLength={500} value={editText} onChange={(e) => setEditText(e.target.value)} className="min-h-32 bg-background/40 border-white/10" />
+           <span className="text-xs text-muted-foreground text-right">{editText.length}/500</span>
+           <div className="flex justify-end gap-2">
+             <Button variant="outline" onClick={() => setEditOpen(false)}>Cancel</Button>
+             <Button data-testid={`button-submit-edit-post-${post.id}`} className="gradient-btn" onClick={handleEdit} disabled={!editText.trim() || updatePost.isPending}>Save Changes</Button>
+           </div>
+         </DialogContent>
+       </Dialog>
+       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+         <DialogContent className="glass border-white/10 sm:max-w-[420px]">
+           <DialogHeader><DialogTitle>Delete this post?</DialogTitle></DialogHeader>
+           <p className="text-sm text-muted-foreground">This will permanently remove the post and its replies. This can't be undone.</p>
+           <div className="flex justify-end gap-2">
+             <Button variant="outline" onClick={() => setDeleteOpen(false)}>Cancel</Button>
+             <Button data-testid={`button-confirm-delete-post-${post.id}`} variant="destructive" disabled={deletePost.isPending} onClick={handleDelete}>Delete Post</Button>
+           </div>
+         </DialogContent>
+       </Dialog>
+       <Dialog open={reportOpen} onOpenChange={(open) => { setReportOpen(open); if (!open) setReportReason(null); }}>
+         <DialogContent className="glass border-white/10 sm:max-w-[420px]">
+           <DialogHeader><DialogTitle>Report Post</DialogTitle></DialogHeader>
+           <p className="text-sm text-muted-foreground">Tell us what's wrong with this post.</p>
+           <div className="space-y-2" role="radiogroup" aria-label="Report reason">
+             {reportReasons.map((reason) => (
+               <button type="button" role="radio" aria-checked={reportReason === reason} key={reason} onClick={() => setReportReason(reason)} data-testid={`button-report-reason-${reason.replaceAll(" ", "-").toLowerCase()}-${post.id}`} className={cn("w-full text-left rounded-xl border px-4 py-3 text-sm transition-colors", reportReason === reason ? "border-primary bg-primary/10 text-foreground" : "border-white/10 text-muted-foreground hover:border-white/25")}>{reason}</button>
+             ))}
+           </div>
+           <div className="flex justify-end gap-2">
+             <Button variant="outline" onClick={() => setReportOpen(false)}>Cancel</Button>
+             <Button className="gradient-btn" data-testid={`button-submit-report-post-${post.id}`} disabled={!reportReason || reportPost.isPending} onClick={handleReport}>Submit Report</Button>
+           </div>
+         </DialogContent>
+       </Dialog>
+       {!isAnon && (
         <AvatarModal
           open={avatarModalOpen}
           onClose={() => setAvatarModalOpen(false)}

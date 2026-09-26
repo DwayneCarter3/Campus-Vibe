@@ -260,6 +260,8 @@ export const GetUserPostsResponse = zod.object({
       ]),
       isPinnedToProfile: zod.boolean(),
       isPinnedToFeed: zod.boolean(),
+      isSavedByMe: zod.boolean(),
+      isFeaturedTrending: zod.boolean(),
       createdAt: zod.coerce.date(),
     }),
   ),
@@ -301,6 +303,9 @@ export const GetUserServicesResponse = zod.object({
       price: zod.string().nullable(),
       contactInfo: zod.string(),
       isActive: zod.boolean(),
+      isSavedByMe: zod.boolean(),
+      isFeatured: zod.boolean(),
+      isPinnedToProfile: zod.boolean(),
       createdAt: zod.coerce.date(),
     }),
   ),
@@ -316,6 +321,7 @@ export const listPostsQueryOffsetDefault = 0;
 export const ListPostsQueryParams = zod.object({
   limit: zod.coerce.number().default(listPostsQueryLimitDefault),
   offset: zod.coerce.number().default(listPostsQueryOffsetDefault),
+  savedOnly: zod.coerce.boolean().optional(),
   faculty: zod.coerce.string().nullish(),
   category: zod
     .enum(["Shuttle Updates", "Portal Down", "Exam Timetable", "Amebo Hot"])
@@ -390,6 +396,8 @@ export const ListPostsResponse = zod.object({
       ]),
       isPinnedToProfile: zod.boolean(),
       isPinnedToFeed: zod.boolean(),
+      isSavedByMe: zod.boolean(),
+      isFeaturedTrending: zod.boolean(),
       createdAt: zod.coerce.date(),
     }),
   ),
@@ -498,6 +506,92 @@ export const GetPostResponse = zod.object({
   ]),
   isPinnedToProfile: zod.boolean(),
   isPinnedToFeed: zod.boolean(),
+  isSavedByMe: zod.boolean(),
+  isFeaturedTrending: zod.boolean(),
+  createdAt: zod.coerce.date(),
+});
+
+/**
+ * @summary Edit the text of a post (author only)
+ */
+export const UpdatePostParams = zod.object({
+  postId: zod.coerce.number(),
+});
+
+export const updatePostBodyContentMax = 500;
+
+export const UpdatePostBody = zod.object({
+  content: zod.string().max(updatePostBodyContentMax),
+});
+
+export const UpdatePostResponse = zod.object({
+  id: zod.number(),
+  authorId: zod.string(),
+  authorName: zod.string(),
+  authorFaculty: zod.string(),
+  authorLevel: zod.string(),
+  authorCampusLocation: zod.string(),
+  authorAvatarUrl: zod.string().nullable(),
+  authorCampusTitle: zod.string(),
+  authorRole: zod.string(),
+  authorIsVerified: zod.boolean(),
+  authorVerificationStatus: zod.string(),
+  isAnonymous: zod.boolean(),
+  poll: zod.union([
+    zod.object({
+      id: zod.number(),
+      question: zod.string(),
+      createdAt: zod.coerce.date(),
+      expiresAt: zod.coerce.date(),
+      isExpired: zod.boolean(),
+      selectedOptionId: zod.number().nullable(),
+      totalVotes: zod.number().nullable(),
+      options: zod.array(
+        zod.object({
+          id: zod.number(),
+          optionText: zod.string(),
+          voteCount: zod.number().nullable(),
+        }),
+      ),
+    }),
+    zod.null(),
+  ]),
+  isOwnedByMe: zod.boolean(),
+  content: zod.string(),
+  category: zod.enum([
+    "Shuttle Updates",
+    "Portal Down",
+    "Exam Timetable",
+    "Amebo Hot",
+  ]),
+  imageUrl: zod.string().nullable(),
+  videoUrl: zod.string().nullable(),
+  likesCount: zod.number(),
+  isLikedByMe: zod.boolean(),
+  noCapsCount: zod.number(),
+  isNoCapByMe: zod.boolean(),
+  commentsCount: zod.number(),
+  reshareCount: zod.number(),
+  originalPostId: zod.number().nullable(),
+  originalPost: zod.union([
+    zod.object({
+      id: zod.number(),
+      authorId: zod.string(),
+      authorName: zod.string(),
+      authorAvatarUrl: zod.string().nullable(),
+      authorIsVerified: zod.boolean(),
+      authorVerificationStatus: zod.string(),
+      isAnonymous: zod.boolean(),
+      content: zod.string(),
+      imageUrl: zod.string().nullable(),
+      createdAt: zod.coerce.date(),
+    }),
+    zod.null(),
+  ]),
+  isPinnedToProfile: zod.boolean(),
+  isPinnedToFeed: zod.boolean(),
+  isSavedByMe: zod.boolean(),
+  isFeaturedTrending: zod.boolean(),
   createdAt: zod.coerce.date(),
 });
 
@@ -506,6 +600,35 @@ export const GetPostResponse = zod.object({
  */
 export const DeletePostParams = zod.object({
   postId: zod.coerce.number(),
+});
+
+export const ToggleSavePostParams = zod.object({
+  postId: zod.coerce.number(),
+});
+
+export const ToggleSavePostResponse = zod.object({
+  saved: zod.boolean(),
+});
+
+export const ReportPostParams = zod.object({
+  postId: zod.coerce.number(),
+});
+
+export const ReportPostBody = zod.object({
+  reason: zod.enum([
+    "Spam",
+    "Harassment",
+    "Fake Listing",
+    "Inappropriate Content",
+  ]),
+});
+
+export const ToggleFeaturePostParams = zod.object({
+  postId: zod.coerce.number(),
+});
+
+export const ToggleFeaturePostResponse = zod.object({
+  featured: zod.boolean(),
 });
 
 /**
@@ -606,6 +729,7 @@ export const listServicesQueryOffsetDefault = 0;
 export const ListServicesQueryParams = zod.object({
   limit: zod.coerce.number().default(listServicesQueryLimitDefault),
   offset: zod.coerce.number().default(listServicesQueryOffsetDefault),
+  savedOnly: zod.coerce.boolean().optional(),
   category: zod.coerce.string().nullish(),
 });
 
@@ -629,6 +753,9 @@ export const ListServicesResponse = zod.object({
       price: zod.string().nullable(),
       contactInfo: zod.string(),
       isActive: zod.boolean(),
+      isSavedByMe: zod.boolean(),
+      isFeatured: zod.boolean(),
+      isPinnedToProfile: zod.boolean(),
       createdAt: zod.coerce.date(),
     }),
   ),
@@ -671,6 +798,9 @@ export const GetServiceResponse = zod.object({
   price: zod.string().nullable(),
   contactInfo: zod.string(),
   isActive: zod.boolean(),
+  isSavedByMe: zod.boolean(),
+  isFeatured: zod.boolean(),
+  isPinnedToProfile: zod.boolean(),
   createdAt: zod.coerce.date(),
 });
 
@@ -708,6 +838,9 @@ export const UpdateServiceResponse = zod.object({
   price: zod.string().nullable(),
   contactInfo: zod.string(),
   isActive: zod.boolean(),
+  isSavedByMe: zod.boolean(),
+  isFeatured: zod.boolean(),
+  isPinnedToProfile: zod.boolean(),
   createdAt: zod.coerce.date(),
 });
 
@@ -716,6 +849,43 @@ export const UpdateServiceResponse = zod.object({
  */
 export const DeleteServiceParams = zod.object({
   serviceId: zod.coerce.number(),
+});
+
+export const ToggleSaveServiceParams = zod.object({
+  serviceId: zod.coerce.number(),
+});
+
+export const ToggleSaveServiceResponse = zod.object({
+  saved: zod.boolean(),
+});
+
+export const ReportServiceParams = zod.object({
+  serviceId: zod.coerce.number(),
+});
+
+export const ReportServiceBody = zod.object({
+  reason: zod.enum([
+    "Spam",
+    "Harassment",
+    "Fake Listing",
+    "Inappropriate Content",
+  ]),
+});
+
+export const ToggleFeatureServiceParams = zod.object({
+  serviceId: zod.coerce.number(),
+});
+
+export const ToggleFeatureServiceResponse = zod.object({
+  featured: zod.boolean(),
+});
+
+export const PinServiceToProfileParams = zod.object({
+  serviceId: zod.coerce.number(),
+});
+
+export const PinServiceToProfileResponse = zod.object({
+  pinned: zod.boolean(),
 });
 
 /**
@@ -812,6 +982,42 @@ export const PinPostToFeedParams = zod.object({
 
 export const PinPostToFeedResponse = zod.object({
   pinned: zod.boolean(),
+});
+
+/**
+ * @summary Pending post and listing reports (CEO/admin only)
+ */
+export const ListAdminReportsResponse = zod.object({
+  reports: zod.array(
+    zod.object({
+      id: zod.number(),
+      postId: zod.number().nullable(),
+      serviceId: zod.number().nullable(),
+      reason: zod.string(),
+      status: zod.string(),
+      createdAt: zod.coerce.date(),
+      targetTitle: zod.string(),
+    }),
+  ),
+  total: zod.number(),
+});
+
+export const ReviewAdminReportParams = zod.object({
+  reportId: zod.coerce.number(),
+});
+
+export const ReviewAdminReportBody = zod.object({
+  status: zod.enum(["dismissed", "reviewed"]),
+});
+
+export const ReviewAdminReportResponse = zod.object({
+  id: zod.number(),
+  postId: zod.number().nullable(),
+  serviceId: zod.number().nullable(),
+  reason: zod.string(),
+  status: zod.string(),
+  createdAt: zod.coerce.date(),
+  targetTitle: zod.string(),
 });
 
 /**

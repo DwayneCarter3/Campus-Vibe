@@ -15,3 +15,5 @@
 - [Drizzle serial push mismatch](drizzle-serial-push.md) — Drizzle push can emit invalid SQL for an existing serial-backed rank; avoid force or sequence drops.
 - [Feed category semantics](feed-category-semantics.md) — “All Gist” is only a view, not a stored post category; default untagged and older posts to Amebo Hot.
 - [Anonymous post privacy](anonymous-post-privacy.md) — mask even the creator's public response and embedded originals; use a separate ownership flag for actions.
+- [Safe media cleanup](safe-media-cleanup.md) — delete only verified uploader-owned objects with no remaining references; untracked legacy media is not safely attributable.
+- [Boolean query coercion](boolean-query-coercion.md) — zod.coerce.boolean treats the query string "false" as true; parse query booleans strictly before using them.

@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from "react";
-import { useListPosts, useCreatePost, getListPostsQueryKey, useGetMyProfile, getGetMyProfileQueryKey } from "@workspace/api-client-react";
+import { useListPosts, useCreatePost, getListPostsQueryKey, useGetMyProfile, getGetMyProfileQueryKey, requestUploadUrl as requestUploadUrlApi } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { PostCard } from "@/components/post-card";
@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { Sparkles, Radio, Camera, Video, X, Loader2, Ghost, BarChart3, Plus, Trash2 } from "lucide-react";
+import { Sparkles, Radio, Camera, Video, X, Loader2, Ghost, BarChart3, Plus, Trash2, Bookmark, Megaphone } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
@@ -21,14 +21,17 @@ type MediaUpload = {
   previewUrl: string;
 };
 
+const HIDDEN_POSTS_KEY = "campusx-hidden-posts";
+function getHiddenPostIds(): Set<number> {
+  try {
+    return new Set<number>(JSON.parse(sessionStorage.getItem(HIDDEN_POSTS_KEY) || "[]"));
+  } catch {
+    return new Set<number>();
+  }
+}
+
 async function requestUploadUrl(file: File): Promise<{ uploadURL: string; objectPath: string }> {
-  const res = await fetch("/api/storage/uploads/request-url", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name: file.name, size: file.size, contentType: file.type || "application/octet-stream" }),
-  });
-  if (!res.ok) throw new Error("Failed to get upload URL");
-  return res.json();
+  return requestUploadUrlApi({ name: file.name, size: file.size, contentType: file.type || "application/octet-stream" });
 }
 
 async function uploadToPresignedUrl(file: File, uploadURL: string): Promise<void> {
@@ -44,6 +47,8 @@ export default function FeedPage() {
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
   const [activeBubble, setActiveBubble] = useState("all");
+  const [savedOnly, setSavedOnly] = useState(false);
+  const [hiddenPostIds, setHiddenPostIds] = useState<Set<number>>(getHiddenPostIds);
   const [postCategory, setPostCategory] = useState<PostCategory | "All">("Amebo Hot");
   const activeCategory = POST_CATEGORIES.find((bubble) => bubble.id === activeBubble)?.category;
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -54,8 +59,8 @@ export default function FeedPage() {
     query: { retry: false, queryKey: getGetMyProfileQueryKey() }
   });
 
-  const { data, isLoading, refetch } = useListPosts({ category: activeCategory }, {
-    query: { queryKey: getListPostsQueryKey({ category: activeCategory }), refetchInterval: 10_000 }
+  const { data, isLoading, isError, refetch } = useListPosts({ category: savedOnly ? undefined : activeCategory, savedOnly }, {
+    query: { queryKey: getListPostsQueryKey({ category: savedOnly ? undefined : activeCategory, savedOnly }), refetchInterval: 10_000 }
   });
 
   const createPost = useCreatePost();
@@ -182,7 +187,7 @@ export default function FeedPage() {
       />
 
       {/* Trending Gist Header + LIVE badge */}
-      <div className="flex items-center gap-3 mb-4">
+      <div className="flex items-center justify-between gap-3 mb-4">
         <div className="flex items-center gap-2">
           <h2 className="font-bold text-base tracking-tight">Trending Gist</h2>
           <Badge className="bg-red-500 text-white text-[10px] px-2 py-0.5 h-auto rounded-full flex items-center gap-1 animate-pulse border-0">
@@ -190,6 +195,9 @@ export default function FeedPage() {
             LIVE
           </Badge>
         </div>
+        <button type="button" data-testid="button-saved-feed" aria-pressed={savedOnly} onClick={() => setSavedOnly((current) => !current)} className={cn("inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors", savedOnly ? "border-primary/60 bg-primary/15 text-primary" : "border-white/10 text-muted-foreground hover:text-foreground hover:border-white/25")}>
+          <Bookmark className="h-3.5 w-3.5" /> {savedOnly ? "All Gist" : "Saved"}
+        </button>
       </div>
 
       {/* Trending Bubbles — horizontal scroll */}
@@ -198,7 +206,7 @@ export default function FeedPage() {
         className="flex gap-3 overflow-x-auto pb-3 mb-6 scrollbar-none"
         style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
       >
-        {POST_CATEGORIES.map((bubble, i) => (
+        {!savedOnly && POST_CATEGORIES.map((bubble, i) => (
           <motion.button
             key={bubble.id}
             data-testid={`btn-trending-${bubble.id}`}
@@ -472,7 +480,7 @@ export default function FeedPage() {
       {/* Feed Header */}
       <div className="flex items-center gap-2 mb-4">
         <h2 className="font-bold text-base">
-          {activeCategory ? activeCategory === "Amebo Hot" ? "Amebo Hot Posts" : `${activeCategory} Gist` : "Campus Gist"}
+           {savedOnly ? "Saved Gist" : activeCategory ? activeCategory === "Amebo Hot" ? "Amebo Hot Posts" : `${activeCategory} Gist` : "Campus Gist"}
         </h2>
         {data && (
           <span className="text-xs text-muted-foreground">({data.total} posts)</span>
@@ -498,25 +506,35 @@ export default function FeedPage() {
               </div>
             </div>
           ))
-        ) : data?.posts.length === 0 ? (
+         ) : isError ? (
+           <div role="alert" className="glass border border-white/10 rounded-2xl p-8 text-center">
+             <p className="font-medium">Couldn't load the feed.</p>
+             <p className="text-sm text-muted-foreground mt-1">Check your connection and try again.</p>
+             <Button variant="outline" onClick={() => refetch()} className="mt-4 border-white/10">Try again</Button>
+           </div>
+         ) : data?.posts.filter((post) => !hiddenPostIds.has(post.id)).length === 0 ? (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             className="text-center py-16 text-muted-foreground border border-dashed border-white/10 rounded-2xl"
           >
-            <div className="text-4xl mb-3">🎙️</div>
-            <p className="font-medium">{activeCategory ? "No posts in this category yet. Be the first to share an update!" : "No gist yet on campus."}</p>
-            {!activeCategory && <p className="text-sm mt-1">Be the first to drop something.</p>}
+             {savedOnly ? <Bookmark className="h-7 w-7 mx-auto mb-3 text-primary" /> : <Megaphone className="h-7 w-7 mx-auto mb-3 text-primary" />}
+             <p className="font-medium">{savedOnly ? "No saved gist yet." : activeCategory ? "No posts in this category yet. Be the first to share an update!" : "No gist yet on campus."}</p>
+             <p className="text-sm mt-1">{savedOnly ? "Save posts from their menu to find them here." : "Be the first to drop something."}</p>
           </motion.div>
         ) : (
-          data?.posts.map((post, i) => (
+           data?.posts.filter((post) => !hiddenPostIds.has(post.id)).map((post, i) => (
             <motion.div
               key={post.id}
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.04 }}
             >
-              <PostCard post={post} />
+               <PostCard post={post} onHide={(id) => setHiddenPostIds((previous) => {
+                 const next = new Set(previous).add(id);
+                 sessionStorage.setItem(HIDDEN_POSTS_KEY, JSON.stringify([...next]));
+                 return next;
+               })} />
             </motion.div>
           ))
         )}

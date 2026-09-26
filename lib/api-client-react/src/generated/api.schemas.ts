@@ -240,6 +240,8 @@ export interface Post {
   originalPost: EmbeddedPost | null;
   isPinnedToProfile: boolean;
   isPinnedToFeed: boolean;
+  isSavedByMe: boolean;
+  isFeaturedTrending: boolean;
   createdAt: string;
 }
 
@@ -280,6 +282,66 @@ export interface CreatePostBody {
   videoUrl?: string | null;
   isAnonymous?: boolean;
   poll?: PollInput;
+}
+
+export interface UpdatePostBody {
+  /** @maxLength 500 */
+  content: string;
+}
+
+export interface SaveResponse {
+  saved: boolean;
+}
+
+export interface FeatureResponse {
+  featured: boolean;
+}
+
+export type ReportBodyReason =
+  (typeof ReportBodyReason)[keyof typeof ReportBodyReason];
+
+export const ReportBodyReason = {
+  Spam: "Spam",
+  Harassment: "Harassment",
+  Fake_Listing: "Fake Listing",
+  Inappropriate_Content: "Inappropriate Content",
+} as const;
+
+export interface ReportBody {
+  reason: ReportBodyReason;
+}
+
+export interface ReportResponse {
+  reported: boolean;
+}
+
+export interface ReportItem {
+  id: number;
+  /** @nullable */
+  postId: number | null;
+  /** @nullable */
+  serviceId: number | null;
+  reason: string;
+  status: string;
+  createdAt: string;
+  targetTitle: string;
+}
+
+export interface ReportsResponse {
+  reports: ReportItem[];
+  total: number;
+}
+
+export type ReviewReportBodyStatus =
+  (typeof ReviewReportBodyStatus)[keyof typeof ReviewReportBodyStatus];
+
+export const ReviewReportBodyStatus = {
+  dismissed: "dismissed",
+  reviewed: "reviewed",
+} as const;
+
+export interface ReviewReportBody {
+  status: ReviewReportBodyStatus;
 }
 
 export interface PollVoteInput {
@@ -341,6 +403,9 @@ export interface Service {
   price: string | null;
   contactInfo: string;
   isActive: boolean;
+  isSavedByMe: boolean;
+  isFeatured: boolean;
+  isPinnedToProfile: boolean;
   createdAt: string;
 }
 
@@ -611,6 +676,7 @@ export type GetUserServicesParams = {
 export type ListPostsParams = {
   limit?: number;
   offset?: number;
+  savedOnly?: boolean;
   /**
    * @nullable
    */
@@ -631,6 +697,7 @@ export const ListPostsCategory = {
 export type ListServicesParams = {
   limit?: number;
   offset?: number;
+  savedOnly?: boolean;
   /**
    * @nullable
    */

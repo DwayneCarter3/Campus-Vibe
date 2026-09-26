@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
-import { eq, desc, sql, and } from "drizzle-orm";
-import { db, servicesTable, usersTable, postsTable, notificationsTable } from "@workspace/db";
+import { getAuth } from "@clerk/express";
+import { eq, desc, sql, and, inArray } from "drizzle-orm";
+import { db, servicesTable, usersTable, postsTable, notificationsTable, savedServicesTable, reportsTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/auth";
 import { broadcastNotification } from "../sse-manager";
 import { isVerifiedAccount, publicVerificationStatus } from "../lib/verification";
@@ -16,6 +17,14 @@ import {
   UpdateServiceBody,
   UpdateServiceResponse,
   DeleteServiceParams,
+  ToggleSaveServiceParams,
+  ToggleSaveServiceResponse,
+  ReportServiceParams,
+  ReportServiceBody,
+  ToggleFeatureServiceParams,
+  ToggleFeatureServiceResponse,
+  PinServiceToProfileParams,
+  PinServiceToProfileResponse,
 } from "@workspace/api-zod";
 
 const router: IRouter = Router();
@@ -28,7 +37,17 @@ async function getProviderTitle(providerId: string, role: string) {
   return computeCampusTitle(role, count ?? 0);
 }
 
-async function buildServiceWithMeta(serviceId: number) {
+async function isServiceSaved(serviceId: number, userId?: string): Promise<boolean> {
+  if (!userId) return false;
+  const [saved] = await db
+    .select({ id: savedServicesTable.id })
+    .from(savedServicesTable)
+    .where(and(eq(savedServicesTable.serviceId, serviceId), eq(savedServicesTable.userId, userId)))
+    .limit(1);
+  return Boolean(saved);
+}
+
+async function buildServiceWithMeta(serviceId: number, viewerId?: string) {
   const [service] = await db
     .select({
       id: servicesTable.id,
@@ -39,6 +58,8 @@ async function buildServiceWithMeta(serviceId: number) {
       price: servicesTable.price,
       contactInfo: servicesTable.contactInfo,
       isActive: servicesTable.isActive,
+      isFeatured: servicesTable.isFeatured,
+      isPinnedToProfile: servicesTable.isPinnedToProfile,
       createdAt: servicesTable.createdAt,
       providerName: usersTable.fullName,
       providerFaculty: usersTable.faculty,
@@ -69,21 +90,42 @@ async function buildServiceWithMeta(serviceId: number) {
     providerVerificationStatus: publicVerificationStatus(providerVerificationStatus, role),
     providerRole: role,
     providerCampusTitle: await getProviderTitle(service.providerId, role),
+    isSavedByMe: await isServiceSaved(serviceId, viewerId),
   };
 }
 
 router.get("/services", async (req, res): Promise<void> => {
-  const params = ListServicesQueryParams.safeParse(req.query);
+  const savedOnlyQuery = req.query.savedOnly;
+  if (savedOnlyQuery !== undefined && savedOnlyQuery !== "true" && savedOnlyQuery !== "false") {
+    res.status(400).json({ error: "savedOnly must be true or false" });
+    return;
+  }
+  const params = ListServicesQueryParams.safeParse({
+    ...req.query,
+    savedOnly: undefined,
+  });
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
     return;
   }
 
   const { limit, offset, category } = params.data;
+  const savedOnly = savedOnlyQuery === "true";
+  const viewerId = getAuth(req)?.userId;
+  if (savedOnly && !viewerId) {
+    res.status(401).json({ error: "Authentication required to view saved services" });
+    return;
+  }
 
   const conditions = [eq(servicesTable.isActive, true)];
   if (category) {
     conditions.push(eq(servicesTable.category, category));
+  }
+  if (savedOnly && viewerId) {
+    const savedRows = await db.select({ serviceId: savedServicesTable.serviceId })
+      .from(savedServicesTable)
+      .where(eq(savedServicesTable.userId, viewerId));
+    conditions.push(inArray(servicesTable.id, savedRows.map((row) => row.serviceId)));
   }
 
   const services = await db
@@ -96,6 +138,8 @@ router.get("/services", async (req, res): Promise<void> => {
       price: servicesTable.price,
       contactInfo: servicesTable.contactInfo,
       isActive: servicesTable.isActive,
+      isFeatured: servicesTable.isFeatured,
+      isPinnedToProfile: servicesTable.isPinnedToProfile,
       createdAt: servicesTable.createdAt,
       providerName: usersTable.fullName,
       providerFaculty: usersTable.faculty,
@@ -109,7 +153,7 @@ router.get("/services", async (req, res): Promise<void> => {
     .from(servicesTable)
     .leftJoin(usersTable, eq(servicesTable.providerId, usersTable.clerkUserId))
     .where(conditions.length === 1 ? conditions[0] : and(...conditions))
-    .orderBy(desc(servicesTable.createdAt))
+    .orderBy(desc(servicesTable.isFeatured), desc(servicesTable.createdAt))
     .limit(limit ?? 20)
     .offset(offset ?? 0);
 
@@ -132,6 +176,7 @@ router.get("/services", async (req, res): Promise<void> => {
       providerVerificationStatus: publicVerificationStatus(providerVerificationStatus, role),
       providerRole: role,
       providerCampusTitle: await getProviderTitle(s.providerId, role),
+      isSavedByMe: await isServiceSaved(s.id, viewerId ?? undefined),
     };
   }));
 
@@ -151,7 +196,7 @@ router.post("/services", requireAuth, async (req, res): Promise<void> => {
     .values({ ...parsed.data, providerId: userId })
     .returning();
 
-  const result = await buildServiceWithMeta(service.id);
+  const result = await buildServiceWithMeta(service.id, userId);
   res.status(201).json(GetServiceResponse.parse(result));
 });
 
@@ -163,7 +208,7 @@ router.get("/services/:serviceId", async (req, res): Promise<void> => {
     return;
   }
 
-  const result = await buildServiceWithMeta(params.data.serviceId);
+  const result = await buildServiceWithMeta(params.data.serviceId, getAuth(req)?.userId ?? undefined);
   if (!result) {
     res.status(404).json({ error: "Service not found" });
     return;
@@ -199,7 +244,7 @@ router.patch("/services/:serviceId", requireAuth, async (req, res): Promise<void
   }
 
   await db.update(servicesTable).set(parsed.data).where(eq(servicesTable.id, params.data.serviceId));
-  const result = await buildServiceWithMeta(params.data.serviceId);
+  const result = await buildServiceWithMeta(params.data.serviceId, userId);
   res.json(UpdateServiceResponse.parse(result));
 });
 
@@ -218,13 +263,129 @@ router.delete("/services/:serviceId", requireAuth, async (req, res): Promise<voi
     return;
   }
 
-  if (service.providerId !== userId) {
+  const [caller] = await db.select({ role: usersTable.role, isAdmin: usersTable.isAdmin })
+    .from(usersTable).where(eq(usersTable.clerkUserId, userId));
+  if (service.providerId !== userId && !caller?.isAdmin && !["admin", "ceo"].includes(caller?.role ?? "")) {
     res.status(403).json({ error: "Forbidden" });
     return;
   }
 
   await db.delete(servicesTable).where(eq(servicesTable.id, params.data.serviceId));
   res.sendStatus(204);
+});
+
+router.post("/services/:serviceId/save", requireAuth, async (req, res): Promise<void> => {
+  const parsed = ToggleSaveServiceParams.safeParse({ serviceId: req.params.serviceId });
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+  const userId = (req as any).userId as string;
+  const [service] = await db.select({ id: servicesTable.id })
+    .from(servicesTable).where(eq(servicesTable.id, parsed.data.serviceId));
+  if (!service) {
+    res.status(404).json({ error: "Service not found" });
+    return;
+  }
+  const [existing] = await db.select({ id: savedServicesTable.id })
+    .from(savedServicesTable)
+    .where(and(eq(savedServicesTable.serviceId, service.id), eq(savedServicesTable.userId, userId)))
+    .limit(1);
+  let saved: boolean;
+  if (existing) {
+    await db.delete(savedServicesTable).where(eq(savedServicesTable.id, existing.id));
+    saved = false;
+  } else {
+    await db.insert(savedServicesTable).values({ serviceId: service.id, userId });
+    saved = true;
+  }
+  res.json(ToggleSaveServiceResponse.parse({ saved }));
+});
+
+router.post("/services/:serviceId/report", requireAuth, async (req, res): Promise<void> => {
+  const params = ReportServiceParams.safeParse({ serviceId: req.params.serviceId });
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+  const body = ReportServiceBody.safeParse(req.body);
+  if (!body.success) {
+    res.status(400).json({ error: body.error.message });
+    return;
+  }
+  const [service] = await db.select({ id: servicesTable.id })
+    .from(servicesTable).where(eq(servicesTable.id, params.data.serviceId));
+  if (!service) {
+    res.status(404).json({ error: "Service not found" });
+    return;
+  }
+  const userId = (req as any).userId as string;
+  const [existingReport] = await db.select({ id: reportsTable.id })
+    .from(reportsTable)
+    .where(and(eq(reportsTable.serviceId, service.id), eq(reportsTable.reporterId, userId)))
+    .limit(1);
+  if (existingReport) {
+    res.status(409).json({ error: "You have already reported this service" });
+    return;
+  }
+  try {
+    await db.insert(reportsTable)
+      .values({ serviceId: service.id, reporterId: userId, reason: body.data.reason });
+  } catch (error) {
+    const dbError = error as { code?: string; cause?: { code?: string } };
+    if (dbError?.code === "23505" || dbError?.cause?.code === "23505") {
+      res.status(409).json({ error: "You have already reported this service" });
+      return;
+    }
+    throw error;
+  }
+  res.status(201).json({ reported: true });
+});
+
+router.patch("/services/:serviceId/feature", requireAuth, async (req, res): Promise<void> => {
+  const params = ToggleFeatureServiceParams.safeParse({ serviceId: req.params.serviceId });
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+  const userId = (req as any).userId as string;
+  const [caller] = await db.select({ role: usersTable.role })
+    .from(usersTable).where(eq(usersTable.clerkUserId, userId));
+  if (!caller || !["admin", "ceo"].includes(caller.role)) {
+    res.status(403).json({ error: "Admin/CEO only" });
+    return;
+  }
+  const [service] = await db.select({ isFeatured: servicesTable.isFeatured })
+    .from(servicesTable).where(eq(servicesTable.id, params.data.serviceId));
+  if (!service) {
+    res.status(404).json({ error: "Service not found" });
+    return;
+  }
+  const featured = !service.isFeatured;
+  await db.update(servicesTable).set({ isFeatured: featured }).where(eq(servicesTable.id, params.data.serviceId));
+  res.json(ToggleFeatureServiceResponse.parse({ featured }));
+});
+
+router.patch("/services/:serviceId/pin-profile", requireAuth, async (req, res): Promise<void> => {
+  const params = PinServiceToProfileParams.safeParse({ serviceId: req.params.serviceId });
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+  const userId = (req as any).userId as string;
+  const [service] = await db.select({ providerId: servicesTable.providerId, isPinnedToProfile: servicesTable.isPinnedToProfile })
+    .from(servicesTable).where(eq(servicesTable.id, params.data.serviceId));
+  if (!service) {
+    res.status(404).json({ error: "Service not found" });
+    return;
+  }
+  if (service.providerId !== userId) {
+    res.status(403).json({ error: "Forbidden" });
+    return;
+  }
+  const pinned = !service.isPinnedToProfile;
+  await db.update(servicesTable).set({ isPinnedToProfile: pinned }).where(eq(servicesTable.id, params.data.serviceId));
+  res.json(PinServiceToProfileResponse.parse({ pinned }));
 });
 
 router.post("/services/:serviceId/whatsapp-click", async (req, res): Promise<void> => {

@@ -25,6 +25,7 @@ import type {
   CreatePostBody,
   CreateServiceBody,
   DirectMessage,
+  FeatureResponse,
   FeedStats,
   GetUserPostsParams,
   GetUserServicesParams,
@@ -56,10 +57,16 @@ import type {
   PublicUserProfile,
   ReceivePaystackWebhook200,
   ReceivePaystackWebhookBody,
+  ReportBody,
+  ReportItem,
+  ReportResponse,
+  ReportsResponse,
   RequestBadgeBody,
   RequestBadgeResponse,
   ResharePostBody,
   ResharePostResponse,
+  ReviewReportBody,
+  SaveResponse,
   SearchStudentsParams,
   SendMessageBody,
   Service,
@@ -68,6 +75,7 @@ import type {
   StartConversationBody,
   StudentSearchResponse,
   TrackWhatsappClick200,
+  UpdatePostBody,
   UpdateProfileBody,
   UpdateServiceBody,
   UpdateUserRoleBody,
@@ -1071,6 +1079,93 @@ export function useGetPost<
 }
 
 /**
+ * @summary Edit the text of a post (author only)
+ */
+export const getUpdatePostUrl = (postId: number) => {
+  return `/api/posts/${postId}`;
+};
+
+export const updatePost = async (
+  postId: number,
+  updatePostBody: UpdatePostBody,
+  options?: RequestInit,
+): Promise<Post> => {
+  return customFetch<Post>(getUpdatePostUrl(postId), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(updatePostBody),
+  });
+};
+
+export const getUpdatePostMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updatePost>>,
+    TError,
+    { postId: number; data: BodyType<UpdatePostBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updatePost>>,
+  TError,
+  { postId: number; data: BodyType<UpdatePostBody> },
+  TContext
+> => {
+  const mutationKey = ["updatePost"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updatePost>>,
+    { postId: number; data: BodyType<UpdatePostBody> }
+  > = (props) => {
+    const { postId, data } = props ?? {};
+
+    return updatePost(postId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdatePostMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updatePost>>
+>;
+export type UpdatePostMutationBody = BodyType<UpdatePostBody>;
+export type UpdatePostMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Edit the text of a post (author only)
+ */
+export const useUpdatePost = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updatePost>>,
+    TError,
+    { postId: number; data: BodyType<UpdatePostBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updatePost>>,
+  TError,
+  { postId: number; data: BodyType<UpdatePostBody> },
+  TContext
+> => {
+  return useMutation(getUpdatePostMutationOptions(options));
+};
+
+/**
  * @summary Delete a post (owner or moderator+)
  */
 export const getDeletePostUrl = (postId: number) => {
@@ -1152,6 +1247,243 @@ export const useDeletePost = <
   TContext
 > => {
   return useMutation(getDeletePostMutationOptions(options));
+};
+
+export const getToggleSavePostUrl = (postId: number) => {
+  return `/api/posts/${postId}/save`;
+};
+
+export const toggleSavePost = async (
+  postId: number,
+  options?: RequestInit,
+): Promise<SaveResponse> => {
+  return customFetch<SaveResponse>(getToggleSavePostUrl(postId), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getToggleSavePostMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof toggleSavePost>>,
+    TError,
+    { postId: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof toggleSavePost>>,
+  TError,
+  { postId: number },
+  TContext
+> => {
+  const mutationKey = ["toggleSavePost"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof toggleSavePost>>,
+    { postId: number }
+  > = (props) => {
+    const { postId } = props ?? {};
+
+    return toggleSavePost(postId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ToggleSavePostMutationResult = NonNullable<
+  Awaited<ReturnType<typeof toggleSavePost>>
+>;
+
+export type ToggleSavePostMutationError = ErrorType<unknown>;
+
+export const useToggleSavePost = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof toggleSavePost>>,
+    TError,
+    { postId: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof toggleSavePost>>,
+  TError,
+  { postId: number },
+  TContext
+> => {
+  return useMutation(getToggleSavePostMutationOptions(options));
+};
+
+export const getReportPostUrl = (postId: number) => {
+  return `/api/posts/${postId}/report`;
+};
+
+export const reportPost = async (
+  postId: number,
+  reportBody: ReportBody,
+  options?: RequestInit,
+): Promise<ReportResponse> => {
+  return customFetch<ReportResponse>(getReportPostUrl(postId), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(reportBody),
+  });
+};
+
+export const getReportPostMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof reportPost>>,
+    TError,
+    { postId: number; data: BodyType<ReportBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof reportPost>>,
+  TError,
+  { postId: number; data: BodyType<ReportBody> },
+  TContext
+> => {
+  const mutationKey = ["reportPost"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof reportPost>>,
+    { postId: number; data: BodyType<ReportBody> }
+  > = (props) => {
+    const { postId, data } = props ?? {};
+
+    return reportPost(postId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ReportPostMutationResult = NonNullable<
+  Awaited<ReturnType<typeof reportPost>>
+>;
+export type ReportPostMutationBody = BodyType<ReportBody>;
+export type ReportPostMutationError = ErrorType<unknown>;
+
+export const useReportPost = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof reportPost>>,
+    TError,
+    { postId: number; data: BodyType<ReportBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof reportPost>>,
+  TError,
+  { postId: number; data: BodyType<ReportBody> },
+  TContext
+> => {
+  return useMutation(getReportPostMutationOptions(options));
+};
+
+export const getToggleFeaturePostUrl = (postId: number) => {
+  return `/api/posts/${postId}/feature`;
+};
+
+export const toggleFeaturePost = async (
+  postId: number,
+  options?: RequestInit,
+): Promise<FeatureResponse> => {
+  return customFetch<FeatureResponse>(getToggleFeaturePostUrl(postId), {
+    ...options,
+    method: "PATCH",
+  });
+};
+
+export const getToggleFeaturePostMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof toggleFeaturePost>>,
+    TError,
+    { postId: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof toggleFeaturePost>>,
+  TError,
+  { postId: number },
+  TContext
+> => {
+  const mutationKey = ["toggleFeaturePost"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof toggleFeaturePost>>,
+    { postId: number }
+  > = (props) => {
+    const { postId } = props ?? {};
+
+    return toggleFeaturePost(postId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ToggleFeaturePostMutationResult = NonNullable<
+  Awaited<ReturnType<typeof toggleFeaturePost>>
+>;
+
+export type ToggleFeaturePostMutationError = ErrorType<unknown>;
+
+export const useToggleFeaturePost = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof toggleFeaturePost>>,
+    TError,
+    { postId: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof toggleFeaturePost>>,
+  TError,
+  { postId: number },
+  TContext
+> => {
+  return useMutation(getToggleFeaturePostMutationOptions(options));
 };
 
 /**
@@ -2022,6 +2354,321 @@ export const useDeleteService = <
   return useMutation(getDeleteServiceMutationOptions(options));
 };
 
+export const getToggleSaveServiceUrl = (serviceId: number) => {
+  return `/api/services/${serviceId}/save`;
+};
+
+export const toggleSaveService = async (
+  serviceId: number,
+  options?: RequestInit,
+): Promise<SaveResponse> => {
+  return customFetch<SaveResponse>(getToggleSaveServiceUrl(serviceId), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getToggleSaveServiceMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof toggleSaveService>>,
+    TError,
+    { serviceId: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof toggleSaveService>>,
+  TError,
+  { serviceId: number },
+  TContext
+> => {
+  const mutationKey = ["toggleSaveService"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof toggleSaveService>>,
+    { serviceId: number }
+  > = (props) => {
+    const { serviceId } = props ?? {};
+
+    return toggleSaveService(serviceId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ToggleSaveServiceMutationResult = NonNullable<
+  Awaited<ReturnType<typeof toggleSaveService>>
+>;
+
+export type ToggleSaveServiceMutationError = ErrorType<unknown>;
+
+export const useToggleSaveService = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof toggleSaveService>>,
+    TError,
+    { serviceId: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof toggleSaveService>>,
+  TError,
+  { serviceId: number },
+  TContext
+> => {
+  return useMutation(getToggleSaveServiceMutationOptions(options));
+};
+
+export const getReportServiceUrl = (serviceId: number) => {
+  return `/api/services/${serviceId}/report`;
+};
+
+export const reportService = async (
+  serviceId: number,
+  reportBody: ReportBody,
+  options?: RequestInit,
+): Promise<ReportResponse> => {
+  return customFetch<ReportResponse>(getReportServiceUrl(serviceId), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(reportBody),
+  });
+};
+
+export const getReportServiceMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof reportService>>,
+    TError,
+    { serviceId: number; data: BodyType<ReportBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof reportService>>,
+  TError,
+  { serviceId: number; data: BodyType<ReportBody> },
+  TContext
+> => {
+  const mutationKey = ["reportService"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof reportService>>,
+    { serviceId: number; data: BodyType<ReportBody> }
+  > = (props) => {
+    const { serviceId, data } = props ?? {};
+
+    return reportService(serviceId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ReportServiceMutationResult = NonNullable<
+  Awaited<ReturnType<typeof reportService>>
+>;
+export type ReportServiceMutationBody = BodyType<ReportBody>;
+export type ReportServiceMutationError = ErrorType<unknown>;
+
+export const useReportService = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof reportService>>,
+    TError,
+    { serviceId: number; data: BodyType<ReportBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof reportService>>,
+  TError,
+  { serviceId: number; data: BodyType<ReportBody> },
+  TContext
+> => {
+  return useMutation(getReportServiceMutationOptions(options));
+};
+
+export const getToggleFeatureServiceUrl = (serviceId: number) => {
+  return `/api/services/${serviceId}/feature`;
+};
+
+export const toggleFeatureService = async (
+  serviceId: number,
+  options?: RequestInit,
+): Promise<FeatureResponse> => {
+  return customFetch<FeatureResponse>(getToggleFeatureServiceUrl(serviceId), {
+    ...options,
+    method: "PATCH",
+  });
+};
+
+export const getToggleFeatureServiceMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof toggleFeatureService>>,
+    TError,
+    { serviceId: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof toggleFeatureService>>,
+  TError,
+  { serviceId: number },
+  TContext
+> => {
+  const mutationKey = ["toggleFeatureService"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof toggleFeatureService>>,
+    { serviceId: number }
+  > = (props) => {
+    const { serviceId } = props ?? {};
+
+    return toggleFeatureService(serviceId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ToggleFeatureServiceMutationResult = NonNullable<
+  Awaited<ReturnType<typeof toggleFeatureService>>
+>;
+
+export type ToggleFeatureServiceMutationError = ErrorType<unknown>;
+
+export const useToggleFeatureService = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof toggleFeatureService>>,
+    TError,
+    { serviceId: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof toggleFeatureService>>,
+  TError,
+  { serviceId: number },
+  TContext
+> => {
+  return useMutation(getToggleFeatureServiceMutationOptions(options));
+};
+
+export const getPinServiceToProfileUrl = (serviceId: number) => {
+  return `/api/services/${serviceId}/pin-profile`;
+};
+
+export const pinServiceToProfile = async (
+  serviceId: number,
+  options?: RequestInit,
+): Promise<PinResponse> => {
+  return customFetch<PinResponse>(getPinServiceToProfileUrl(serviceId), {
+    ...options,
+    method: "PATCH",
+  });
+};
+
+export const getPinServiceToProfileMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof pinServiceToProfile>>,
+    TError,
+    { serviceId: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof pinServiceToProfile>>,
+  TError,
+  { serviceId: number },
+  TContext
+> => {
+  const mutationKey = ["pinServiceToProfile"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof pinServiceToProfile>>,
+    { serviceId: number }
+  > = (props) => {
+    const { serviceId } = props ?? {};
+
+    return pinServiceToProfile(serviceId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type PinServiceToProfileMutationResult = NonNullable<
+  Awaited<ReturnType<typeof pinServiceToProfile>>
+>;
+
+export type PinServiceToProfileMutationError = ErrorType<unknown>;
+
+export const usePinServiceToProfile = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof pinServiceToProfile>>,
+    TError,
+    { serviceId: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof pinServiceToProfile>>,
+  TError,
+  { serviceId: number },
+  TContext
+> => {
+  return useMutation(getPinServiceToProfileMutationOptions(options));
+};
+
 /**
  * @summary List recent notifications for the current user
  */
@@ -2702,6 +3349,162 @@ export const usePinPostToFeed = <
   TContext
 > => {
   return useMutation(getPinPostToFeedMutationOptions(options));
+};
+
+/**
+ * @summary Pending post and listing reports (CEO/admin only)
+ */
+export const getListAdminReportsUrl = () => {
+  return `/api/admin/reports`;
+};
+
+export const listAdminReports = async (
+  options?: RequestInit,
+): Promise<ReportsResponse> => {
+  return customFetch<ReportsResponse>(getListAdminReportsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListAdminReportsQueryKey = () => {
+  return [`/api/admin/reports`] as const;
+};
+
+export const getListAdminReportsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listAdminReports>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listAdminReports>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListAdminReportsQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listAdminReports>>
+  > = ({ signal }) => listAdminReports({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listAdminReports>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListAdminReportsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listAdminReports>>
+>;
+export type ListAdminReportsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Pending post and listing reports (CEO/admin only)
+ */
+
+export function useListAdminReports<
+  TData = Awaited<ReturnType<typeof listAdminReports>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listAdminReports>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListAdminReportsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+export const getReviewAdminReportUrl = (reportId: number) => {
+  return `/api/admin/reports/${reportId}`;
+};
+
+export const reviewAdminReport = async (
+  reportId: number,
+  reviewReportBody: ReviewReportBody,
+  options?: RequestInit,
+): Promise<ReportItem> => {
+  return customFetch<ReportItem>(getReviewAdminReportUrl(reportId), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(reviewReportBody),
+  });
+};
+
+export const getReviewAdminReportMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof reviewAdminReport>>,
+    TError,
+    { reportId: number; data: BodyType<ReviewReportBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof reviewAdminReport>>,
+  TError,
+  { reportId: number; data: BodyType<ReviewReportBody> },
+  TContext
+> => {
+  const mutationKey = ["reviewAdminReport"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof reviewAdminReport>>,
+    { reportId: number; data: BodyType<ReviewReportBody> }
+  > = (props) => {
+    const { reportId, data } = props ?? {};
+
+    return reviewAdminReport(reportId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ReviewAdminReportMutationResult = NonNullable<
+  Awaited<ReturnType<typeof reviewAdminReport>>
+>;
+export type ReviewAdminReportMutationBody = BodyType<ReviewReportBody>;
+export type ReviewAdminReportMutationError = ErrorType<unknown>;
+
+export const useReviewAdminReport = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof reviewAdminReport>>,
+    TError,
+    { reportId: number; data: BodyType<ReviewReportBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof reviewAdminReport>>,
+  TError,
+  { reportId: number; data: BodyType<ReviewReportBody> },
+  TContext
+> => {
+  return useMutation(getReviewAdminReportMutationOptions(options));
 };
 
 /**

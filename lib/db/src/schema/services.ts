@@ -11,6 +11,8 @@ export const servicesTable = pgTable("services", {
   price: text("price"),
   contactInfo: text("contact_info").notNull(),
   isActive: boolean("is_active").notNull().default(true),
+  isFeatured: boolean("is_featured").notNull().default(false),
+  isPinnedToProfile: boolean("is_pinned_to_profile").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

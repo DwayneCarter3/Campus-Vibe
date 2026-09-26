@@ -221,6 +221,10 @@ paths:
           schema:
             type: integer
             default: 0
+        - name: savedOnly
+          in: query
+          schema:
+            type: boolean
         - name: faculty
           in: query
           schema:
@@ -279,6 +283,29 @@ paths:
                 $ref: "#/components/schemas/Post"
         "404":
           description: Not found
+    patch:
+      operationId: updatePost
+      tags: [posts]
+      summary: Edit the text of a post (author only)
+      parameters:
+        - name: postId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdatePostBody"
+      responses:
+        "200":
+          description: Updated post
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Post"
     delete:
       operationId: deletePost
       tags: [posts]
@@ -296,6 +323,66 @@ paths:
           description: Unauthorized
         "404":
           description: Not found
+
+  /posts/{postId}/save:
+    post:
+      operationId: toggleSavePost
+      tags: [posts]
+      parameters:
+        - name: postId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Save state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SaveResponse"
+
+  /posts/{postId}/report:
+    post:
+      operationId: reportPost
+      tags: [posts]
+      parameters:
+        - name: postId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReportBody"
+      responses:
+        "201":
+          description: Report added to review queue
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReportResponse"
+
+  /posts/{postId}/feature:
+    patch:
+      operationId: toggleFeaturePost
+      tags: [posts]
+      parameters:
+        - name: postId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Trending Gist state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FeatureResponse"
 
   /polls/{pollId}/vote:
     post:
@@ -436,6 +523,10 @@ paths:
           schema:
             type: integer
             default: 0
+        - name: savedOnly
+          in: query
+          schema:
+            type: boolean
         - name: category
           in: query
           schema:
@@ -533,6 +624,84 @@ paths:
           description: Unauthorized
         "404":
           description: Not found
+
+  /services/{serviceId}/save:
+    post:
+      operationId: toggleSaveService
+      tags: [services]
+      parameters:
+        - name: serviceId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Save state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SaveResponse"
+
+  /services/{serviceId}/report:
+    post:
+      operationId: reportService
+      tags: [services]
+      parameters:
+        - name: serviceId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReportBody"
+      responses:
+        "201":
+          description: Report added to review queue
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReportResponse"
+
+  /services/{serviceId}/feature:
+    patch:
+      operationId: toggleFeatureService
+      tags: [services]
+      parameters:
+        - name: serviceId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Featured listing state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FeatureResponse"
+
+  /services/{serviceId}/pin-profile:
+    patch:
+      operationId: pinServiceToProfile
+      tags: [services]
+      parameters:
+        - name: serviceId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Profile pin state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PinResponse"
 
   /notifications:
     get:
@@ -704,6 +873,43 @@ paths:
           description: Forbidden – admin only.
         '404':
           description: Post not found.
+
+  /admin/reports:
+    get:
+      operationId: listAdminReports
+      tags: [admin]
+      summary: Pending post and listing reports (CEO/admin only)
+      responses:
+        "200":
+          description: Review queue
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReportsResponse"
+
+  /admin/reports/{reportId}:
+    patch:
+      operationId: reviewAdminReport
+      tags: [admin]
+      parameters:
+        - name: reportId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReviewReportBody"
+      responses:
+        "200":
+          description: Report status updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReportItem"
 
   /admin/claim:
     post:
@@ -1444,6 +1650,10 @@ components:
           type: boolean
         isPinnedToFeed:
           type: boolean
+        isSavedByMe:
+          type: boolean
+        isFeaturedTrending:
+          type: boolean
         createdAt:
           type: string
           format: date-time
@@ -1462,6 +1672,8 @@ components:
         - isAnonymous
         - poll
         - isOwnedByMe
+        - isSavedByMe
+        - isFeaturedTrending
         - content
         - category
         - imageUrl
@@ -1509,6 +1721,82 @@ components:
           $ref: "#/components/schemas/PollInput"
       required:
         - content
+
+    UpdatePostBody:
+      type: object
+      required: [content]
+      properties:
+        content:
+          type: string
+          maxLength: 500
+
+    SaveResponse:
+      type: object
+      required: [saved]
+      properties:
+        saved:
+          type: boolean
+
+    FeatureResponse:
+      type: object
+      required: [featured]
+      properties:
+        featured:
+          type: boolean
+
+    ReportBody:
+      type: object
+      required: [reason]
+      properties:
+        reason:
+          type: string
+          enum: [Spam, Harassment, Fake Listing, Inappropriate Content]
+
+    ReportResponse:
+      type: object
+      required: [reported]
+      properties:
+        reported:
+          type: boolean
+
+    ReportItem:
+      type: object
+      required: [id, postId, serviceId, reason, status, createdAt, targetTitle]
+      properties:
+        id:
+          type: integer
+        postId:
+          type: ["integer", "null"]
+        serviceId:
+          type: ["integer", "null"]
+        reason:
+          type: string
+        status:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        targetTitle:
+          type: string
+
+    ReportsResponse:
+      type: object
+      required: [reports, total]
+      properties:
+        reports:
+          type: array
+          items:
+            $ref: "#/components/schemas/ReportItem"
+        total:
+          type: integer
+
+    ReviewReportBody:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [dismissed, reviewed]
 
     PollInput:
       type: object
@@ -1685,6 +1973,12 @@ components:
           type: string
         isActive:
           type: boolean
+        isSavedByMe:
+          type: boolean
+        isFeatured:
+          type: boolean
+        isPinnedToProfile:
+          type: boolean
         createdAt:
           type: string
           format: date-time
@@ -1706,6 +2000,9 @@ components:
         - price
         - contactInfo
         - isActive
+        - isSavedByMe
+        - isFeatured
+        - isPinnedToProfile
         - createdAt
 
     ListServicesResponse:

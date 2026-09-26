@@ -1,10 +1,13 @@
 import { useState } from "react";
-import type { Service } from "@workspace/api-client-react";
+import type { Service, ReportBodyReason } from "@workspace/api-client-react";
+import { useUpdateService, useDeleteService, useToggleSaveService, useReportService, useToggleFeatureService, usePinServiceToProfile, useGetMyProfile, getGetMyProfileQueryKey } from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Link, useLocation } from "wouter";
 import { motion } from "framer-motion";
-import { ShieldCheck, MapPin, AlertTriangle, MessageCircle } from "lucide-react";
+import { MapPin, AlertTriangle, MessageCircle, MoreVertical, Bookmark, Link2, EyeOff, Flag, Pencil, Trash2, Pin, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   Dialog,
@@ -12,6 +15,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { UserVerificationMarks } from "@/components/user-verification-marks";
 import { useStartConversation } from "@workspace/api-client-react";
 
@@ -28,6 +34,7 @@ interface ServiceCardProps {
   service: Service;
   index?: number;
   currentUserId?: string;
+  directView?: boolean;
 }
 
 function formatWhatsAppUrl(contactInfo: string, title: string): string {
@@ -53,14 +60,52 @@ const CATEGORY_COLORS: Record<string, string> = {
   "Hair Styling": "bg-pink-500/15 text-pink-400 border-pink-500/25",
 };
 
-export function ServiceCard({ service, index = 0, currentUserId }: ServiceCardProps) {
+export function ServiceCard({ service, index = 0, currentUserId, directView = false }: ServiceCardProps) {
   const [showWarning, setShowWarning] = useState(false);
+  const [dialog, setDialog] = useState<"edit" | "delete" | "report" | null>(null);
+  const [hidden, setHidden] = useState(() => {
+    try { return JSON.parse(sessionStorage.getItem("campusx-hidden-listings") || "[]").includes(service.id); } catch { return false; }
+  });
+  const [reason, setReason] = useState<ReportBodyReason>("Spam");
+  const [draft, setDraft] = useState({ title: service.title, description: service.description, category: service.category, price: service.price ?? "", contactInfo: service.contactInfo });
+  const queryClient = useQueryClient();
+  const { data: profile } = useGetMyProfile({ query: { queryKey: getGetMyProfileQueryKey(), retry: false } });
+  const updateService = useUpdateService();
+  const deleteService = useDeleteService();
+  const saveService = useToggleSaveService();
+  const reportService = useReportService();
+  const featureService = useToggleFeatureService();
+  const pinService = usePinServiceToProfile();
   const [, setLocation] = useLocation();
   const whatsappUrl = formatWhatsAppUrl(service.contactInfo, service.title);
   const categoryColor = CATEGORY_COLORS[service.category] ?? "bg-primary/15 text-primary border-primary/25";
   const startConversation = useStartConversation();
 
-  const isMyService = currentUserId && service.providerId === currentUserId;
+  const isMyService = service.providerId === (currentUserId ?? profile?.clerkUserId);
+  const canModerate = profile?.role === "ceo" || profile?.role === "admin";
+  const busy = updateService.isPending || deleteService.isPending || saveService.isPending || reportService.isPending || featureService.isPending || pinService.isPending;
+  const refresh = () => queryClient.invalidateQueries({ predicate: (q) => typeof q.queryKey[0] === "string" && (q.queryKey[0].startsWith("/api/services") || q.queryKey[0].includes("/services")) });
+  const failed = () => toast({ title: "Action failed. Please try again.", variant: "destructive" });
+  const requireAccount = () => {
+    if (profile) return true;
+    setLocation("/sign-in");
+    return false;
+  };
+  const hideListing = () => {
+    setHidden(true);
+    try {
+      const ids: number[] = JSON.parse(sessionStorage.getItem("campusx-hidden-listings") || "[]");
+      sessionStorage.setItem("campusx-hidden-listings", JSON.stringify([...new Set([...ids, service.id])]));
+    } catch { /* session-only fallback */ }
+    toast({ title: "Listing hidden for this session" });
+  };
+  const copyLink = async () => {
+    try {
+      const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+      await navigator.clipboard.writeText(`${window.location.origin}${base}/earn?listing=${service.id}`);
+      toast({ title: "Link copied!" });
+    } catch { toast({ title: "Could not copy link", variant: "destructive" }); }
+  };
 
   const handleWhatsAppClick = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -88,6 +133,7 @@ export function ServiceCard({ service, index = 0, currentUserId }: ServiceCardPr
     );
   };
 
+  if (hidden && !directView) return null;
   return (
     <>
       <motion.div
@@ -98,14 +144,36 @@ export function ServiceCard({ service, index = 0, currentUserId }: ServiceCardPr
       >
         <div className="p-5 flex-1 flex flex-col gap-3">
 
-          {/* Top row: category + price */}
+          {/* Top row: category, price and listing controls */}
           <div className="flex justify-between items-center gap-2">
             <Badge className={cn("text-[11px] px-2 py-0.5 border font-medium rounded-full", categoryColor)}>
               {service.category}
             </Badge>
-            {service.price && (
-              <span className="text-sm font-bold text-accent shrink-0">{service.price}</span>
-            )}
+            <div className="flex items-center gap-1">
+              {service.isFeatured && <Sparkles className="h-4 w-4 text-amber-400" aria-label="Featured listing" />}
+              {service.isPinnedToProfile && <Pin className="h-4 w-4 text-primary" aria-label="Pinned to profile" />}
+              {service.price && <span className="text-sm font-bold text-accent shrink-0">{service.price}</span>}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild><button data-testid={`button-listing-more-${service.id}`} aria-label={`More options for ${service.title}`} className="p-1.5 rounded-lg text-muted-foreground hover:bg-white/10 hover:text-foreground"><MoreVertical className="h-4 w-4" /></button></DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="min-w-48 bg-[#1d202c] border-white/10 text-foreground">
+                  {isMyService ? <>
+                    <DropdownMenuItem onSelect={() => { setDraft({ title: service.title, description: service.description, category: service.category, price: service.price ?? "", contactInfo: service.contactInfo }); setDialog("edit"); }}><Pencil className="h-4 w-4 mr-2" />Edit listing</DropdownMenuItem>
+                    <DropdownMenuItem disabled={busy} onSelect={() => pinService.mutate({ serviceId: service.id }, { onSuccess: () => { refresh(); toast({ title: service.isPinnedToProfile ? "Removed from profile" : "Pinned to profile" }); }, onError: failed })}><Pin className="h-4 w-4 mr-2" />{service.isPinnedToProfile ? "Unpin from Profile" : "Pin to Profile"}</DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setDialog("delete")} className="text-rose-400"><Trash2 className="h-4 w-4 mr-2" />Delete listing</DropdownMenuItem>
+                  </> : <>
+                    <DropdownMenuItem disabled={busy} onSelect={() => { if (!requireAccount()) return; saveService.mutate({ serviceId: service.id }, { onSuccess: () => { refresh(); toast({ title: service.isSavedByMe ? "Removed from saved listings" : "Listing saved" }); }, onError: failed }); }}><Bookmark className="h-4 w-4 mr-2" />{service.isSavedByMe ? "Unsave listing" : "Save listing"}</DropdownMenuItem>
+                    <DropdownMenuItem onSelect={copyLink}><Link2 className="h-4 w-4 mr-2" />Copy direct link</DropdownMenuItem>
+                    <DropdownMenuItem onSelect={hideListing}><EyeOff className="h-4 w-4 mr-2" />Hide listing</DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => { if (requireAccount()) setDialog("report"); }}><Flag className="h-4 w-4 mr-2" />Report listing</DropdownMenuItem>
+                  </>}
+                  {canModerate && <>
+                    <DropdownMenuSeparator className="bg-white/10" />
+                    <DropdownMenuItem disabled={busy} onSelect={() => featureService.mutate({ serviceId: service.id }, { onSuccess: () => { refresh(); toast({ title: service.isFeatured ? "Listing unfeatured" : "Listing featured" }); }, onError: failed })}><Sparkles className="h-4 w-4 mr-2" />{service.isFeatured ? "Unfeature Listing" : "Feature Listing"}</DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setDialog("delete")} className="text-rose-400 focus:text-rose-400"><Trash2 className="h-4 w-4 mr-2" />Delete Listing (Admin)</DropdownMenuItem>
+                  </>}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           </div>
 
           {/* Title */}
@@ -202,7 +270,7 @@ export function ServiceCard({ service, index = 0, currentUserId }: ServiceCardPr
               Check the item fully before paying.
             </p>
             <div className="bg-orange-500/10 border border-orange-500/30 rounded-xl px-4 py-3 text-xs text-orange-300 leading-relaxed">
-              🛡️ CampusX does not process payments. If anyone asks you to pay online before meeting, it is a scam.
+                  CampusX does not process payments. If anyone asks you to pay online before meeting, it is a scam.
             </div>
           </div>
           <div className="px-5 pb-5">
@@ -213,6 +281,31 @@ export function ServiceCard({ service, index = 0, currentUserId }: ServiceCardPr
               I Understand — Contact Seller
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={dialog === "edit"} onOpenChange={(open) => !open && setDialog(null)}>
+        <DialogContent className="glass border-white/10 sm:max-w-lg max-h-[90dvh] overflow-y-auto">
+          <DialogTitle>Edit listing</DialogTitle>
+          <form className="space-y-4" onSubmit={(e) => { e.preventDefault(); updateService.mutate({ serviceId: service.id, data: { ...draft, price: draft.price || null } }, { onSuccess: () => { setDialog(null); refresh(); toast({ title: "Listing updated" }); }, onError: failed }); }}>
+            {(["title", "category", "price", "contactInfo"] as const).map((key) => <label key={key} className="block text-sm font-medium capitalize">{key === "contactInfo" ? "WhatsApp number" : key}<Input data-testid={`input-listing-${key}-${service.id}`} className="mt-1.5 bg-background/50 border-white/10" value={draft[key]} onChange={(e) => setDraft({ ...draft, [key]: e.target.value })} required={key !== "price"} minLength={key === "title" ? 3 : undefined} /></label>)}
+            <label className="block text-sm font-medium">Description<Textarea data-testid={`input-listing-description-${service.id}`} className="mt-1.5 bg-background/50 border-white/10" value={draft.description} onChange={(e) => setDraft({ ...draft, description: e.target.value })} required minLength={10} /></label>
+            <Button type="submit" className="w-full gradient-btn" disabled={busy}>{updateService.isPending ? "Saving…" : "Save changes"}</Button>
+          </form>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={dialog === "delete"} onOpenChange={(open) => !open && setDialog(null)}>
+        <DialogContent className="glass border-rose-500/20 sm:max-w-sm">
+          <DialogTitle>Delete this listing?</DialogTitle>
+          <p className="text-sm text-muted-foreground">“{service.title}” will be permanently removed. This cannot be undone.</p>
+          <div className="flex justify-end gap-2"><Button variant="outline" onClick={() => setDialog(null)}>Cancel</Button><Button data-testid={`button-confirm-delete-listing-${service.id}`} disabled={busy} className="bg-rose-600 hover:bg-rose-500 text-white" onClick={() => deleteService.mutate({ serviceId: service.id }, { onSuccess: () => { setDialog(null); refresh(); toast({ title: "Listing deleted" }); }, onError: failed })}>{deleteService.isPending ? "Deleting…" : "Delete listing"}</Button></div>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={dialog === "report"} onOpenChange={(open) => !open && setDialog(null)}>
+        <DialogContent className="glass border-white/10 sm:max-w-sm">
+          <DialogTitle>Report listing</DialogTitle>
+          <p className="text-sm text-muted-foreground">Why should we review this listing?</p>
+          <div className="space-y-2">{(["Spam", "Harassment", "Fake Listing", "Inappropriate Content"] as ReportBodyReason[]).map((option) => <label key={option} className="flex items-center gap-3 rounded-xl p-3 border border-white/10 hover:border-primary/40 cursor-pointer text-sm"><input type="radio" name={`listing-report-${service.id}`} checked={reason === option} onChange={() => setReason(option)} className="accent-primary" />{option}</label>)}</div>
+          <Button data-testid={`button-submit-report-${service.id}`} disabled={busy} onClick={() => reportService.mutate({ serviceId: service.id, data: { reason } }, { onSuccess: () => { setDialog(null); toast({ title: "Report submitted" }); }, onError: failed })}>{reportService.isPending ? "Submitting…" : "Submit report"}</Button>
         </DialogContent>
       </Dialog>
     </>

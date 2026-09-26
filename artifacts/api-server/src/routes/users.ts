@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 import { eq, desc, and, ne, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { clerkClient, getAuth } from "@clerk/express";
-import { db, usersTable, postsTable, postLikesTable, postNoCapsTable, postCommentsTable, servicesTable } from "@workspace/db";
+import { db, usersTable, postsTable, postLikesTable, postNoCapsTable, postCommentsTable, servicesTable, savedPostsTable, savedServicesTable } from "@workspace/db";
 import { publicEmbeddedPost } from "../lib/post-privacy";
 import { loadPublicPolls } from "../lib/polls";
 import { requireAuth } from "../middlewares/auth";
@@ -463,6 +463,7 @@ router.get("/users/:userId/posts", async (req, res): Promise<void> => {
       originalPostId: postsTable.originalPostId,
       isPinnedToProfile: postsTable.isPinnedToProfile,
       isPinnedToFeed: postsTable.isPinnedToFeed,
+      isFeaturedTrending: postsTable.isFeaturedTrending,
       createdAt: postsTable.createdAt,
       authorName: usersTable.fullName,
       authorFaculty: usersTable.faculty,
@@ -502,13 +503,16 @@ router.get("/users/:userId/posts", async (req, res): Promise<void> => {
     posts.map(async (post) => {
       let isLikedByMe = false;
       let isNoCapByMe = false;
+      let isSavedByMe = false;
       if (clerkUserId) {
-        const [likes, nocaps] = await Promise.all([
+        const [likes, nocaps, saves] = await Promise.all([
           db.select().from(postLikesTable).where(and(eq(postLikesTable.postId, post.id), eq(postLikesTable.userId, clerkUserId))),
           db.select().from(postNoCapsTable).where(and(eq(postNoCapsTable.postId, post.id), eq(postNoCapsTable.userId, clerkUserId))),
+          db.select({ id: savedPostsTable.id }).from(savedPostsTable).where(and(eq(savedPostsTable.postId, post.id), eq(savedPostsTable.userId, clerkUserId))),
         ]);
         isLikedByMe = likes.length > 0;
         isNoCapByMe = nocaps.length > 0;
+        isSavedByMe = saves.length > 0;
       }
       const [{ commentsCount }] = await db
         .select({ commentsCount: sql<number>`count(*)::int` })
@@ -529,6 +533,7 @@ router.get("/users/:userId/posts", async (req, res): Promise<void> => {
       return {
         ...publicFields,
         isOwnedByMe: Boolean(clerkUserId && clerkUserId === post.authorId),
+        isSavedByMe,
         authorName: post.authorName ?? "Unknown",
         authorFaculty: post.authorFaculty ?? "Unknown",
         authorLevel: getEffectiveLevel(post.authorLevel, authorMatricNumber),
@@ -575,6 +580,7 @@ router.get("/users/:userId/services", async (req, res): Promise<void> => {
     return;
   }
 
+  const clerkUserId = getAuth(req).userId ?? undefined;
   const { userId } = params.data;
   const limit = Number(req.query.limit) || 50;
   const offset = Number(req.query.offset) || 0;
@@ -589,6 +595,8 @@ router.get("/users/:userId/services", async (req, res): Promise<void> => {
       price: servicesTable.price,
       contactInfo: servicesTable.contactInfo,
       isActive: servicesTable.isActive,
+      isFeatured: servicesTable.isFeatured,
+      isPinnedToProfile: servicesTable.isPinnedToProfile,
       createdAt: servicesTable.createdAt,
       providerName: usersTable.fullName,
       providerFaculty: usersTable.faculty,
@@ -602,7 +610,7 @@ router.get("/users/:userId/services", async (req, res): Promise<void> => {
     .from(servicesTable)
     .leftJoin(usersTable, eq(servicesTable.providerId, usersTable.clerkUserId))
     .where(and(eq(servicesTable.providerId, userId), eq(servicesTable.isActive, true)))
-    .orderBy(desc(servicesTable.createdAt))
+    .orderBy(desc(servicesTable.isPinnedToProfile), desc(servicesTable.createdAt))
     .limit(limit)
     .offset(offset);
 
@@ -615,8 +623,13 @@ router.get("/users/:userId/services", async (req, res): Promise<void> => {
     const { providerVerificationStatus, providerRole, providerMatricNumber, ...rest } = s;
     const role = providerRole ?? "student";
     const postCount = await getPostCount(s.providerId);
+    const isSavedByMe = clerkUserId
+      ? (await db.select({ id: savedServicesTable.id }).from(savedServicesTable)
+          .where(and(eq(savedServicesTable.serviceId, s.id), eq(savedServicesTable.userId, clerkUserId)))).length > 0
+      : false;
     return {
       ...rest,
+      isSavedByMe,
       providerName: s.providerName ?? "Unknown",
       providerFaculty: s.providerFaculty ?? "Unknown",
       providerLevel: getEffectiveLevel(s.providerLevel, providerMatricNumber),

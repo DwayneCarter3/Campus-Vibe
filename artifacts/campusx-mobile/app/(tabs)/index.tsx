@@ -12,10 +12,13 @@ import {
   KeyboardAvoidingView,
   ScrollView,
   ActivityIndicator,
+  Alert,
+  Clipboard,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
+import * as ExpoLinking from "expo-linking";
 import { formatDistanceToNow } from "date-fns";
 import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
@@ -28,6 +31,14 @@ import {
   useNoCapPost,
   useCreatePost,
   useVotePoll,
+  useGetMyProfile,
+  useUpdatePost,
+  useDeletePost,
+  useToggleSavePost,
+  useReportPost,
+  useToggleFeaturePost,
+  usePinPostToProfile,
+  getGetPostQueryKey,
   Post,
   Poll,
 } from "@workspace/api-client-react";
@@ -49,9 +60,18 @@ const CATEGORIES = [
 
 type FeedCategory = Post["category"];
 
-function PostCard({ post }: { post: Post }) {
+const hiddenPostIds = new Set<number>();
+const REPORT_REASONS = ["Spam", "Harassment", "Fake Listing", "Inappropriate Content"] as const;
+
+export function PostCard({ post, onHide }: { post: Post; onHide?: () => void }) {
   const colors = useColors();
   const queryClient = useQueryClient();
+  const router = useRouter();
+  const { data: profile } = useGetMyProfile();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
+  const [editedContent, setEditedContent] = useState(post.content);
   // Keep only the just-submitted result locally; normal feed refreshes should win.
   const [poll, setPoll] = useState<Poll | null>(null);
   const [selectedOptionId, setSelectedOptionId] = useState<number | null>(null);
@@ -82,6 +102,84 @@ function PostCard({ post }: { post: Post }) {
       },
     },
   });
+  const invalidatePostData = () => {
+    queryClient.invalidateQueries({ queryKey: getListPostsQueryKey() });
+    queryClient.invalidateQueries({ queryKey: getGetPostQueryKey(post.id) });
+  };
+  const updateMutation = useUpdatePost({
+    mutation: {
+      onSuccess: () => {
+        setEditOpen(false);
+        invalidatePostData();
+      },
+      onError: (error) => Alert.alert("Couldn't update post", error.message),
+    },
+  });
+  const deleteMutation = useDeletePost({
+    mutation: {
+      onSuccess: () => {
+        invalidatePostData();
+        setMenuOpen(false);
+      },
+      onError: (error) => Alert.alert("Couldn't delete post", error.message),
+    },
+  });
+  const saveMutation = useToggleSavePost({
+    mutation: {
+      onSuccess: () => invalidatePostData(),
+      onError: (error) => Alert.alert("Couldn't update saved posts", error.message),
+    },
+  });
+  const reportMutation = useReportPost({
+    mutation: {
+      onSuccess: () => {
+        setReportOpen(false);
+        Alert.alert("Report submitted", "Thank you for helping keep CampusX safe.");
+      },
+      onError: (error) => Alert.alert("Couldn't submit report", error.message),
+    },
+  });
+  const featureMutation = useToggleFeaturePost({
+    mutation: {
+      onSuccess: () => invalidatePostData(),
+      onError: (error) => Alert.alert("Couldn't update trending feature", error.message),
+    },
+  });
+  const pinMutation = usePinPostToProfile({
+    mutation: {
+      onSuccess: () => invalidatePostData(),
+      onError: (error) => Alert.alert("Couldn't update profile pin", error.message),
+    },
+  });
+  const isAdmin = profile?.isAdmin === true || profile?.role === "admin" || profile?.role === "ceo";
+
+  const confirmDelete = (adminDelete = false) => {
+    Alert.alert(
+      adminDelete ? "Delete Post (Admin)" : "Delete Post",
+      "This post will be permanently deleted.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: () => deleteMutation.mutate({ postId: post.id }),
+        },
+      ],
+    );
+  };
+
+  const copyPostLink = () => {
+    Clipboard.setString(ExpoLinking.createURL(`/post/${post.id}`));
+    setMenuOpen(false);
+    Alert.alert("Link copied", "Post link copied to clipboard.");
+  };
+
+  const hideForSession = () => {
+    hiddenPostIds.add(post.id);
+    setMenuOpen(false);
+    onHide?.();
+    queryClient.invalidateQueries({ queryKey: getListPostsQueryKey() });
+  };
 
   const handleFire = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -140,6 +238,14 @@ function PostCard({ post }: { post: Post }) {
             <Text style={[styles.timeText, { color: colors.mutedForeground }]}>{timeAgo}</Text>
           </View>
         </View>
+        <TouchableOpacity
+          accessibilityRole="button"
+          accessibilityLabel="Post options"
+          onPress={() => setMenuOpen(true)}
+          style={styles.optionsButton}
+        >
+          <Feather name="more-vertical" size={20} color={colors.mutedForeground} />
+        </TouchableOpacity>
       </View>
 
       <View style={{ alignSelf: "flex-start", borderColor: colors.primary + "55", backgroundColor: colors.primary + "16", borderWidth: 1, borderRadius: 20, paddingHorizontal: 9, paddingVertical: 3, marginTop: 8 }}>
@@ -259,8 +365,120 @@ function PostCard({ post }: { post: Post }) {
         </TouchableOpacity>
 
         <View style={styles.reactionSpacer} />
-        <Text style={[styles.timeTextSmall, { color: colors.mutedForeground }]}>LASU Ojo</Text>
+        <TouchableOpacity
+          accessibilityRole="button"
+          accessibilityLabel="Open post"
+          onPress={() => router.push(`/post/${post.id}`)}
+          style={styles.detailLink}
+        >
+          <Feather name="external-link" size={14} color={colors.mutedForeground} />
+          <Text style={[styles.timeTextSmall, { color: colors.mutedForeground }]}>Post</Text>
+        </TouchableOpacity>
       </View>
+
+      <Modal visible={menuOpen} transparent animationType="fade" onRequestClose={() => setMenuOpen(false)}>
+        <TouchableOpacity style={styles.menuBackdrop} activeOpacity={1} onPress={() => setMenuOpen(false)}>
+          <View style={[styles.menuSheet, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            {post.isOwnedByMe ? (
+              <>
+                <TouchableOpacity style={styles.menuItem} onPress={() => { setEditedContent(post.content); setMenuOpen(false); setEditOpen(true); }}>
+                  <Feather name="edit-2" size={18} color={colors.foreground} />
+                  <Text style={[styles.menuText, { color: colors.foreground }]}>Edit Post</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.menuItem} onPress={() => confirmDelete()}>
+                  <Feather name="trash-2" size={18} color={colors.destructive ?? "#ef4444"} />
+                  <Text style={[styles.menuText, { color: colors.destructive ?? "#ef4444" }]}>Delete Post</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.menuItem} onPress={() => { pinMutation.mutate({ postId: post.id }); setMenuOpen(false); }}>
+                  <Feather name="map-pin" size={18} color={colors.foreground} />
+                  <Text style={[styles.menuText, { color: colors.foreground }]}>{post.isPinnedToProfile ? "Unpin from Profile" : "Pin Profile"}</Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <>
+                <TouchableOpacity style={styles.menuItem} onPress={() => { saveMutation.mutate({ postId: post.id }); setMenuOpen(false); }}>
+                  <Feather name={post.isSavedByMe ? "bookmark" : "bookmark"} size={18} color={colors.foreground} />
+                  <Text style={[styles.menuText, { color: colors.foreground }]}>{post.isSavedByMe ? "Unsave Post" : "Save Post"}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.menuItem} onPress={copyPostLink}>
+                  <Feather name="link" size={18} color={colors.foreground} />
+                  <Text style={[styles.menuText, { color: colors.foreground }]}>Copy Link to Post</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.menuItem} onPress={hideForSession}>
+                  <Feather name="eye-off" size={18} color={colors.foreground} />
+                  <Text style={[styles.menuText, { color: colors.foreground }]}>Hide for session</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.menuItem} onPress={() => { setMenuOpen(false); setReportOpen(true); }}>
+                  <Feather name="flag" size={18} color={colors.foreground} />
+                  <Text style={[styles.menuText, { color: colors.foreground }]}>Report</Text>
+                </TouchableOpacity>
+              </>
+            )}
+            {isAdmin && (
+              <>
+                <View style={[styles.menuDivider, { backgroundColor: colors.border }]} />
+                <TouchableOpacity style={styles.menuItem} onPress={() => confirmDelete(true)}>
+                  <Feather name="trash-2" size={18} color={colors.destructive ?? "#ef4444"} />
+                  <Text style={[styles.menuText, { color: colors.destructive ?? "#ef4444" }]}>Delete Post (Admin)</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.menuItem} onPress={() => { featureMutation.mutate({ postId: post.id }); setMenuOpen(false); }}>
+                  <Feather name="trending-up" size={18} color={colors.foreground} />
+                  <Text style={[styles.menuText, { color: colors.foreground }]}>{post.isFeaturedTrending ? "Remove from Trending Gist" : "Feature on Trending Gist"}</Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      <Modal visible={editOpen} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setEditOpen(false)}>
+        <View style={[styles.editModal, { backgroundColor: colors.background }]}>
+          <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
+            <TouchableOpacity onPress={() => setEditOpen(false)} style={styles.modalHeaderBtn}>
+              <Text style={[styles.modalHeaderBtnText, { color: colors.mutedForeground }]}>Cancel</Text>
+            </TouchableOpacity>
+            <Text style={[styles.modalTitle, { color: colors.foreground }]}>Edit Post</Text>
+            <TouchableOpacity
+              disabled={updateMutation.isPending || !editedContent.trim()}
+              onPress={() => updateMutation.mutate({ postId: post.id, data: { content: editedContent.trim() } })}
+              style={[styles.postButton, { backgroundColor: editedContent.trim() && !updateMutation.isPending ? colors.primary : colors.muted }]}
+            >
+              {updateMutation.isPending ? <ActivityIndicator color="#fff" size="small" /> : <Text style={[styles.postButtonText, { color: editedContent.trim() ? "#fff" : colors.mutedForeground }]}>Save</Text>}
+            </TouchableOpacity>
+          </View>
+          <TextInput
+            value={editedContent}
+            onChangeText={setEditedContent}
+            multiline
+            maxLength={500}
+            placeholder="Edit your post"
+            placeholderTextColor={colors.mutedForeground}
+            style={[styles.editInput, { color: colors.foreground }]}
+          />
+        </View>
+      </Modal>
+
+      <Modal visible={reportOpen} transparent animationType="fade" onRequestClose={() => setReportOpen(false)}>
+        <View style={styles.menuBackdrop}>
+          <View style={[styles.menuSheet, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <Text style={[styles.reportTitle, { color: colors.foreground }]}>Report post</Text>
+            {REPORT_REASONS.map((reason) => (
+              <TouchableOpacity
+                key={reason}
+                disabled={reportMutation.isPending}
+                style={styles.menuItem}
+                onPress={() => reportMutation.mutate({ postId: post.id, data: { reason } })}
+              >
+                <Feather name="flag" size={17} color={colors.mutedForeground} />
+                <Text style={[styles.menuText, { color: colors.foreground }]}>{reason}</Text>
+              </TouchableOpacity>
+            ))}
+            <TouchableOpacity style={styles.reportCancel} onPress={() => setReportOpen(false)}>
+              <Text style={{ color: colors.primary, fontWeight: "600" }}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -476,10 +694,12 @@ export default function AmeboFeed() {
   const router = useRouter();
   const [composeOpen, setComposeOpen] = useState(false);
   const [activeCategory, setActiveCategory] = useState<FeedCategory | undefined>(undefined);
+  const [savedOnly, setSavedOnly] = useState(false);
+  const [, setHiddenRevision] = useState(0);
 
   const { data, isLoading, isError, refetch, isRefetching } = useListPosts(
-    { category: activeCategory },
-    { query: { queryKey: getListPostsQueryKey({ category: activeCategory }), refetchInterval: 10_000 } },
+    { ...(savedOnly ? { savedOnly: true } : { category: activeCategory }) },
+    { query: { queryKey: getListPostsQueryKey(savedOnly ? { savedOnly: true } : { category: activeCategory }), refetchInterval: 10_000 } },
   );
   const { data: notificationData } = useListNotifications(
     { limit: 50 },
@@ -490,7 +710,7 @@ export default function AmeboFeed() {
       },
     },
   );
-  const posts = data?.posts ?? [];
+  const posts = (data?.posts ?? []).filter((post) => !hiddenPostIds.has(post.id));
   const unreadNotifications = notificationData?.notifications?.filter((item) => !item.isRead).length ?? 0;
 
   const isWeb = Platform.OS === "web";
@@ -529,20 +749,28 @@ export default function AmeboFeed() {
       </View>
 
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0, borderBottomWidth: 1, borderBottomColor: colors.border }} contentContainerStyle={{ gap: 8, paddingHorizontal: 14, paddingVertical: 11 }}>
+        <TouchableOpacity
+          accessibilityRole="button"
+          accessibilityState={{ selected: savedOnly }}
+          onPress={() => { setSavedOnly((value) => !value); setActiveCategory(undefined); }}
+          style={{ borderWidth: 1, borderColor: savedOnly ? colors.primary : colors.border, backgroundColor: savedOnly ? colors.primary + "20" : colors.surface, borderRadius: 16, paddingHorizontal: 12, paddingVertical: 8 }}
+        >
+          <Text style={{ color: savedOnly ? colors.primary : colors.mutedForeground, fontSize: 12, fontWeight: "600" }}>Saved</Text>
+        </TouchableOpacity>
         {CATEGORIES.map((item) => (
           <TouchableOpacity
             key={item.label}
             accessibilityRole="button"
             accessibilityState={{ selected: activeCategory === item.value }}
-            onPress={() => setActiveCategory(item.value)}
-            style={{ borderWidth: 1, borderColor: activeCategory === item.value ? colors.primary : colors.border, backgroundColor: activeCategory === item.value ? colors.primary + "20" : colors.surface, borderRadius: 16, paddingHorizontal: 12, paddingVertical: 8 }}
+            onPress={() => { setActiveCategory(item.value); setSavedOnly(false); }}
+            style={{ borderWidth: 1, borderColor: !savedOnly && activeCategory === item.value ? colors.primary : colors.border, backgroundColor: !savedOnly && activeCategory === item.value ? colors.primary + "20" : colors.surface, borderRadius: 16, paddingHorizontal: 12, paddingVertical: 8 }}
           >
-            <Text style={{ color: activeCategory === item.value ? colors.primary : colors.mutedForeground, fontSize: 12, fontWeight: "600" }}>{item.emoji} {item.label}</Text>
+            <Text style={{ color: !savedOnly && activeCategory === item.value ? colors.primary : colors.mutedForeground, fontSize: 12, fontWeight: "600" }}>{item.emoji} {item.label}</Text>
           </TouchableOpacity>
         ))}
       </ScrollView>
       <Text style={{ color: colors.foreground, fontSize: 15, fontWeight: "700", paddingHorizontal: 16, paddingTop: 12, paddingBottom: 4 }}>
-        {activeCategory ? activeCategory === "Amebo Hot" ? "Amebo Hot Posts" : `${activeCategory} Gist` : "Campus Gist"}
+        {savedOnly ? "Saved Posts" : activeCategory ? activeCategory === "Amebo Hot" ? "Amebo Hot Posts" : `${activeCategory} Gist` : "Campus Gist"}
       </Text>
 
       {isLoading ? (
@@ -559,10 +787,10 @@ export default function AmeboFeed() {
         </View>
       ) : (
         <FlatList
-          key={activeCategory ?? "all"}
+          key={savedOnly ? "saved" : activeCategory ?? "all"}
           data={posts}
           keyExtractor={(item) => String(item.id)}
-          renderItem={({ item }) => <PostCard post={item} />}
+          renderItem={({ item }) => <PostCard post={item} onHide={() => setHiddenRevision((revision) => revision + 1)} />}
           contentContainerStyle={[styles.listContent, { paddingBottom: 100 + bottomPad }]}
           showsVerticalScrollIndicator={false}
           refreshControl={
@@ -576,8 +804,8 @@ export default function AmeboFeed() {
           ListEmptyComponent={
             <View style={styles.emptyState}>
               <Feather name="radio" size={40} color={colors.border} />
-               <Text style={[styles.emptyTitle, { color: colors.foreground }]}>{activeCategory ? "No posts in this category yet. Be the first to share an update!" : "No gist yet"}</Text>
-               {!activeCategory && <Text style={[styles.emptySub, { color: colors.mutedForeground }]}>Be the first to drop something on the feed</Text>}
+                <Text style={[styles.emptyTitle, { color: colors.foreground }]}>{savedOnly ? "No saved posts yet" : activeCategory ? "No posts in this category yet. Be the first to share an update!" : "No gist yet"}</Text>
+                {!activeCategory && !savedOnly && <Text style={[styles.emptySub, { color: colors.mutedForeground }]}>Be the first to drop something on the feed</Text>}
             </View>
           }
         />
@@ -616,6 +844,17 @@ const styles = StyleSheet.create({
   centered: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12 },
   card: { borderRadius: 16, borderWidth: 1, padding: 16, overflow: "hidden" },
   cardHeader: { flexDirection: "row", alignItems: "flex-start", gap: 12 },
+  optionsButton: { width: 34, height: 34, alignItems: "center", justifyContent: "center", marginTop: -6, marginRight: -6 },
+  detailLink: { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 8, paddingVertical: 5 },
+  menuBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.45)", justifyContent: "center", padding: 24 },
+  menuSheet: { borderRadius: 18, borderWidth: 1, paddingVertical: 8, overflow: "hidden" },
+  menuItem: { minHeight: 48, flexDirection: "row", alignItems: "center", gap: 13, paddingHorizontal: 18 },
+  menuText: { fontSize: 15, fontWeight: "500", flex: 1 },
+  menuDivider: { height: 1, marginVertical: 4, marginHorizontal: 16 },
+  reportTitle: { fontSize: 17, fontWeight: "700", paddingHorizontal: 18, paddingTop: 12, paddingBottom: 8 },
+  reportCancel: { minHeight: 46, alignItems: "center", justifyContent: "center", borderTopWidth: 1, borderTopColor: "rgba(128,128,128,0.2)", marginTop: 4 },
+  editModal: { flex: 1 },
+  editInput: { fontSize: 16, lineHeight: 24, minHeight: 140, padding: 18, textAlignVertical: "top" },
   avatar: { width: 42, height: 42, borderRadius: 21, alignItems: "center", justifyContent: "center" },
   avatarText: { fontSize: 18, fontWeight: "700" },
   authorInfo: { flex: 1 },

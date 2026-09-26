@@ -13,8 +13,13 @@ import {
   useListPosts,
   getListPostsQueryKey,
   useClaimAdmin,
+  useListAdminReports,
+  getListAdminReportsQueryKey,
+  useReviewAdminReport,
+  useDeletePost,
+  useDeleteService,
 } from "@workspace/api-client-react";
-import type { AdminUserItem, PendingVerificationItem } from "@workspace/api-client-react";
+import type { AdminUserItem, PendingVerificationItem, ReportItem } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useUser } from "@clerk/react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -29,14 +34,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Shield, Users, CheckCircle, Crown, Search, ShieldCheck, Lock, FileText } from "lucide-react";
+import { Users, CheckCircle, Crown, Search, ShieldCheck, Lock, FileText, Flag, Trash2 } from "lucide-react";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { motion } from "framer-motion";
 import { PostCard } from "@/components/post-card";
 import { cn } from "@/lib/utils";
 import { useLocation } from "wouter";
 import { toast } from "@/hooks/use-toast";
 
-type AdminTab = "users" | "verifications" | "posts";
+type AdminTab = "users" | "verifications" | "posts" | "reports";
 
 const CEO_EMAIL = "dwaynecartergabriel@gmail.com";
 
@@ -44,6 +50,7 @@ export default function AdminPage() {
   const [, setLocation] = useLocation();
   const [activeTab, setActiveTab] = useState<AdminTab>("users");
   const [search, setSearch] = useState("");
+  const [deleteTarget, setDeleteTarget] = useState<ReportItem | null>(null);
   const queryClient = useQueryClient();
   const { user: clerkUser } = useUser();
 
@@ -55,7 +62,40 @@ export default function AdminPage() {
   const isCEO = profile?.role === "ceo" || clerkEmail === CEO_EMAIL;
   const isAdminOrCEO = isCEO || profile?.role === "admin";
   const isModerator = profile?.role === "moderator";
-  const displayedTab = isModerator && !isAdminOrCEO ? "posts" : activeTab;
+  const displayedTab = isModerator && !isAdminOrCEO && activeTab !== "posts" ? "posts" : activeTab;
+  const { data: reportsData, isLoading: reportsLoading, isError: reportsError, refetch: refetchReports } = useListAdminReports({
+    query: { queryKey: getListAdminReportsQueryKey(), enabled: isAdminOrCEO, refetchOnMount: "always", refetchInterval: 15000 },
+  });
+  const reviewReport = useReviewAdminReport();
+  const deletePost = useDeletePost();
+  const deleteService = useDeleteService();
+  const pendingReports = reportsData?.reports.filter((report) => report.status === "pending") ?? [];
+  const review = (report: ReportItem, status: "dismissed" | "reviewed") => {
+    reviewReport.mutate({ reportId: report.id, data: { status } }, {
+      onSuccess: () => { queryClient.invalidateQueries({ queryKey: getListAdminReportsQueryKey() }); toast({ title: status === "dismissed" ? "Report dismissed" : "Report marked reviewed" }); },
+      onError: () => toast({ title: "Could not update report", variant: "destructive" }),
+    });
+  };
+  const removeReportedContent = async () => {
+    if (!deleteTarget) return;
+    try {
+      if (deleteTarget.postId != null) {
+        await deletePost.mutateAsync({ postId: deleteTarget.postId });
+        await queryClient.invalidateQueries({ queryKey: getListPostsQueryKey() });
+      } else if (deleteTarget.serviceId != null) {
+        await deleteService.mutateAsync({ serviceId: deleteTarget.serviceId });
+        await queryClient.invalidateQueries({ predicate: (q) => typeof q.queryKey[0] === "string" && (q.queryKey[0].startsWith("/api/services") || q.queryKey[0].includes("/services")) });
+      } else {
+        throw new Error("Missing target");
+      }
+      queryClient.invalidateQueries({ queryKey: getListAdminReportsQueryKey() });
+      toast({ title: "Content and associated reports removed" });
+      setDeleteTarget(null);
+    } catch {
+      queryClient.invalidateQueries({ queryKey: getListAdminReportsQueryKey() });
+      toast({ title: "Could not complete removal. Please check the report and try again.", variant: "destructive" });
+    }
+  };
 
   const { data: postsData, isLoading: postsLoading } = useListPosts(undefined, {
     query: {
@@ -187,6 +227,7 @@ export default function AdminPage() {
     ...(isAdminOrCEO ? [{ id: "users" as AdminTab, label: "All Users", icon: <Users className="h-4 w-4" /> }] : []),
     ...(isAdminOrCEO ? [{ id: "verifications" as AdminTab, label: "Pending Verifications", icon: <CheckCircle className="h-4 w-4" /> }] : []),
     { id: "posts", label: "Moderate Posts", icon: <FileText className="h-4 w-4" /> },
+    ...(isAdminOrCEO ? [{ id: "reports" as AdminTab, label: "Reports", icon: <Flag className="h-4 w-4" /> }] : []),
   ];
 
   return (
@@ -226,9 +267,28 @@ export default function AdminPage() {
                 {(pendingData?.users ?? []).length}
               </span>
             )}
+            {tab.id === "reports" && pendingReports.length > 0 && <span className="ml-1 min-w-5 h-5 px-1 rounded-full bg-rose-500 text-[10px] font-bold text-white flex items-center justify-center">{pendingReports.length}</span>}
           </button>
         ))}
       </div>
+      {isAdminOrCEO && displayedTab === "reports" && (
+        <section className="space-y-4">
+          <div className="flex items-end justify-between"><div><h2 className="text-lg font-bold">Pending reports</h2><p className="text-sm text-muted-foreground">Review flagged content without exposing private identities.</p></div><span className="text-xs text-muted-foreground">{pendingReports.length} awaiting review</span></div>
+          {reportsLoading && [1, 2, 3].map((i) => <Skeleton key={i} className="h-36 rounded-xl" />)}
+          {reportsError && <div className="glass border border-rose-500/20 rounded-xl p-6"><p className="text-sm">Could not load reports.</p><Button variant="outline" className="mt-3" onClick={() => refetchReports()}>Try again</Button></div>}
+          {!reportsLoading && !reportsError && pendingReports.length === 0 && <div className="glass rounded-2xl border border-white/10 py-16 text-center"><CheckCircle className="h-11 w-11 mx-auto mb-3 text-primary/60" /><p className="font-semibold">Queue is clear</p><p className="text-sm text-muted-foreground mt-1">New reports will appear here.</p></div>}
+          {pendingReports.map((report) => (
+            <article key={report.id} data-testid={`report-${report.id}`} className="glass rounded-2xl p-5 border border-white/10 space-y-4">
+              <div className="flex flex-wrap items-start justify-between gap-3"><div className="min-w-0"><div className="flex items-center gap-2"><Badge className="bg-rose-500/10 text-rose-300 border border-rose-500/20">{report.postId != null ? "Post" : "Listing"}</Badge><span className="text-xs text-muted-foreground">Report #{report.id}</span></div><h3 className="font-semibold mt-2 break-words line-clamp-2">{report.targetTitle || "Content unavailable"}</h3></div><time className="text-xs text-muted-foreground" dateTime={report.createdAt}>{new Date(report.createdAt).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })}</time></div>
+              <p className="text-sm"><span className="text-muted-foreground">Reason:</span> {report.reason}</p>
+              <div className="flex flex-wrap gap-2 border-t border-white/10 pt-4"><Button size="sm" variant="outline" disabled={reviewReport.isPending} onClick={() => review(report, "dismissed")}>Dismiss</Button><Button size="sm" variant="outline" disabled={reviewReport.isPending} onClick={() => review(report, "reviewed")}>Mark reviewed</Button><Button size="sm" className="bg-rose-600 hover:bg-rose-500 text-white" onClick={() => setDeleteTarget(report)}><Trash2 className="h-3.5 w-3.5 mr-1" />Delete {report.postId != null ? "post" : "listing"}</Button></div>
+            </article>
+          ))}
+        </section>
+      )}
+      <Dialog open={!!deleteTarget} onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}>
+        <DialogContent className="glass border-rose-500/20 sm:max-w-sm"><DialogTitle>Remove reported content?</DialogTitle><p className="text-sm text-muted-foreground">This permanently deletes the {deleteTarget?.postId != null ? "post" : "listing"} and its associated reports. This cannot be undone.</p><div className="flex gap-2 justify-end"><Button variant="outline" onClick={() => setDeleteTarget(null)}>Cancel</Button><Button data-testid="button-confirm-delete-reported" disabled={deletePost.isPending || deleteService.isPending} className="bg-rose-600 hover:bg-rose-500 text-white" onClick={removeReportedContent}>Delete content</Button></div></DialogContent>
+      </Dialog>
 
       {displayedTab === "posts" && (
         <div className="space-y-4">

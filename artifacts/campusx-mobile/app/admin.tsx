@@ -24,14 +24,20 @@ import {
   useApproveBadge,
   useRejectBadge,
   useSetUserVerification,
+  useListAdminReports,
+  getListAdminReportsQueryKey,
+  useReviewAdminReport,
+  useDeletePost,
+  useDeleteService,
+  getListServicesQueryKey,
 } from "@workspace/api-client-react";
-import type { AdminUserItem, PendingVerificationItem } from "@workspace/api-client-react";
+import type { AdminUserItem, PendingVerificationItem, ReportItem } from "@workspace/api-client-react";
 import { useColors } from "@/hooks/useColors";
 import { useUser } from "@clerk/expo";
 
 const CEO_EMAIL = "dwaynecartergabriel@gmail.com";
 
-type AdminTab = "verifications" | "users";
+type AdminTab = "verifications" | "users" | "reports";
 type UserRole = "student" | "moderator" | "admin" | "ceo";
 
 const ROLES: UserRole[] = ["student", "moderator", "admin", "ceo"];
@@ -80,10 +86,22 @@ export default function AdminScreen() {
     },
   });
 
+  const { data: reportsData, isLoading: reportsLoading } = useListAdminReports({
+    query: {
+      queryKey: getListAdminReportsQueryKey(),
+      enabled: isAdminOrCEO,
+      refetchOnMount: "always",
+      refetchInterval: 15000,
+    },
+  });
+
   const updateRole = useUpdateUserRole();
   const approveBadge = useApproveBadge();
   const rejectBadge = useRejectBadge();
   const setUserVerification = useSetUserVerification();
+  const reviewReport = useReviewAdminReport();
+  const deleteReportedPost = useDeletePost();
+  const deleteReportedService = useDeleteService();
 
   const handleRoleChange = (userId: string, currentRole: string) => {
     const currentIdx = ROLES.indexOf(currentRole as UserRole);
@@ -142,6 +160,47 @@ export default function AdminScreen() {
     });
   };
 
+  const invalidateReports = () => {
+    void queryClient.invalidateQueries({ queryKey: getListAdminReportsQueryKey() });
+    void queryClient.invalidateQueries({ queryKey: getListServicesQueryKey() });
+  };
+
+  const handleReviewReport = (reportId: number, status: "reviewed" | "dismissed") => {
+    reviewReport.mutate({ reportId, data: { status } }, {
+      onSuccess: invalidateReports,
+      onError: () => Alert.alert("Error", "Could not update the report. Try again."),
+    });
+  };
+
+  const handleDeleteReportedContent = (report: ReportItem) => {
+    const contentLabel = report.serviceId ? "listing" : "post";
+    Alert.alert(
+      `Delete ${contentLabel}`,
+      `Permanently delete "${report.targetTitle}"? This cannot be undone.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: () => {
+            const options = {
+              onSuccess: () => {
+                invalidateReports();
+                Alert.alert("Content deleted", `The reported ${contentLabel} was removed.`);
+              },
+              onError: () => Alert.alert("Error", `Could not delete this ${contentLabel}.`),
+            };
+            if (report.serviceId !== null) {
+              deleteReportedService.mutate({ serviceId: report.serviceId }, options);
+            } else if (report.postId !== null) {
+              deleteReportedPost.mutate({ postId: report.postId }, options);
+            }
+          },
+        },
+      ],
+    );
+  };
+
   if (profileLoading) {
     return (
       <View style={[styles.centered, { backgroundColor: colors.background }]}>
@@ -172,11 +231,13 @@ export default function AdminScreen() {
 
   const tabs: { id: AdminTab; label: string; icon: string }[] = [
     { id: "verifications", label: "Pending Badges", icon: "shield" },
+    { id: "reports", label: "Reports", icon: "flag" },
     ...(isAdminOrCEO ? [{ id: "users" as AdminTab, label: "All Users", icon: "users" }] : []),
   ];
 
   const pendingList = pendingData?.users ?? [];
   const usersList = usersData?.users ?? [];
+  const pendingReports = reportsData?.reports.filter((report) => report.status === "pending") ?? [];
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -220,6 +281,7 @@ export default function AdminScreen() {
                 {tab.id === "verifications" && pendingList.length > 0 && (
                   ` (${pendingList.length})`
                 )}
+                {tab.id === "reports" && pendingReports.length > 0 && ` (${pendingReports.length})`}
               </Text>
             </TouchableOpacity>
           ))}
@@ -290,6 +352,61 @@ export default function AdminScreen() {
                     <Feather name="x-circle" size={14} color="#F87171" />
                     <Text style={[styles.approveBtnText, { color: "#F87171" }]}>Reject</Text>
                   </TouchableOpacity>
+                </View>
+              ))
+            )}
+          </>
+        )}
+
+        {/* Pending reports */}
+        {activeTab === "reports" && (
+          <>
+            {reportsLoading ? (
+              <ActivityIndicator color={colors.primary} style={{ marginTop: 40 }} />
+            ) : pendingReports.length === 0 ? (
+              <View style={styles.emptyState}>
+                <Feather name="check-circle" size={48} color={colors.border} />
+                <Text style={[styles.emptyTitle, { color: colors.foreground }]}>No pending reports</Text>
+                <Text style={[styles.emptySub, { color: colors.mutedForeground }]}>Reported posts and listings will appear here.</Text>
+              </View>
+            ) : (
+              pendingReports.map((report: ReportItem) => (
+                <View key={report.id} style={[styles.reportCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                  <View style={styles.reportHeading}>
+                    <View style={[styles.reportType, { backgroundColor: colors.primary + "20" }]}>
+                      <Feather name={report.serviceId ? "shopping-bag" : "file-text"} size={13} color={colors.primary} />
+                      <Text style={[styles.reportTypeText, { color: colors.primary }]}>{report.serviceId ? "Listing" : "Post"}</Text>
+                    </View>
+                    <Text style={[styles.reportDate, { color: colors.mutedForeground }]}>{new Date(report.createdAt).toLocaleDateString()}</Text>
+                  </View>
+                  <Text style={[styles.reportTitle, { color: colors.foreground }]}>{report.targetTitle}</Text>
+                  <Text style={[styles.reportReason, { color: colors.mutedForeground }]}>Reason: {report.reason}</Text>
+                  <View style={[styles.reportActions, { borderTopColor: colors.border }]}>
+                    <TouchableOpacity
+                      onPress={() => handleDeleteReportedContent(report)}
+                      disabled={deleteReportedPost.isPending || deleteReportedService.isPending}
+                      style={[styles.reportAction, { borderColor: "#EF444440", backgroundColor: "#EF444420" }]}
+                    >
+                      <Feather name="trash-2" size={13} color="#EF4444" />
+                      <Text style={[styles.reportActionText, { color: "#EF4444" }]}>Delete content</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={() => handleReviewReport(report.id, "dismissed")}
+                      disabled={reviewReport.isPending}
+                      style={[styles.reportAction, { borderColor: colors.border }]}
+                    >
+                      <Feather name="x" size={13} color={colors.mutedForeground} />
+                      <Text style={[styles.reportActionText, { color: colors.mutedForeground }]}>Dismiss</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={() => handleReviewReport(report.id, "reviewed")}
+                      disabled={reviewReport.isPending}
+                      style={[styles.reportAction, { borderColor: "#10B98140", backgroundColor: "#10B98120" }]}
+                    >
+                      <Feather name="check" size={13} color="#10B981" />
+                      <Text style={[styles.reportActionText, { color: "#10B981" }]}>Reviewed</Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
               ))
             )}
@@ -407,6 +524,16 @@ const styles = StyleSheet.create({
   tab: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 12 },
   tabText: { fontSize: 13, fontWeight: "600" },
   card: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 12, borderRadius: 14, borderWidth: 1, padding: 14 },
+  reportCard: { borderRadius: 14, borderWidth: 1, padding: 14, gap: 9 },
+  reportHeading: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  reportType: { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 8, paddingVertical: 5, borderRadius: 8 },
+  reportTypeText: { fontSize: 11, fontWeight: "700" },
+  reportDate: { fontSize: 11 },
+  reportTitle: { fontSize: 15, fontWeight: "700" },
+  reportReason: { fontSize: 13 },
+  reportActions: { flexDirection: "row", flexWrap: "wrap", gap: 7, borderTopWidth: 1, paddingTop: 10, marginTop: 2 },
+  reportAction: { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 9, paddingVertical: 7, borderRadius: 9, borderWidth: 1 },
+  reportActionText: { fontSize: 11, fontWeight: "700" },
   userActions: { width: "100%", flexDirection: "row", flexWrap: "wrap", justifyContent: "flex-end", alignItems: "center", gap: 8 },
   cardAvatar: { width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center", borderWidth: 1.5, flexShrink: 0 },
   cardAvatarText: { fontSize: 18, fontWeight: "700" },

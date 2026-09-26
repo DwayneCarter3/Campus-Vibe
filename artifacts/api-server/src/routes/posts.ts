@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 import { getAuth } from "@clerk/express";
 import { eq, desc, and, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
-import { db, postsTable, postLikesTable, postNoCapsTable, postCommentsTable, usersTable, pollsTable, pollOptionsTable } from "@workspace/db";
+import { db, postsTable, postLikesTable, postNoCapsTable, postCommentsTable, usersTable, pollsTable, pollOptionsTable, savedPostsTable, reportsTable, uploadedMediaTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/auth";
 import { computeCampusTitle } from "./admin";
 import { isVerifiedAccount, publicVerificationStatus } from "../lib/verification";
@@ -10,13 +10,23 @@ import { getEffectiveLevel } from "../lib/academic-level";
 import { createNotification } from "../lib/notifications";
 import { publicPost } from "../lib/post-privacy";
 import { loadPublicPolls } from "../lib/polls";
+import { ObjectStorageService } from "../lib/objectStorage";
 import {
   ListPostsQueryParams,
   ListPostsResponse,
   CreatePostBody,
   GetPostParams,
   GetPostResponse,
+  UpdatePostParams,
+  UpdatePostBody,
+  UpdatePostResponse,
   DeletePostParams,
+  ToggleSavePostParams,
+  ToggleSavePostResponse,
+  ReportPostParams,
+  ReportPostBody,
+  ToggleFeaturePostParams,
+  ToggleFeaturePostResponse,
   LikePostParams,
   LikePostResponse,
   NoCapPostParams,
@@ -35,9 +45,98 @@ import {
 } from "@workspace/api-zod";
 
 const router: IRouter = Router();
+const objectStorageService = new ObjectStorageService();
 
 const originalPostAlias = alias(postsTable, "op");
 const originalUserAlias = alias(usersTable, "ou");
+
+function getAppObjectPath(rawUrl: string | null | undefined): string | null {
+  if (!rawUrl) return null;
+  try {
+    const normalized = objectStorageService.normalizeObjectEntityPath(rawUrl);
+    const path = normalized.startsWith("/api/storage/objects/")
+      ? normalized.slice("/api/storage".length)
+      : normalized;
+    if (!path.startsWith("/objects/")) return null;
+    if (path.includes("?") || path.includes("#") || path.split("/").some((part) => part === "." || part === "..")) {
+      return null;
+    }
+    return path;
+  } catch {
+    return null;
+  }
+}
+
+function hasMalformedPrivateObjectPath(rawUrl: string): boolean {
+  return (rawUrl.startsWith("/objects/") || rawUrl.startsWith("/api/storage/objects/"))
+    && getAppObjectPath(rawUrl) === null;
+}
+
+async function validateNewPostMediaOwnership(urls: Array<string | null | undefined>, uploaderId: string): Promise<string | null> {
+  const paths = new Set<string>();
+  for (const url of urls) {
+    if (!url) continue;
+    if (hasMalformedPrivateObjectPath(url)) {
+      return "Private media object paths must be valid /objects/ paths.";
+    }
+    const path = getAppObjectPath(url);
+    if (path) paths.add(path);
+  }
+  for (const objectPath of paths) {
+    const [ownedUpload] = await db
+      .select({ id: uploadedMediaTable.id })
+      .from(uploadedMediaTable)
+      .where(and(eq(uploadedMediaTable.objectPath, objectPath), eq(uploadedMediaTable.uploaderId, uploaderId)));
+    if (!ownedUpload) return "You can only attach private media uploaded by your account.";
+  }
+  return null;
+}
+
+async function cleanUnreferencedPostMedia(
+  urls: Array<string | null | undefined>,
+  deletedPostId: number,
+  postAuthorId: string,
+  logError: (context: Record<string, unknown>, message: string) => void,
+) {
+  const candidates = [...new Set(urls.map(getAppObjectPath).filter((path): path is string => path !== null))];
+  if (!candidates.length) return;
+
+  try {
+    const [remainingPosts, users, ownedUploads] = await Promise.all([
+      db.select({ imageUrl: postsTable.imageUrl, videoUrl: postsTable.videoUrl }).from(postsTable),
+      db.select({ avatarUrl: usersTable.avatarUrl }).from(usersTable),
+      db.select({ id: uploadedMediaTable.id, objectPath: uploadedMediaTable.objectPath })
+        .from(uploadedMediaTable)
+        .where(eq(uploadedMediaTable.uploaderId, postAuthorId)),
+    ]);
+    const ownedByPath = new Map(ownedUploads.map((upload) => [upload.objectPath, upload.id]));
+    const referencedPaths = new Set<string>();
+    for (const post of remainingPosts) {
+      const imagePath = getAppObjectPath(post.imageUrl);
+      const videoPath = getAppObjectPath(post.videoUrl);
+      if (imagePath) referencedPaths.add(imagePath);
+      if (videoPath) referencedPaths.add(videoPath);
+    }
+    for (const user of users) {
+      const avatarPath = getAppObjectPath(user.avatarUrl);
+      if (avatarPath) referencedPaths.add(avatarPath);
+    }
+
+    for (const path of candidates) {
+      const uploadId = ownedByPath.get(path);
+      if (uploadId === undefined || referencedPaths.has(path)) continue;
+      try {
+        const file = await objectStorageService.getObjectEntityFile(path);
+        await file.delete();
+        await db.delete(uploadedMediaTable).where(eq(uploadedMediaTable.id, uploadId));
+      } catch (error) {
+        logError({ err: error, postId: deletedPostId, objectPath: path }, "Failed to clean up unreferenced post media");
+      }
+    }
+  } catch (error) {
+    logError({ err: error, postId: deletedPostId }, "Failed to check post media references for cleanup");
+  }
+}
 
 async function getActorName(clerkUserId: string): Promise<string> {
   const [user] = await db
@@ -89,6 +188,7 @@ async function buildPostWithMeta(postId: number, clerkUserId?: string) {
       originalPostId: postsTable.originalPostId,
       isPinnedToProfile: postsTable.isPinnedToProfile,
       isPinnedToFeed: postsTable.isPinnedToFeed,
+      isFeaturedTrending: postsTable.isFeaturedTrending,
       createdAt: postsTable.createdAt,
       authorName: usersTable.fullName,
       authorFaculty: usersTable.faculty,
@@ -124,13 +224,16 @@ async function buildPostWithMeta(postId: number, clerkUserId?: string) {
 
   let isLikedByMe = false;
   let isNoCapByMe = false;
+  let isSavedByMe = false;
   if (clerkUserId) {
-    const [like, nocap] = await Promise.all([
+    const [like, nocap, saved] = await Promise.all([
       db.select().from(postLikesTable).where(and(eq(postLikesTable.postId, postId), eq(postLikesTable.userId, clerkUserId))),
       db.select().from(postNoCapsTable).where(and(eq(postNoCapsTable.postId, postId), eq(postNoCapsTable.userId, clerkUserId))),
+      db.select().from(savedPostsTable).where(and(eq(savedPostsTable.postId, postId), eq(savedPostsTable.userId, clerkUserId))),
     ]);
     isLikedByMe = like.length > 0;
     isNoCapByMe = nocap.length > 0;
+    isSavedByMe = saved.length > 0;
   }
 
   const role = post.authorRole ?? "student";
@@ -173,6 +276,8 @@ async function buildPostWithMeta(postId: number, clerkUserId?: string) {
     } : null,
     isPinnedToProfile: post.isPinnedToProfile ?? false,
     isPinnedToFeed: post.isPinnedToFeed ?? false,
+    isSavedByMe,
+    isFeaturedTrending: post.isFeaturedTrending ?? false,
     isLikedByMe,
     isNoCapByMe,
   };
@@ -183,7 +288,16 @@ async function buildPostWithMeta(postId: number, clerkUserId?: string) {
 }
 
 router.get("/posts", async (req, res): Promise<void> => {
-  const params = ListPostsQueryParams.safeParse(req.query);
+  const query: Record<string, unknown> = { ...req.query };
+  const savedOnly = query.savedOnly === "true";
+  if (query.savedOnly !== undefined) {
+    if (query.savedOnly !== "true" && query.savedOnly !== "false") {
+      res.status(400).json({ error: "savedOnly must be either true or false." });
+      return;
+    }
+    delete query.savedOnly;
+  }
+  const params = ListPostsQueryParams.safeParse(query);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
     return;
@@ -191,6 +305,17 @@ router.get("/posts", async (req, res): Promise<void> => {
 
   const { limit, offset, category } = params.data;
   const clerkUserId = getAuth(req).userId ?? undefined;
+  if (savedOnly && !clerkUserId) {
+    res.status(401).json({ error: "Sign in to view saved posts." });
+    return;
+  }
+
+  const filters = [
+    category ? eq(postsTable.category, category) : undefined,
+    savedOnly && clerkUserId
+      ? sql`exists (select 1 from saved_posts sp where sp.post_id = ${postsTable.id} and sp.user_id = ${clerkUserId})`
+      : undefined,
+  ];
 
   const posts = await db
     .select({
@@ -207,6 +332,7 @@ router.get("/posts", async (req, res): Promise<void> => {
       originalPostId: postsTable.originalPostId,
       isPinnedToProfile: postsTable.isPinnedToProfile,
       isPinnedToFeed: postsTable.isPinnedToFeed,
+      isFeaturedTrending: postsTable.isFeaturedTrending,
       createdAt: postsTable.createdAt,
       authorName: usersTable.fullName,
       authorFaculty: usersTable.faculty,
@@ -231,32 +357,35 @@ router.get("/posts", async (req, res): Promise<void> => {
     .leftJoin(usersTable, eq(postsTable.authorId, usersTable.clerkUserId))
     .leftJoin(originalPostAlias, eq(postsTable.originalPostId, originalPostAlias.id))
     .leftJoin(originalUserAlias, eq(originalPostAlias.authorId, originalUserAlias.clerkUserId))
-    .where(category ? eq(postsTable.category, category) : undefined)
-    .orderBy(desc(postsTable.isPinnedToFeed), desc(postsTable.createdAt))
+    .where(and(...filters))
+    .orderBy(desc(postsTable.isFeaturedTrending), desc(postsTable.isPinnedToFeed), desc(postsTable.createdAt))
     .limit(limit ?? 20)
     .offset(offset ?? 0);
 
   const [{ count }] = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(postsTable)
-    .where(category ? eq(postsTable.category, category) : undefined);
+    .where(and(...filters));
 
   const publicPolls = await loadPublicPolls(posts.map((post) => post.originalPostId ?? post.id), clerkUserId);
   const postsWithReactions = await Promise.all(
     posts.map(async (post) => {
       let isLikedByMe = false;
       let isNoCapByMe = false;
+      let isSavedByMe = false;
       const [{ commentsCount }] = await db
         .select({ commentsCount: sql<number>`count(*)::int` })
         .from(postCommentsTable)
         .where(eq(postCommentsTable.postId, post.id));
       if (clerkUserId) {
-        const [likes, nocaps] = await Promise.all([
+        const [likes, nocaps, saved] = await Promise.all([
           db.select().from(postLikesTable).where(and(eq(postLikesTable.postId, post.id), eq(postLikesTable.userId, clerkUserId))),
           db.select().from(postNoCapsTable).where(and(eq(postNoCapsTable.postId, post.id), eq(postNoCapsTable.userId, clerkUserId))),
+          db.select().from(savedPostsTable).where(and(eq(savedPostsTable.postId, post.id), eq(savedPostsTable.userId, clerkUserId))),
         ]);
         isLikedByMe = likes.length > 0;
         isNoCapByMe = nocaps.length > 0;
+        isSavedByMe = saved.length > 0;
       }
 
       const role = post.authorRole ?? "student";
@@ -299,6 +428,8 @@ router.get("/posts", async (req, res): Promise<void> => {
         } : null,
         isPinnedToProfile: post.isPinnedToProfile ?? false,
         isPinnedToFeed: post.isPinnedToFeed ?? false,
+        isSavedByMe,
+        isFeaturedTrending: post.isFeaturedTrending ?? false,
         isLikedByMe,
         isNoCapByMe,
       };
@@ -330,6 +461,17 @@ router.post("/posts", requireAuth, async (req, res): Promise<void> => {
     res.status(400).json({ error: "Enter a question and 2–4 different, nonempty poll options." });
     return;
   }
+  const mediaOwnershipError = await validateNewPostMediaOwnership(
+    [parsed.data.imageUrl, parsed.data.videoUrl],
+    userId,
+  );
+  if (mediaOwnershipError) {
+    const hasMalformedPath = [parsed.data.imageUrl, parsed.data.videoUrl]
+      .some((url) => url != null && hasMalformedPrivateObjectPath(url));
+    res.status(hasMalformedPath ? 400 : 403).json({ error: mediaOwnershipError });
+    return;
+  }
+
   const postId = await db.transaction(async (tx) => {
     const [post] = await tx.insert(postsTable).values({
       authorId: userId,
@@ -369,6 +511,43 @@ router.get("/posts/:postId", async (req, res): Promise<void> => {
   res.json(GetPostResponse.parse(result));
 });
 
+router.patch("/posts/:postId", requireAuth, async (req, res): Promise<void> => {
+  const userId = (req as any).userId as string;
+  const raw = Array.isArray(req.params.postId) ? req.params.postId[0] : req.params.postId;
+  const params = UpdatePostParams.safeParse({ postId: raw });
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+  const body = UpdatePostBody.safeParse(req.body);
+  if (!body.success) {
+    res.status(400).json({ error: body.error.message });
+    return;
+  }
+
+  const [post] = await db.select().from(postsTable).where(eq(postsTable.id, params.data.postId));
+  if (!post) {
+    res.status(404).json({ error: "Post not found" });
+    return;
+  }
+  if (post.authorId !== userId) {
+    res.status(403).json({ error: "Only the post author can edit this post." });
+    return;
+  }
+
+  if (!body.data.content.trim()) {
+    const [poll] = await db.select({ id: pollsTable.id }).from(pollsTable).where(eq(pollsTable.postId, post.id)).limit(1);
+    if (!post.imageUrl && !post.videoUrl && !poll) {
+      res.status(400).json({ error: "Post text cannot be empty unless the post has media or a poll." });
+      return;
+    }
+  }
+
+  await db.update(postsTable).set({ content: body.data.content }).where(eq(postsTable.id, post.id));
+  const updated = await buildPostWithMeta(post.id, userId);
+  res.json(UpdatePostResponse.parse(updated));
+});
+
 router.delete("/posts/:postId", requireAuth, async (req, res): Promise<void> => {
   const userId = (req as any).userId as string;
   const raw = Array.isArray(req.params.postId) ? req.params.postId[0] : req.params.postId;
@@ -397,8 +576,127 @@ router.delete("/posts/:postId", requireAuth, async (req, res): Promise<void> => 
     return;
   }
 
-  await db.delete(postsTable).where(eq(postsTable.id, params.data.postId));
+  const deleted = await db.transaction(async (tx) => {
+    const [removed] = await tx
+      .delete(postsTable)
+      .where(eq(postsTable.id, params.data.postId))
+      .returning({ id: postsTable.id, originalPostId: postsTable.originalPostId });
+    if (removed?.originalPostId != null) {
+      await tx
+        .update(postsTable)
+        .set({ reshareCount: sql`greatest(${postsTable.reshareCount} - 1, 0)` })
+        .where(eq(postsTable.id, removed.originalPostId));
+    }
+    return removed;
+  });
+  if (!deleted) {
+    res.status(404).json({ error: "Post not found" });
+    return;
+  }
+  await cleanUnreferencedPostMedia(
+    [post.imageUrl, post.videoUrl],
+    post.id,
+    post.authorId,
+    (context, message) => req.log.error(context, message),
+  );
   res.sendStatus(204);
+});
+
+router.post("/posts/:postId/save", requireAuth, async (req, res): Promise<void> => {
+  const userId = (req as any).userId as string;
+  const raw = Array.isArray(req.params.postId) ? req.params.postId[0] : req.params.postId;
+  const params = ToggleSavePostParams.safeParse({ postId: raw });
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+
+  const result = await db.transaction(async (tx) => {
+    const [post] = await tx.select({ id: postsTable.id }).from(postsTable).where(eq(postsTable.id, params.data.postId)).for("update");
+    if (!post) return { found: false, saved: false };
+    const [existing] = await tx
+      .select({ id: savedPostsTable.id })
+      .from(savedPostsTable)
+      .where(and(eq(savedPostsTable.postId, post.id), eq(savedPostsTable.userId, userId)));
+    if (existing) {
+      await tx.delete(savedPostsTable).where(eq(savedPostsTable.id, existing.id));
+      return { found: true, saved: false };
+    }
+
+    const [inserted] = await tx
+      .insert(savedPostsTable)
+      .values({ postId: post.id, userId })
+      .onConflictDoNothing()
+      .returning({ id: savedPostsTable.id });
+    return { found: true, saved: Boolean(inserted) };
+  });
+  if (!result.found) {
+    res.status(404).json({ error: "Post not found" });
+    return;
+  }
+  res.json(ToggleSavePostResponse.parse({ saved: result.saved }));
+});
+
+router.post("/posts/:postId/report", requireAuth, async (req, res): Promise<void> => {
+  const userId = (req as any).userId as string;
+  const raw = Array.isArray(req.params.postId) ? req.params.postId[0] : req.params.postId;
+  const params = ReportPostParams.safeParse({ postId: raw });
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+  const body = ReportPostBody.safeParse(req.body);
+  if (!body.success) {
+    res.status(400).json({ error: body.error.message });
+    return;
+  }
+  const [post] = await db.select({ id: postsTable.id }).from(postsTable).where(eq(postsTable.id, params.data.postId));
+  if (!post) {
+    res.status(404).json({ error: "Post not found" });
+    return;
+  }
+
+  const [reported] = await db
+    .insert(reportsTable)
+    .values({ postId: post.id, reporterId: userId, reason: body.data.reason, status: "pending" })
+    .onConflictDoNothing()
+    .returning({ id: reportsTable.id });
+  if (!reported) {
+    res.status(409).json({ error: "You have already reported this post." });
+    return;
+  }
+  res.status(201).json({ reported: true });
+});
+
+router.patch("/posts/:postId/feature", requireAuth, async (req, res): Promise<void> => {
+  const userId = (req as any).userId as string;
+  const raw = Array.isArray(req.params.postId) ? req.params.postId[0] : req.params.postId;
+  const params = ToggleFeaturePostParams.safeParse({ postId: raw });
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+
+  const [caller] = await db
+    .select({ role: usersTable.role, isAdmin: usersTable.isAdmin })
+    .from(usersTable)
+    .where(eq(usersTable.clerkUserId, userId));
+  if (!caller?.isAdmin && !["admin", "ceo"].includes(caller?.role ?? "")) {
+    res.status(403).json({ error: "Admin or CEO only." });
+    return;
+  }
+
+  const [post] = await db.select().from(postsTable).where(eq(postsTable.id, params.data.postId));
+  if (!post) {
+    res.status(404).json({ error: "Post not found" });
+    return;
+  }
+  const [updated] = await db
+    .update(postsTable)
+    .set({ isFeaturedTrending: !post.isFeaturedTrending })
+    .where(eq(postsTable.id, post.id))
+    .returning({ isFeaturedTrending: postsTable.isFeaturedTrending });
+  res.json(ToggleFeaturePostResponse.parse({ featured: updated.isFeaturedTrending }));
 });
 
 router.post("/posts/:postId/reshare", requireAuth, async (req, res): Promise<void> => {
