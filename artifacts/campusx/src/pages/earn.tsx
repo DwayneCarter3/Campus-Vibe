@@ -173,16 +173,11 @@ export default function EarnPage() {
   }, [services, search]);
   const searchQuery = search.trim();
 
-  const [columns, setColumns] = useState(1);
+  const [columns, setColumns] = useState(() => typeof window === "undefined" ? 1 : window.innerWidth >= 1280 ? 4 : window.innerWidth >= 1024 ? 3 : window.innerWidth >= 640 ? 2 : 1);
   useEffect(() => {
-    const grid = listingGridRef.current;
-    if (!grid) return;
-    const observer = new ResizeObserver(([entry]) => {
-      const width = entry.contentRect.width;
-      setColumns(width >= 980 ? 3 : width >= 580 ? 2 : 1);
-    });
-    observer.observe(grid);
-    return () => observer.disconnect();
+    const updateColumns = () => setColumns(window.innerWidth >= 1280 ? 4 : window.innerWidth >= 1024 ? 3 : window.innerWidth >= 640 ? 2 : 1);
+    window.addEventListener("resize", updateColumns);
+    return () => window.removeEventListener("resize", updateColumns);
   }, []);
   const virtualizer = useWindowVirtualizer({
     count: filtered.length + (hasNextPage && !searchQuery ? 1 : 0),

@@ -40,7 +40,7 @@ export function Navbar() {
             </div>
             <div
               aria-label="Main navigation links"
-              className="hidden md:flex min-w-0 flex-1 items-center gap-2 overflow-x-auto overscroll-x-contain whitespace-nowrap px-1"
+              className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto overscroll-x-contain whitespace-nowrap px-1"
               role="navigation"
               tabIndex={0}
             >
