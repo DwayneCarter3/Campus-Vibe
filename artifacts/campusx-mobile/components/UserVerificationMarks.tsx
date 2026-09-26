@@ -1,4 +1,5 @@
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet, View } from "react-native";
+import { Feather } from "@expo/vector-icons";
 import { VerificationBadge } from "@/components/VerificationBadge";
 
 export function UserVerificationMarks({ status }: { status?: string | null }) {
@@ -8,7 +9,9 @@ export function UserVerificationMarks({ status }: { status?: string | null }) {
 
   return (
     <View style={styles.marks}>
-      <Text style={styles.studentPill}>Student Verified</Text>
+      <View style={styles.studentPill} accessible accessibilityRole="image" accessibilityLabel="Verified student">
+        <Feather name="check" size={12} color="#4ADE80" />
+      </View>
       {status === "Student_Verified" && <VerificationBadge type="green" fontSize={15} />}
       {status === "Premium_Approved" && <VerificationBadge type="blue" fontSize={15} />}
     </View>
@@ -20,11 +23,10 @@ const styles = StyleSheet.create({
   studentPill: {
     borderWidth: 1,
     borderColor: "#22C55E",
-    color: "#4ADE80",
     borderRadius: 20,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    fontSize: 9,
-    fontWeight: "700",
+    width: 20,
+    height: 20,
+    alignItems: "center",
+    justifyContent: "center",
   },
 });

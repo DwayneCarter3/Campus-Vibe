@@ -1,5 +1,6 @@
 import { VerificationBadge } from "@/components/verification-badge";
 import { cn } from "@/lib/utils";
+import { Check } from "lucide-react";
 
 interface UserVerificationMarksProps {
   status: string | null | undefined;
@@ -13,8 +14,12 @@ export function UserVerificationMarks({ status, className }: UserVerificationMar
 
   return (
     <span className={cn("inline-flex items-center gap-1.5 shrink-0", className)}>
-      <span className="inline-flex items-center rounded-full border border-emerald-500/65 px-2 py-0.5 text-[10px] font-semibold leading-none text-emerald-400">
-        Student Verified
+      <span
+        role="img"
+        aria-label="Verified student"
+        className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-emerald-500/65 text-emerald-400"
+      >
+        <Check aria-hidden="true" className="h-3 w-3" strokeWidth={2.5} />
       </span>
       {status === "Student_Verified" && <VerificationBadge type="green" />}
       {status === "Premium_Approved" && <VerificationBadge type="blue" />}
