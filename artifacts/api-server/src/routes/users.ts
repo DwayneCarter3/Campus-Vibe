@@ -16,7 +16,7 @@ import {
   GetUserServicesResponse,
 } from "@workspace/api-zod";
 import { CEO_EMAIL, computeCampusTitle } from "./admin";
-import { isVerifiedAccount } from "../lib/verification";
+import { isPrivilegedRole, isVerifiedAccount, PENDING_VERIFICATION_STATUSES } from "../lib/verification";
 
 const opAlias = alias(postsTable, "op");
 const ouAlias = alias(usersTable, "ou");
@@ -40,10 +40,15 @@ async function getPostCount(clerkUserId: string): Promise<number> {
 async function expirePromoIfNeeded(user: typeof usersTable.$inferSelect): Promise<typeof usersTable.$inferSelect> {
   if (user.promoExpiresAt && user.promoExpiresAt < new Date()) {
     const roleKeepsVerification = user.role === "ceo" || user.role === "admin";
+    const status = roleKeepsVerification
+      ? "Premium_Approved"
+      : PENDING_VERIFICATION_STATUSES.includes(user.verificationStatus as typeof PENDING_VERIFICATION_STATUSES[number])
+        ? user.verificationStatus
+        : "none";
     const [updated] = await db
       .update(usersTable)
       .set({
-        verificationStatus: roleKeepsVerification ? "Premium_Approved" : "none",
+        verificationStatus: status,
         premiumBadgeDiscountPercent: 0,
         promoExpiresAt: null,
         hustlePromoExpiresAt: null,
@@ -52,7 +57,7 @@ async function expirePromoIfNeeded(user: typeof usersTable.$inferSelect): Promis
       .returning();
     return updated ?? {
       ...user,
-      verificationStatus: roleKeepsVerification ? "Premium_Approved" : "none",
+      verificationStatus: status,
       premiumBadgeDiscountPercent: 0,
       promoExpiresAt: null,
       hustlePromoExpiresAt: null,
@@ -220,7 +225,7 @@ router.put("/users/me", requireAuth, async (req, res): Promise<void> => {
       [user] = await db
         .update(usersTable)
         .set({
-          verificationStatus: "approved", // free Blue Tick
+          verificationStatus: isPrivilegedRole(user.role) ? "Premium_Approved" : "approved",
           premiumBadgeDiscountPercent: 100,
           promoExpiresAt,
           hustlePromoExpiresAt: promoExpiresAt,
@@ -256,11 +261,16 @@ router.put("/users/me", requireAuth, async (req, res): Promise<void> => {
     if (user.email.trim().toLowerCase() === CEO_EMAIL && user.role !== "ceo") {
       [user] = await db
         .update(usersTable)
-        .set({ role: "ceo", isAdmin: true })
+        .set({ role: "ceo", isAdmin: true, verificationStatus: "Premium_Approved" })
         .where(eq(usersTable.clerkUserId, userId))
         .returning();
     }
 
+    if (isPrivilegedRole(user.role) && user.verificationStatus !== "Premium_Approved") {
+      [user] = await db.update(usersTable)
+        .set({ verificationStatus: "Premium_Approved" })
+        .where(eq(usersTable.clerkUserId, userId)).returning();
+    }
     // Lazy expiry check on update too
     user = await expirePromoIfNeeded(user);
   }
@@ -290,6 +300,14 @@ router.post("/users/me/request-badge", requireAuth, async (req, res): Promise<vo
     return;
   }
 
+  if (isPrivilegedRole(user.role)) {
+    const verificationStatus = "Premium_Approved";
+    if (user.verificationStatus !== verificationStatus) {
+      await db.update(usersTable).set({ verificationStatus }).where(eq(usersTable.clerkUserId, userId));
+    }
+    res.json({ success: true, verificationStatus });
+    return;
+  }
   if (user.promoExpiresAt && user.promoExpiresAt < new Date()) {
     await db
       .update(usersTable)

@@ -168,7 +168,7 @@ export default function ProfileScreen() {
   const verificationStatus = (profile as any)?.verificationStatus ?? "none";
   const isVerified = verificationStatus === "approved" || verificationStatus === "Student_Verified";
   const isPremium = verificationStatus === "Premium_Approved";
-  const badgePending = verificationStatus === "pending_promo" || verificationStatus === "pending_paid" || verificationStatus === "Premium_Pending_Approval";
+  const badgePending = ["pending", "Student_Pending", "pending_promo", "pending_paid", "Premium_Pending_Approval"].includes(verificationStatus);
   const clerkEmail = clerkUser?.primaryEmailAddress?.emailAddress ?? "";
   const isAdmin = profile?.isAdmin;
   const isCEO = (profile as any)?.role === "ceo" || clerkEmail === CEO_EMAIL;
@@ -216,6 +216,11 @@ export default function ProfileScreen() {
             <Text style={[styles.profileName, { color: colors.foreground, marginBottom: 0 }]}>{displayName}</Text>
             {(isVerified || isPremium) && <VerificationBadge size="lg" fontSize={20} />}
           </View>
+          {isPremium && (
+            <View style={{ backgroundColor: "#2563EB22", borderColor: "#60A5FA70", borderWidth: 1, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 4, marginBottom: 6 }}>
+              <Text style={{ color: "#BFDBFE", fontSize: 11, fontWeight: "700" }}>Premium Blue Tick</Text>
+            </View>
+          )}
           {campusTitle && (
             <View style={[styles.titlePill, { backgroundColor: (titleColor ?? colors.primary) + "20", borderColor: (titleColor ?? colors.primary) + "40" }]}>
               {isCEO && <Feather name="award" size={10} color={titleColor ?? colors.primary} />}

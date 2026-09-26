@@ -211,6 +211,11 @@ export default function MyProfilePage() {
                     <VerificationBadge size="lg" />
                   )}
                 </h1>
+                {profile.verificationStatus === "Premium_Approved" && (
+                  <Badge className="text-[10px] bg-blue-500/20 text-blue-200 border border-blue-400/40">
+                    Premium Blue Tick
+                  </Badge>
+                )}
                 {profile.campusTitle && (
                   <CampusTitleBadge title={profile.campusTitle} role={profile.role ?? undefined} />
                 )}
@@ -324,7 +329,7 @@ export default function MyProfilePage() {
               <div className="min-w-0">
                 <p className="text-sm font-medium text-sky-200">Verified Student Badge</p>
                  <p className="text-[11px] text-muted-foreground">
-                  {["pending_promo", "pending_paid", "Premium_Pending_Approval"].includes(profile.verificationStatus)
+                   {["pending", "Student_Pending", "pending_promo", "pending_paid", "Premium_Pending_Approval"].includes(profile.verificationStatus)
                     ? "Your badge request is pending admin review."
                      : profile.promoExpiresAt
                        ? "Request your free blue verification badge while your launch perk is active."
@@ -352,7 +357,7 @@ export default function MyProfilePage() {
                 </Button>
               </div>
             )}
-            {["pending_promo", "pending_paid", "Premium_Pending_Approval"].includes(profile.verificationStatus) && (
+             {["pending", "Student_Pending", "pending_promo", "pending_paid", "Premium_Pending_Approval"].includes(profile.verificationStatus) && (
               <Badge className="shrink-0 text-[11px] bg-amber-500/15 text-amber-400 border border-amber-500/25">Pending</Badge>
             )}
           </div>

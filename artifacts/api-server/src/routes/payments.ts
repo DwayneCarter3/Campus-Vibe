@@ -8,6 +8,7 @@ import {
   usersTable,
 } from "@workspace/db";
 import { requireAuth } from "../middlewares/auth";
+import { isPrivilegedRole } from "../lib/verification";
 
 const router: IRouter = Router();
 
@@ -126,12 +127,12 @@ async function applySuccessfulPayment(
   if (payment.packageType === "student_verification") {
     await db
       .update(usersTable)
-      .set({ verificationStatus: "Student_Verified" })
+      .set({ verificationStatus: sql`case when ${usersTable.role} in ('ceo', 'admin') or ${usersTable.verificationStatus} = 'Premium_Approved' then 'Premium_Approved' else 'Student_Verified' end` })
       .where(eq(usersTable.clerkUserId, payment.clerkUserId));
   } else if (payment.packageType === "premium_blue_tick") {
     await db
       .update(usersTable)
-      .set({ verificationStatus: "Premium_Pending_Approval" })
+      .set({ verificationStatus: sql`case when ${usersTable.role} in ('ceo', 'admin') or ${usersTable.verificationStatus} = 'Premium_Approved' then 'Premium_Approved' else 'Premium_Pending_Approval' end` })
       .where(eq(usersTable.clerkUserId, payment.clerkUserId));
   } else if (payment.packageType === "marketplace_promotion") {
     await db
@@ -195,7 +196,7 @@ router.post("/payments/initialize", requireAuth, async (req, res): Promise<void>
     if (claim) {
       const update =
         benefit === "badge"
-          ? { verificationStatus: "approved" }
+          ? { verificationStatus: isPrivilegedRole(user.role) ? "Premium_Approved" : "approved" }
           : { hustlePromoExpiresAt: new Date(Date.now() + PROMO_DURATION_MS) };
       await db.update(usersTable).set(update).where(eq(usersTable.clerkUserId, userId));
       res.json({

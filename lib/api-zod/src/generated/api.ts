@@ -614,7 +614,7 @@ export const ClaimAdminResponse = zod.object({
 });
 
 /**
- * @summary List all users (CEO only)
+ * @summary List all users (admin/CEO)
  */
 export const listAdminUsersQueryLimitDefault = 50;
 export const listAdminUsersQueryOffsetDefault = 0;

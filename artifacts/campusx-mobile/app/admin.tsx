@@ -65,7 +65,8 @@ export default function AdminScreen() {
     {
       query: {
         queryKey: getListAdminUsersQueryKey({ search: search || undefined }),
-        enabled: isCEO,
+        enabled: isAdminOrCEO,
+        refetchOnMount: "always",
       },
     }
   );
@@ -74,6 +75,8 @@ export default function AdminScreen() {
     query: {
       queryKey: getListPendingVerificationsQueryKey(),
       enabled: isAdminOrCEO,
+      refetchOnMount: "always",
+      refetchInterval: 15000,
     },
   });
 
@@ -95,8 +98,10 @@ export default function AdminScreen() {
             updateRole.mutate(
               { userId, data: { role: role as any } },
               {
-                onSuccess: () =>
-                  queryClient.invalidateQueries({ queryKey: getListAdminUsersQueryKey() }),
+                onSuccess: () => {
+                  queryClient.invalidateQueries({ queryKey: getListAdminUsersQueryKey() });
+                  queryClient.invalidateQueries({ queryKey: getListPendingVerificationsQueryKey() });
+                },
                 onError: () =>
                   Alert.alert("Error", "Failed to update role. Try again."),
               }
@@ -108,72 +113,33 @@ export default function AdminScreen() {
   };
 
   const handleApprove = (userId: string, name: string) => {
-    Alert.alert(
-      "Approve Badge",
-      `Approve Verified Student badge for ${name}?`,
-      [
-        {
-          text: "Approve",
-          onPress: () =>
-            approveBadge.mutate(
-              { userId },
-              {
-                onSuccess: () => {
-                  queryClient.invalidateQueries({ queryKey: getListPendingVerificationsQueryKey() });
-                  Alert.alert("Done", `${name}'s badge has been approved! ✅`);
-                },
-                onError: () => Alert.alert("Error", "Failed to approve badge."),
-              }
-            ),
-        },
-        { text: "Cancel", style: "cancel" },
-      ]
-    );
+    approveBadge.mutate({ userId }, {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getListPendingVerificationsQueryKey() });
+        queryClient.invalidateQueries({ queryKey: getListAdminUsersQueryKey() });
+      },
+      onError: () => Alert.alert("Error", `Failed to approve ${name}'s badge.`),
+    });
   };
 
   const handleVerificationToggle = (userId: string, name: string, verified: boolean) => {
-    Alert.alert(
-      verified ? "Revoke Verification" : "Approve Verification",
-      `${verified ? "Revoke" : "Approve"} verification for ${name}?`,
-      [
-        {
-          text: verified ? "Revoke" : "Approve",
-          onPress: () =>
-            setUserVerification.mutate(
-              { userId, data: { verified: !verified } },
-              {
-                onSuccess: () => {
-                  queryClient.invalidateQueries({ queryKey: getListAdminUsersQueryKey() });
-                  queryClient.invalidateQueries({ queryKey: getListPendingVerificationsQueryKey() });
-                },
-                onError: () => Alert.alert("Error", "Could not update verification."),
-              },
-            ),
-        },
-        { text: "Cancel", style: "cancel" },
-      ],
-    );
+    setUserVerification.mutate({ userId, data: { verified: !verified } }, {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getListAdminUsersQueryKey() });
+        queryClient.invalidateQueries({ queryKey: getListPendingVerificationsQueryKey() });
+      },
+      onError: () => Alert.alert("Error", `Could not update ${name}'s verification.`),
+    });
   };
 
   const handleReject = (userId: string, name: string) => {
-    Alert.alert("Reject Verification", `Reject verification for ${name}?`, [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Reject",
-        style: "destructive",
-        onPress: () =>
-          rejectBadge.mutate(
-            { userId },
-            {
-              onSuccess: () => {
-                queryClient.invalidateQueries({ queryKey: getListPendingVerificationsQueryKey() });
-                queryClient.invalidateQueries({ queryKey: getListAdminUsersQueryKey() });
-              },
-              onError: () => Alert.alert("Error", "Could not reject verification."),
-            },
-          ),
+    rejectBadge.mutate({ userId }, {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getListPendingVerificationsQueryKey() });
+        queryClient.invalidateQueries({ queryKey: getListAdminUsersQueryKey() });
       },
-    ]);
+      onError: () => Alert.alert("Error", `Could not reject ${name}'s verification.`),
+    });
   };
 
   if (profileLoading) {
@@ -236,7 +202,7 @@ export default function AdminScreen() {
       </View>
 
       {/* Tabs */}
-      {isCEO && (
+      {isAdminOrCEO && (
         <View style={[styles.tabs, { borderBottomColor: colors.border }]}>
           {tabs.map((tab) => (
             <TouchableOpacity
@@ -330,7 +296,7 @@ export default function AdminScreen() {
           </>
         )}
 
-        {/* User Management (CEO only) */}
+        {/* User Management (role changes remain CEO only) */}
         {activeTab === "users" && isAdminOrCEO && (
           <>
             {/* Search */}
@@ -384,38 +350,40 @@ export default function AdminScreen() {
                       </View>
                     ) : null}
                   </View>
-                  <TouchableOpacity
-                    onPress={() => handleRoleChange(u.clerkUserId, u.role)}
-                    disabled={updateRole.isPending || !isCEO}
-                    style={[styles.roleBtn, {
-                      backgroundColor: (ROLE_COLORS[u.role as UserRole] ?? "#6B7280") + "20",
-                      borderColor: (ROLE_COLORS[u.role as UserRole] ?? "#6B7280") + "40",
-                    }]}
-                  >
-                    <Text style={[styles.roleBtnText, { color: ROLE_COLORS[u.role as UserRole] ?? "#6B7280" }]}>
-                      {u.role.charAt(0).toUpperCase() + u.role.slice(1)}
-                    </Text>
-                    <Feather name="chevron-down" size={11} color={ROLE_COLORS[u.role as UserRole] ?? "#6B7280"} />
-                  </TouchableOpacity>
-                  {(() => {
-                    const verified = ["approved", "Student_Verified", "Premium_Approved"].includes(u.verificationStatus);
-                    const protectedAccount = u.role === "admin" || u.role === "ceo";
-                    return (
-                      <TouchableOpacity
-                        onPress={() => handleVerificationToggle(u.clerkUserId, u.fullName, verified)}
-                        disabled={setUserVerification.isPending || protectedAccount}
-                        style={[styles.verifyBtn, {
-                          backgroundColor: protectedAccount ? "#F59E0B20" : verified ? "#EF444420" : "#10B98120",
-                          borderColor: protectedAccount ? "#F59E0B40" : verified ? "#EF444440" : "#10B98140",
-                        }]}
-                      >
-                        <Feather name={protectedAccount ? "shield" : verified ? "x-circle" : "check-circle"} size={12} color={protectedAccount ? "#FBBF24" : verified ? "#F87171" : "#34D399"} />
-                        <Text style={[styles.verifyBtnText, { color: protectedAccount ? "#FBBF24" : verified ? "#F87171" : "#34D399" }]}>
-                          {protectedAccount ? "Always Verified" : verified ? "Revoke Verification" : "Approve Verification"}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })()}
+                  <View style={styles.userActions}>
+                    <TouchableOpacity
+                      onPress={() => handleRoleChange(u.clerkUserId, u.role)}
+                      disabled={updateRole.isPending || !isCEO}
+                      style={[styles.roleBtn, {
+                        backgroundColor: (ROLE_COLORS[u.role as UserRole] ?? "#6B7280") + "20",
+                        borderColor: (ROLE_COLORS[u.role as UserRole] ?? "#6B7280") + "40",
+                      }]}
+                    >
+                      <Text style={[styles.roleBtnText, { color: ROLE_COLORS[u.role as UserRole] ?? "#6B7280" }]}>
+                        {u.role.charAt(0).toUpperCase() + u.role.slice(1)}
+                      </Text>
+                      <Feather name="chevron-down" size={11} color={ROLE_COLORS[u.role as UserRole] ?? "#6B7280"} />
+                    </TouchableOpacity>
+                    {(() => {
+                      const verified = ["approved", "Student_Verified", "Premium_Approved"].includes(u.verificationStatus);
+                      const protectedAccount = u.role === "admin" || u.role === "ceo";
+                      return (
+                        <TouchableOpacity
+                          onPress={() => handleVerificationToggle(u.clerkUserId, u.fullName, verified)}
+                          disabled={setUserVerification.isPending || protectedAccount}
+                          style={[styles.verifyBtn, {
+                            backgroundColor: protectedAccount ? "#F59E0B20" : verified ? "#EF444420" : "#10B98120",
+                            borderColor: protectedAccount ? "#F59E0B40" : verified ? "#EF444440" : "#10B98140",
+                          }]}
+                        >
+                          <Feather name={protectedAccount ? "shield" : verified ? "x-circle" : "check-circle"} size={12} color={protectedAccount ? "#FBBF24" : verified ? "#F87171" : "#34D399"} />
+                          <Text style={[styles.verifyBtnText, { color: protectedAccount ? "#FBBF24" : verified ? "#F87171" : "#34D399" }]}>
+                            {protectedAccount ? "Always Verified" : verified ? "Revoke Verification" : "Approve Verification"}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })()}
+                  </View>
                 </View>
               ))
             )}
@@ -438,7 +406,8 @@ const styles = StyleSheet.create({
   tabs: { flexDirection: "row", borderBottomWidth: 1, paddingHorizontal: 16 },
   tab: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 12 },
   tabText: { fontSize: 13, fontWeight: "600" },
-  card: { flexDirection: "row", alignItems: "center", gap: 12, borderRadius: 14, borderWidth: 1, padding: 14 },
+  card: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 12, borderRadius: 14, borderWidth: 1, padding: 14 },
+  userActions: { width: "100%", flexDirection: "row", flexWrap: "wrap", justifyContent: "flex-end", alignItems: "center", gap: 8 },
   cardAvatar: { width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center", borderWidth: 1.5, flexShrink: 0 },
   cardAvatarText: { fontSize: 18, fontWeight: "700" },
   cardName: { fontSize: 14, fontWeight: "700" },

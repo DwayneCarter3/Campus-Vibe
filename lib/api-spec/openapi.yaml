@@ -644,7 +644,7 @@ paths:
     get:
       tags: [admin]
       operationId: listAdminUsers
-      summary: List all users (CEO only)
+      summary: List all users (admin/CEO)
       parameters:
         - name: search
           in: query
@@ -668,7 +668,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ListAdminUsersResponse'
         '403':
-          description: CEO only.
+          description: Admin/CEO only.
         '401':
           description: Unauthorized.
 

@@ -2517,7 +2517,7 @@ export const useClaimAdmin = <
 };
 
 /**
- * @summary List all users (CEO only)
+ * @summary List all users (admin/CEO)
  */
 export const getListAdminUsersUrl = (params?: ListAdminUsersParams) => {
   const normalizedParams = new URLSearchParams();
@@ -2584,7 +2584,7 @@ export type ListAdminUsersQueryResult = NonNullable<
 export type ListAdminUsersQueryError = ErrorType<void>;
 
 /**
- * @summary List all users (CEO only)
+ * @summary List all users (admin/CEO)
  */
 
 export function useListAdminUsers<

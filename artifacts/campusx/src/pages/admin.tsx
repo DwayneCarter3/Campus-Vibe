@@ -31,6 +31,7 @@ import { motion } from "framer-motion";
 import { CampusTitleBadge } from "@/components/campus-title-badge";
 import { cn } from "@/lib/utils";
 import { useLocation } from "wouter";
+import { toast } from "@/hooks/use-toast";
 
 type AdminTab = "users" | "verifications";
 
@@ -56,7 +57,8 @@ export default function AdminPage() {
     {
       query: {
         queryKey: getListAdminUsersQueryKey({ search: search || undefined }),
-        enabled: isCEO,
+        enabled: isAdminOrCEO,
+        refetchOnMount: "always",
       },
     }
   );
@@ -65,6 +67,8 @@ export default function AdminPage() {
     query: {
       queryKey: getListPendingVerificationsQueryKey(),
       enabled: isAdminOrCEO,
+      refetchOnMount: "always",
+      refetchInterval: 15000,
     },
   });
 
@@ -98,7 +102,10 @@ export default function AdminPage() {
       {
         onSuccess: () => {
           queryClient.invalidateQueries({ queryKey: getListAdminUsersQueryKey() });
+          queryClient.invalidateQueries({ queryKey: getListPendingVerificationsQueryKey() });
+          queryClient.invalidateQueries({ queryKey: getGetMyProfileQueryKey() });
         },
+        onError: () => toast({ title: "Could not change the user's role", variant: "destructive" }),
       }
     );
   };
@@ -109,7 +116,10 @@ export default function AdminPage() {
       {
         onSuccess: () => {
           queryClient.invalidateQueries({ queryKey: getListPendingVerificationsQueryKey() });
+          queryClient.invalidateQueries({ queryKey: getListAdminUsersQueryKey() });
+          queryClient.invalidateQueries({ queryKey: getGetMyProfileQueryKey() });
         },
+        onError: () => toast({ title: "Could not approve verification", variant: "destructive" }),
       }
     );
   };
@@ -121,7 +131,9 @@ export default function AdminPage() {
         onSuccess: () => {
           queryClient.invalidateQueries({ queryKey: getListAdminUsersQueryKey() });
           queryClient.invalidateQueries({ queryKey: getListPendingVerificationsQueryKey() });
+          queryClient.invalidateQueries({ queryKey: getGetMyProfileQueryKey() });
         },
+        onError: () => toast({ title: "Could not update verification", variant: "destructive" }),
       },
     );
   };
@@ -133,7 +145,9 @@ export default function AdminPage() {
         onSuccess: () => {
           queryClient.invalidateQueries({ queryKey: getListAdminUsersQueryKey() });
           queryClient.invalidateQueries({ queryKey: getListPendingVerificationsQueryKey() });
+          queryClient.invalidateQueries({ queryKey: getGetMyProfileQueryKey() });
         },
+        onError: () => toast({ title: "Could not reject verification", variant: "destructive" }),
       },
     );
   };
@@ -216,7 +230,7 @@ export default function AdminPage() {
                   key={u.clerkUserId}
                   initial={{ opacity: 0, y: 6 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className="glass rounded-xl p-4 flex items-center gap-3 border border-white/5"
+                  className="glass rounded-xl p-4 flex flex-wrap items-center gap-3 border border-white/5"
                 >
                   <Avatar className="h-10 w-10 border border-white/10 shrink-0">
                     <AvatarImage src={u.avatarUrl ?? undefined} />
@@ -225,7 +239,7 @@ export default function AdminPage() {
                     </AvatarFallback>
                   </Avatar>
 
-                  <div className="flex-1 min-w-0">
+                  <div className="flex-1 min-w-[160px]">
                     <div className="flex items-center gap-1.5 flex-wrap">
                       <span className="font-semibold text-sm truncate">{u.fullName}</span>
                       <CampusTitleBadge title={u.campusTitle} role={u.role} />

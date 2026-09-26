@@ -106,6 +106,11 @@ export default function UserProfilePage() {
                   {profile.fullName}
                   {profile.isVerified && <VerificationBadge size="lg" />}
                 </h1>
+                {profile.verificationStatus === "Premium_Approved" && (
+                  <Badge className="text-[10px] bg-blue-500/20 text-blue-200 border border-blue-400/40">
+                    Premium Blue Tick
+                  </Badge>
+                )}
               </div>
 
               <div className="flex flex-wrap gap-2 mb-2">
