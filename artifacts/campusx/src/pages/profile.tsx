@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { lazy, Suspense, useState, useRef } from "react";
 import {
   useGetMyProfile,
   getGetMyProfileQueryKey,
@@ -29,14 +29,12 @@ import {
   GraduationCap,
   MapPin,
   Pencil,
-  ShieldCheck,
   FileText,
   Briefcase,
   Camera,
   Loader2,
   Star,
   Settings,
-  ScrollText,
   TrendingUp,
 } from "lucide-react";
 import { motion } from "framer-motion";
@@ -45,7 +43,8 @@ import { ServiceCard } from "@/components/service-card";
 import { UserVerificationMarks } from "@/components/user-verification-marks";
 import { AvatarModal } from "@/components/avatar-modal";
 import { cn } from "@/lib/utils";
-import { PRIVACY_POLICY, TERMS_OF_SERVICE } from "@/lib/legal";
+
+const SettingsLegalPanel = lazy(() => import("@/components/settings-legal-panel"));
 
 type Tab = "posts" | "hustles";
 
@@ -64,7 +63,7 @@ export default function MyProfilePage() {
   const [editLevel, setEditLevel] = useState<UpdateProfileBodyLevel>("");
   const [editAvatarUrl, setEditAvatarUrl] = useState("");
   const [isAvatarUploading, setIsAvatarUploading] = useState(false);
-  const [legalOpen, setLegalOpen] = useState<"privacy" | "terms" | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const avatarFileRef = useRef<HTMLInputElement>(null);
 
   const requestUploadUrl = useRequestUploadUrl();
@@ -395,20 +394,24 @@ export default function MyProfilePage() {
           </div>
         )}
 
-        <div className="rounded-2xl border border-white/10 bg-background/30 p-4">
-          <div className="flex items-center gap-2 mb-3">
-            <Settings className="h-4 w-4 text-muted-foreground" />
-            <p className="text-sm font-semibold">Settings & legal</p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Button variant="outline" size="sm" className="border-white/10 text-xs" onClick={() => setLegalOpen("privacy")}>
-              <ShieldCheck className="h-3.5 w-3.5 mr-1.5" /> Privacy Policy
-            </Button>
-            <Button variant="outline" size="sm" className="border-white/10 text-xs" onClick={() => setLegalOpen("terms")}>
-              <ScrollText className="h-3.5 w-3.5 mr-1.5" /> Terms of Service
-            </Button>
-          </div>
-        </div>
+        {settingsOpen ? (
+          <Suspense fallback={<div className="h-24 rounded-2xl border border-white/10 bg-background/30" />}>
+            <SettingsLegalPanel onClose={() => setSettingsOpen(false)} />
+          </Suspense>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setSettingsOpen(true)}
+            className="w-full rounded-2xl border border-white/10 bg-background/30 p-4 text-left transition-colors hover:bg-background/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            aria-label="Open Settings and legal"
+          >
+            <span className="flex items-center gap-2">
+              <Settings className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm font-semibold">Settings &amp; legal</span>
+            </span>
+            <span className="mt-1 block pl-6 text-xs text-muted-foreground">Privacy policy and terms of service</span>
+          </button>
+        )}
 
         {/* ── Tabs ───────────────────────────────────────── */}
         <div className="flex gap-1 p-1 glass rounded-xl border border-white/5">
@@ -619,18 +622,6 @@ export default function MyProfilePage() {
         name={profile.fullName}
       />
 
-      <Dialog open={legalOpen !== null} onOpenChange={(open) => !open && setLegalOpen(null)}>
-        <DialogContent className="max-w-2xl max-h-[85dvh] bg-card border-white/10">
-          <DialogHeader>
-            <DialogTitle>{legalOpen === "privacy" ? "Privacy Policy" : "Terms of Service"}</DialogTitle>
-          </DialogHeader>
-          <div className="max-h-[65dvh] overflow-y-auto rounded-xl bg-background/40 border border-white/5 p-4">
-            <pre className="whitespace-pre-wrap font-sans text-sm leading-6 text-muted-foreground">
-              {legalOpen === "privacy" ? PRIVACY_POLICY : TERMS_OF_SERVICE}
-            </pre>
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

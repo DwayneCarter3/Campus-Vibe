@@ -45,6 +45,7 @@ import { getPostCategoryMeta } from "@/components/post-categories";
 import { PollCard } from "@/components/poll-card";
 import { useToast } from "@/hooks/use-toast";
 import type { ReportBodyReason } from "@workspace/api-client-react";
+import { LazyBlurImage } from "@/components/lazy-blur-image";
 
 interface PostCardProps {
   post: Post;
@@ -182,7 +183,7 @@ export function PostCard({ post, isAdmin, isModerator, moderationMode = false, o
   const handleEdit = () => {
     const content = editText.trim();
     if (!content || content.length > 500 || updatePost.isPending) return;
-    updatePost.mutate({ postId: post.id, data: { content } }, {
+    updatePost.mutate({ postId: post.id, data: { content, imageUrl: post.imageUrl, blurDataUrl: post.blurDataUrl } }, {
       onSuccess: () => { setEditOpen(false); invalidatePost(); toast({ title: "Post updated" }); },
       onError: () => fail("Couldn't update post. Try again."),
     });
@@ -466,7 +467,7 @@ export function PostCard({ post, isAdmin, isModerator, moderationMode = false, o
                     </p>
                     {post.originalPost.imageUrl && (
                       <div className="mt-2 rounded-lg overflow-hidden border border-white/10">
-                        <img src={post.originalPost.imageUrl} alt="Original post" className="w-full h-auto object-cover max-h-[200px]" />
+                        <LazyBlurImage src={post.originalPost.imageUrl} alt="Original post" className="min-h-[72px] max-h-[200px] bg-black/20" imageClassName="max-h-[200px] object-cover" />
                       </div>
                     )}
                 </div>
@@ -481,9 +482,7 @@ export function PostCard({ post, isAdmin, isModerator, moderationMode = false, o
               {post.poll && <PollCard poll={post.poll} postId={post.id} authorId={post.authorId} />}
 
               {post.imageUrl && (
-                <div className="mt-3 rounded-xl overflow-hidden border border-white/10">
-                  <img src={post.imageUrl} alt="Post attachment" className="w-full h-auto object-cover max-h-[400px]" />
-                </div>
+                <LazyBlurImage src={post.imageUrl} blurDataUrl={post.blurDataUrl} alt="Post attachment" className="mt-3 min-h-[160px] max-h-[400px] rounded-xl border border-white/10 bg-black/20" imageClassName="max-h-[400px] object-cover" />
               )}
 
               {post.videoUrl && (

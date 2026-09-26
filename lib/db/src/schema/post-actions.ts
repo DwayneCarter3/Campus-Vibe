@@ -36,5 +36,17 @@ export const uploadedMediaTable = pgTable("uploaded_media", {
   id: serial("id").primaryKey(),
   objectPath: text("object_path").notNull().unique(),
   uploaderId: text("uploader_id").notNull(),
+  purpose: text("purpose"),
+  declaredContentType: text("declared_content_type"),
+  declaredSize: integer("declared_size"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, (table) => [
+  check("uploaded_media_purpose_check", sql`${table.purpose} IS NULL OR ${table.purpose} IN ('post-image', 'service-image')`),
+  check("uploaded_media_image_metadata_check", sql`${table.purpose} IS NULL OR (
+    ${table.declaredContentType} IS NOT NULL
+    AND
+    ${table.declaredContentType} = 'image/webp'
+    AND ${table.declaredSize} IS NOT NULL
+    AND ${table.declaredSize} BETWEEN 1 AND 81920
+  )`),
+]);

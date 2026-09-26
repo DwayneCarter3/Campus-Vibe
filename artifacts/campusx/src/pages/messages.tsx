@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { lazy, Suspense, useState, useEffect, useRef } from "react";
 import { useSearch } from "wouter";
 import {
   useListConversations,
@@ -23,8 +23,10 @@ import { Send, MessageCircle, ArrowLeft, BadgeCheck } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
+import type { WazobiaLanguage } from "@/components/wazobia-thread-ui";
 
 const WAZOBIA_ID = "system:wazobia";
+const WazobiaThreadUI = lazy(() => import("@/components/wazobia-thread-ui"));
 const languages = [
   { value: "english", label: "English", flag: "🇬🇧" },
   { value: "pidgin", label: "Pidgin", flag: "🇳🇬" },
@@ -32,7 +34,6 @@ const languages = [
   { value: "hausa", label: "Hausa", flag: "🔴" },
   { value: "igbo", label: "Igbo", flag: "🔵" },
 ] as const;
-type WazobiaLanguage = (typeof languages)[number]["value"];
 
 function BotAvatar({ size = "h-10 w-10" }: { size?: string }) {
   return (
@@ -332,25 +333,19 @@ export default function MessagesPage() {
                 </div>
 
                 {isBotThread && (
-                  <div className="border-b border-white/5 px-4 py-3" data-testid="wazobia-language-bar">
-                    <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:flex-wrap sm:overflow-visible" role="group" aria-label="WAZOBIA reply language">
-                      {languages.map(({ value, label, flag }) => (
-                        <button
-                          key={value}
-                          type="button"
-                          data-testid={`button-language-${value}`}
-                          aria-pressed={language === value}
-                          onClick={() => chooseLanguage(value)}
-                          disabled={setWazobiaLanguage.isPending}
-                          className={cn("shrink-0 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary", language === value ? "border-primary/60 bg-primary/20 text-foreground" : "border-white/10 bg-white/5 text-muted-foreground hover:bg-white/10 hover:text-foreground")}
-                        >
-                          <span aria-hidden="true">{flag}</span> {label}
-                        </button>
-                      ))}
-                    </div>
-                    {languageLoading && <Skeleton className="mt-2 h-1 w-24 rounded-full" />}
-                    {(languageError || languageLoadError) && <p data-testid="status-language-error" role="alert" className="mt-2 text-xs text-destructive">{languageError || "Couldn't load your language preference."} {languageLoadError && <button data-testid="button-retry-language" className="underline" onClick={() => refetchLanguage()}>Retry</button>}</p>}
-                  </div>
+                  <Suspense fallback={<div className="h-14 border-b border-white/5" />}>
+                    <WazobiaThreadUI
+                      mode="language"
+                      languages={languages}
+                      language={language}
+                      onChooseLanguage={chooseLanguage}
+                      isSaving={setWazobiaLanguage.isPending}
+                      isLoading={languageLoading}
+                      error={languageError}
+                      loadError={languageLoadError}
+                      onRetry={() => refetchLanguage()}
+                    />
+                  </Suspense>
                 )}
 
                 {/* Messages */}
@@ -406,10 +401,9 @@ export default function MessagesPage() {
                     })}
                   </AnimatePresence>
                   {isBotThread && chatWithWazobia.isPending && (
-                    <div role="status" data-testid="status-wazobia-reply" className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <BotAvatar size="h-7 w-7" />
-                      <div className="rounded-2xl rounded-bl-md bg-white/10 px-4 py-2.5">WAZOBIA is thinking…</div>
-                    </div>
+                    <Suspense fallback={null}>
+                      <WazobiaThreadUI mode="pending" />
+                    </Suspense>
                   )}
                   <div ref={messagesEndRef} />
                 </div>

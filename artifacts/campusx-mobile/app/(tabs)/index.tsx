@@ -17,14 +17,17 @@ import {
   Clipboard,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Image as ExpoImage } from "expo-image";
+import * as ImagePicker from "expo-image-picker";
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import * as ExpoLinking from "expo-linking";
 import { formatDistanceToNow } from "date-fns";
-import { useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
+import { useAuth } from "@clerk/expo";
 import {
-  useListPosts,
+  listPosts,
   getListPostsQueryKey,
   useListNotifications,
   getListNotificationsQueryKey,
@@ -39,6 +42,7 @@ import {
   useReportPost,
   useToggleFeaturePost,
   usePinPostToProfile,
+  useRequestUploadUrl,
   getGetPostQueryKey,
   useGetShuttleStatus,
   getGetShuttleStatusQueryKey,
@@ -48,6 +52,7 @@ import {
 } from "@workspace/api-client-react";
 import { useColors } from "@/hooks/useColors";
 import { UserVerificationMarks } from "@/components/UserVerificationMarks";
+import { uploadCampusImage } from "@/lib/mediaUpload";
 
 const FACULTIES = [
   "Arts", "Science", "Law", "Social Sciences", "Education",
@@ -367,7 +372,13 @@ export function PostCard({ post, onHide }: { post: Post; onHide?: () => void }) 
       </View>
       {post.content ? <Text style={[styles.content, { color: colors.foreground }]}>{post.content}</Text> : null}
       {post.imageUrl ? (
-        <Image source={{ uri: mediaUri(post.imageUrl) }} style={[styles.postImage, { backgroundColor: colors.surface }]} resizeMode="cover" />
+        <ExpoImage
+          source={{ uri: mediaUri(post.imageUrl) }}
+          placeholder={post.blurDataUrl ? { uri: post.blurDataUrl } : undefined}
+          transition={180}
+          contentFit="cover"
+          style={[styles.postImage, { backgroundColor: colors.surface }]}
+        />
       ) : null}
       {post.originalPost && (
         <View style={[styles.reshareCard, { borderColor: colors.border, backgroundColor: colors.surface }]}>
@@ -392,7 +403,12 @@ export function PostCard({ post, onHide }: { post: Post; onHide?: () => void }) 
           </View>
           {post.originalPost.content ? <Text style={[styles.reshareContent, { color: colors.foreground }]}>{post.originalPost.content}</Text> : null}
           {post.originalPost.imageUrl ? (
-            <Image source={{ uri: mediaUri(post.originalPost.imageUrl) }} style={[styles.reshareImage, { backgroundColor: colors.card }]} resizeMode="cover" />
+            <ExpoImage
+              source={{ uri: mediaUri(post.originalPost.imageUrl) }}
+              transition={180}
+              contentFit="cover"
+              style={[styles.reshareImage, { backgroundColor: colors.card }]}
+            />
           ) : null}
         </View>
       )}
@@ -639,6 +655,9 @@ function ComposeModal({ visible, onClose, onPosted }: { visible: boolean; onClos
   const [isAnonymous, setIsAnonymous] = useState(true);
   const [showFacultyPicker, setShowFacultyPicker] = useState(false);
   const [selectedFaculty] = useState("LASU Ojo");
+  const [imageAsset, setImageAsset] = useState<ImagePicker.ImagePickerAsset | null>(null);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const requestUploadUrl = useRequestUploadUrl();
 
   const createPost = useCreatePost({
     mutation: {
@@ -652,6 +671,7 @@ function ComposeModal({ visible, onClose, onPosted }: { visible: boolean; onClos
         setPollOptions(["", ""]);
         setCategory("Amebo Hot");
         setIsAnonymous(true);
+        setImageAsset(null);
         onClose();
       },
       onError: () => {
@@ -668,16 +688,43 @@ function ComposeModal({ visible, onClose, onPosted }: { visible: boolean; onClos
     && new Set(trimmedPollOptions.map((option) => option.toLocaleLowerCase())).size === trimmedPollOptions.length;
   const canPost = pollEnabled ? pollIsValid : Boolean(content.trim());
 
-  const handlePost = () => {
-    if (!canPost) return;
-    createPost.mutate({
-      data: {
-        content: content.trim(),
-        category: category === "All" ? "Amebo Hot" : category,
-        isAnonymous,
-        ...(pollEnabled ? { poll: { question: pollQuestion.trim(), options: trimmedPollOptions } } : {}),
-      },
+  const pickImage = async () => {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert("Permission needed", "Allow photo library access to attach an image.");
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["images"],
+      allowsEditing: true,
+      quality: 1,
     });
+    if (!result.canceled && result.assets[0]) setImageAsset(result.assets[0]);
+  };
+
+  const handlePost = async () => {
+    if (!canPost) return;
+    setIsUploadingImage(true);
+    try {
+      const image = imageAsset
+        ? await uploadCampusImage(imageAsset, "post-image", (request) =>
+            requestUploadUrl.mutateAsync({ data: request }),
+          )
+        : null;
+      createPost.mutate({
+        data: {
+          content: content.trim(),
+          category: category === "All" ? "Amebo Hot" : category,
+          isAnonymous,
+          ...(image ? { imageUrl: image.imageUrl, blurDataUrl: image.blurDataUrl } : {}),
+          ...(pollEnabled ? { poll: { question: pollQuestion.trim(), options: trimmedPollOptions } } : {}),
+        },
+      });
+    } catch (error) {
+      Alert.alert("Image upload failed", error instanceof Error ? error.message : "Could not upload the image.");
+    } finally {
+      setIsUploadingImage(false);
+    }
   };
 
   return (
@@ -691,10 +738,10 @@ function ComposeModal({ visible, onClose, onPosted }: { visible: boolean; onClos
             <Text style={[styles.modalTitle, { color: colors.foreground }]}>Drop Gist 📢</Text>
             <TouchableOpacity
               onPress={handlePost}
-              disabled={!canPost || createPost.isPending}
-              style={[styles.postButton, { backgroundColor: canPost && !createPost.isPending ? colors.primary : colors.muted }]}
+              disabled={!canPost || createPost.isPending || isUploadingImage}
+              style={[styles.postButton, { backgroundColor: canPost && !createPost.isPending && !isUploadingImage ? colors.primary : colors.muted }]}
             >
-              {createPost.isPending ? (
+              {createPost.isPending || isUploadingImage ? (
                 <ActivityIndicator color="#fff" size="small" />
               ) : (
                 <Text style={[styles.postButtonText, { color: canPost ? "#fff" : colors.mutedForeground }]}>Post</Text>
@@ -727,6 +774,28 @@ function ComposeModal({ visible, onClose, onPosted }: { visible: boolean; onClos
               autoFocus
               maxLength={500}
             />
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 10, marginTop: 4 }}>
+              <TouchableOpacity
+                accessibilityRole="button"
+                accessibilityLabel="Attach an image"
+                onPress={() => void pickImage()}
+                style={[styles.createPollToggle, { borderColor: colors.border, backgroundColor: colors.surface }]}
+              >
+                <Feather name="image" size={17} color={colors.primary} />
+                <Text style={{ color: colors.primary, fontSize: 13, fontWeight: "600" }}>Add image</Text>
+              </TouchableOpacity>
+              {imageAsset ? (
+                <TouchableOpacity
+                  accessibilityRole="button"
+                  accessibilityLabel="Remove attached image"
+                  onPress={() => setImageAsset(null)}
+                  style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
+                >
+                  <ExpoImage source={{ uri: imageAsset.uri }} style={{ width: 42, height: 42, borderRadius: 8 }} contentFit="cover" />
+                  <Feather name="x-circle" size={19} color={colors.mutedForeground} />
+                </TouchableOpacity>
+              ) : null}
+            </View>
             <TouchableOpacity
               accessibilityRole="switch"
               accessibilityLabel="Create a poll"
@@ -836,15 +905,35 @@ export default function AmeboFeed() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { userId } = useAuth();
   const [composeOpen, setComposeOpen] = useState(false);
   const [activeCategory, setActiveCategory] = useState<FeedCategory | undefined>(undefined);
   const [savedOnly, setSavedOnly] = useState(false);
   const [, setHiddenRevision] = useState(0);
 
-  const { data, isLoading, isError, refetch, isRefetching } = useListPosts(
-    { ...(savedOnly ? { savedOnly: true } : { category: activeCategory }) },
-    { query: { queryKey: getListPostsQueryKey(savedOnly ? { savedOnly: true } : { category: activeCategory }), refetchInterval: 10_000 } },
-  );
+  const postParams = savedOnly ? { savedOnly: true } : { ...(activeCategory ? { category: activeCategory } : {}) };
+  const {
+    data,
+    isLoading,
+    isError,
+    refetch,
+    isRefetching,
+    hasNextPage,
+    fetchNextPage,
+    isFetchingNextPage,
+    isFetchNextPageError,
+  } = useInfiniteQuery({
+    queryKey: [getListPostsQueryKey()[0], postParams, userId, "infinite"],
+    enabled: !!userId,
+    initialPageParam: undefined as string | undefined,
+    queryFn: ({ pageParam }) => listPosts({
+      ...postParams,
+      limit: 10,
+      ...(pageParam ? { cursor: pageParam } : {}),
+    }),
+    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+    staleTime: 20_000,
+  });
   const { data: notificationData } = useListNotifications(
     { limit: 50 },
     {
@@ -854,7 +943,9 @@ export default function AmeboFeed() {
       },
     },
   );
-  const posts = (data?.posts ?? []).filter((post) => !hiddenPostIds.has(post.id));
+  const allPosts = data?.pages.flatMap((page) => page.posts) ?? [];
+  const posts = Array.from(new Map(allPosts.map((post) => [post.id, post])).values())
+    .filter((post) => !hiddenPostIds.has(post.id));
   const unreadNotifications = notificationData?.notifications?.filter((item) => !item.isRead).length ?? 0;
 
   const isWeb = Platform.OS === "web";
@@ -921,7 +1012,7 @@ export default function AmeboFeed() {
         <View style={styles.centered}>
           <ActivityIndicator color={colors.primary} size="large" />
         </View>
-      ) : isError ? (
+      ) : isError && !data ? (
         <View style={styles.centered}>
           <Feather name="wifi-off" size={40} color={colors.border} />
           <Text style={[styles.emptyTitle, { color: colors.foreground }]}>Couldn't load posts</Text>
@@ -946,6 +1037,21 @@ export default function AmeboFeed() {
               colors={[colors.primary]}
             />
           }
+          onEndReached={() => {
+            if (hasNextPage && !isFetchingNextPage) void fetchNextPage();
+          }}
+          onEndReachedThreshold={0.45}
+          ListFooterComponent={isFetchingNextPage ? (
+            <View style={{ paddingVertical: 18 }}><ActivityIndicator color={colors.primary} /></View>
+          ) : isFetchNextPageError ? (
+            <TouchableOpacity onPress={() => void fetchNextPage()} style={{ paddingVertical: 14, alignItems: "center" }}>
+              <Text style={{ color: colors.destructive ?? "#EF4444", fontWeight: "600" }}>Couldn't load more. Tap to retry.</Text>
+            </TouchableOpacity>
+          ) : hasNextPage ? (
+            <TouchableOpacity onPress={() => void fetchNextPage()} style={{ paddingVertical: 14, alignItems: "center" }}>
+              <Text style={{ color: colors.primary, fontWeight: "600" }}>Load more posts</Text>
+            </TouchableOpacity>
+          ) : null}
           ListEmptyComponent={
             <View style={styles.emptyState}>
               <Feather name="radio" size={40} color={colors.border} />
@@ -964,7 +1070,14 @@ export default function AmeboFeed() {
         <Feather name="plus" size={24} color="#fff" />
       </TouchableOpacity>
 
-      <ComposeModal visible={composeOpen} onClose={() => setComposeOpen(false)} onPosted={setActiveCategory} />
+      <ComposeModal
+        visible={composeOpen}
+        onClose={() => setComposeOpen(false)}
+        onPosted={(postedCategory) => {
+          setSavedOnly(false);
+          setActiveCategory(postedCategory);
+        }}
+      />
     </View>
   );
 }

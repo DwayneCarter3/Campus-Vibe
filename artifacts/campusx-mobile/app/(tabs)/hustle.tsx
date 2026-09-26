@@ -17,14 +17,16 @@ import {
   RefreshControl,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Image as ExpoImage } from "expo-image";
+import * as ImagePicker from "expo-image-picker";
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import * as ExpoLinking from "expo-linking";
-import { useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import { useAuth, useUser } from "@clerk/expo";
 import {
-  useListServices,
+  listServices,
   getListServicesQueryKey,
   useStartConversation,
   useCreateService,
@@ -36,12 +38,20 @@ import {
   useToggleFeatureService,
   usePinServiceToProfile,
   useGetMyProfile,
+  useRequestUploadUrl,
   Service,
 } from "@workspace/api-client-react";
 import { useColors } from "@/hooks/useColors";
 import { UserVerificationMarks } from "@/components/UserVerificationMarks";
+import { uploadCampusImage } from "@/lib/mediaUpload";
 
 const CATEGORIES = ["All", "Clothing", "Electronics", "Books", "Hostels/Accommodation", "Food & Pastries", "Services", "Others"];
+
+function mediaUri(path: string): string {
+  if (!path.startsWith("/") || Platform.OS === "web") return path;
+  const domain = process.env.EXPO_PUBLIC_DOMAIN;
+  return domain ? `https://${domain}${path}` : path;
+}
 
 const CATEGORY_ICONS: Record<string, string> = {
   All: "grid",
@@ -255,6 +265,15 @@ function ServiceCard({
           </TouchableOpacity>
         </View>
         <Text style={[styles.serviceTitle, { color: colors.foreground }]}>{service.title}</Text>
+        {service.imageUrl ? (
+          <ExpoImage
+            source={{ uri: mediaUri(service.imageUrl) }}
+            placeholder={service.blurDataUrl ? { uri: service.blurDataUrl } : undefined}
+            transition={180}
+            contentFit="cover"
+            style={[styles.serviceImage, { backgroundColor: colors.surface }]}
+          />
+        ) : null}
         <Text style={[styles.serviceDesc, { color: colors.mutedForeground }]} numberOfLines={2}>{service.description}</Text>
       </View>
 
@@ -442,7 +461,17 @@ function EditServiceModal({
   service: Service;
   pending: boolean;
   onClose: () => void;
-  onSave: (data: { title: string; description: string; category: string; price: string | null; contactInfo: string; isFlashSale: boolean; originalPrice: string | null }) => void;
+  onSave: (data: {
+    title: string;
+    description: string;
+    category: string;
+    price: string | null;
+    contactInfo: string;
+    isFlashSale: boolean;
+    originalPrice: string | null;
+    imageUrl?: string | null;
+    blurDataUrl?: string | null;
+  }) => void;
 }) {
   const colors = useColors();
   const [title, setTitle] = useState(service.title);
@@ -452,12 +481,55 @@ function EditServiceModal({
   const [isFlashSale, setIsFlashSale] = useState(service.isFlashSale ?? false);
   const [originalPrice, setOriginalPrice] = useState(service.originalPrice ?? "");
   const [contactInfo, setContactInfo] = useState(service.contactInfo);
+  const [imageAsset, setImageAsset] = useState<ImagePicker.ImagePickerAsset | null>(null);
+  const [removeImage, setRemoveImage] = useState(false);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const requestUploadUrl = useRequestUploadUrl();
   const priceAmount = numericPrice(price);
   const originalAmount = numericPrice(originalPrice);
   const flashSaleError = isFlashSale && (!priceAmount || !originalAmount || originalAmount <= (priceAmount ?? 0))
     ? "Enter numeric prices and make the original price higher than the sale price."
     : "";
   const isValid = !!title.trim() && !!description.trim() && !!contactInfo.trim() && !flashSaleError;
+  const pickImage = async () => {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert("Permission needed", "Allow photo library access to attach a listing image.");
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], allowsEditing: true, quality: 1 });
+    if (!result.canceled && result.assets[0]) {
+      setImageAsset(result.assets[0]);
+      setRemoveImage(false);
+    }
+  };
+  const saveListing = async () => {
+    let imageFields: { imageUrl?: string | null; blurDataUrl?: string | null } = {};
+    setIsUploadingImage(true);
+    try {
+      if (imageAsset) {
+        imageFields = await uploadCampusImage(imageAsset, "service-image", (request) =>
+          requestUploadUrl.mutateAsync({ data: request }),
+        );
+      } else if (removeImage) {
+        imageFields = { imageUrl: null, blurDataUrl: null };
+      }
+      onSave({
+        title: title.trim(),
+        description: description.trim(),
+        category,
+        price: price.trim() || null,
+        contactInfo: contactInfo.trim(),
+        isFlashSale,
+        originalPrice: isFlashSale ? originalPrice.trim() : null,
+        ...imageFields,
+      });
+    } catch (error) {
+      Alert.alert("Image upload failed", error instanceof Error ? error.message : "Could not upload the image.");
+    } finally {
+      setIsUploadingImage(false);
+    }
+  };
   return (
     <Modal visible animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
@@ -466,19 +538,11 @@ function EditServiceModal({
             <TouchableOpacity onPress={onClose}><Text style={[styles.cancelText, { color: colors.mutedForeground }]}>Cancel</Text></TouchableOpacity>
             <Text style={[styles.modalTitle, { color: colors.foreground }]}>Edit Listing</Text>
             <TouchableOpacity
-              onPress={() => onSave({
-                title: title.trim(),
-                description: description.trim(),
-                category,
-                price: price.trim() || null,
-                contactInfo: contactInfo.trim(),
-                isFlashSale,
-                originalPrice: isFlashSale ? originalPrice.trim() : null,
-              })}
-              disabled={!isValid || pending}
-              style={[styles.submitBtn, { backgroundColor: isValid && !pending ? colors.primary : colors.muted }]}
+              onPress={() => void saveListing()}
+              disabled={!isValid || pending || isUploadingImage}
+              style={[styles.submitBtn, { backgroundColor: isValid && !pending && !isUploadingImage ? colors.primary : colors.muted }]}
             >
-              {pending ? <ActivityIndicator color="#fff" size="small" /> : <Text style={[styles.submitBtnText, { color: isValid ? "#fff" : colors.mutedForeground }]}>Save</Text>}
+              {pending || isUploadingImage ? <ActivityIndicator color="#fff" size="small" /> : <Text style={[styles.submitBtnText, { color: isValid ? "#fff" : colors.mutedForeground }]}>Save</Text>}
             </TouchableOpacity>
           </View>
           <ScrollView style={styles.modalBody} keyboardShouldPersistTaps="handled">
@@ -489,6 +553,28 @@ function EditServiceModal({
             <View style={[styles.formGroup, { borderColor: colors.border }]}>
               <Text style={[styles.label, { color: colors.mutedForeground }]}>DESCRIPTION</Text>
               <TextInput style={[styles.input, styles.textArea, { color: colors.foreground }]} value={description} onChangeText={setDescription} multiline maxLength={300} />
+            </View>
+            <View style={[styles.formGroup, { borderColor: colors.border }]}>
+              <Text style={[styles.label, { color: colors.mutedForeground }]}>LISTING IMAGE</Text>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                {(imageAsset?.uri || (service.imageUrl && !removeImage)) ? (
+                  <ExpoImage
+                    source={{ uri: imageAsset?.uri ?? mediaUri(service.imageUrl!) }}
+                    placeholder={service.blurDataUrl ? { uri: service.blurDataUrl } : undefined}
+                    style={{ width: 56, height: 56, borderRadius: 9 }}
+                    contentFit="cover"
+                  />
+                ) : null}
+                <TouchableOpacity onPress={() => void pickImage()} style={[styles.categoryChip, { borderColor: colors.border }]}>
+                  <Feather name="image" size={14} color={colors.primary} />
+                  <Text style={[styles.chipText, { color: colors.primary }]}>{imageAsset ? "Change image" : "Choose image"}</Text>
+                </TouchableOpacity>
+                {(imageAsset || service.imageUrl) && !removeImage ? (
+                  <TouchableOpacity onPress={() => { setImageAsset(null); setRemoveImage(true); }} accessibilityLabel="Remove listing image">
+                    <Feather name="x-circle" size={20} color={colors.mutedForeground} />
+                  </TouchableOpacity>
+                ) : null}
+              </View>
             </View>
             <View style={[styles.formGroup, { borderColor: colors.border }]}>
               <Text style={[styles.label, { color: colors.mutedForeground }]}>CATEGORY</Text>
@@ -552,6 +638,9 @@ function AddServiceModal({ visible, onClose }: { visible: boolean; onClose: () =
   const [whatsapp, setWhatsapp] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("Services");
   const [showCategoryPicker, setShowCategoryPicker] = useState(false);
+  const [imageAsset, setImageAsset] = useState<ImagePicker.ImagePickerAsset | null>(null);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const requestUploadUrl = useRequestUploadUrl();
 
   const priceAmount = numericPrice(price);
   const originalAmount = numericPrice(originalPrice);
@@ -567,25 +656,49 @@ function AddServiceModal({ visible, onClose }: { visible: boolean; onClose: () =
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         setTitle(""); setDescription(""); setPrice(""); setOriginalPrice(""); setIsFlashSale(false); setWhatsapp("");
         setSelectedCategory("Services");
+        setImageAsset(null);
         onClose();
       },
       onError: () => Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error),
     },
   });
 
-  const handleSubmit = () => {
+  const pickImage = async () => {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert("Permission needed", "Allow photo library access to attach a listing image.");
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], allowsEditing: true, quality: 1 });
+    if (!result.canceled && result.assets[0]) setImageAsset(result.assets[0]);
+  };
+
+  const handleSubmit = async () => {
     if (!isValid) return;
-    createService.mutate({
-      data: {
-        title: title.trim(),
-        description: description.trim(),
-        category: selectedCategory,
-        price: price.trim() || undefined,
-        contactInfo: whatsapp.trim(),
-        isFlashSale,
-        originalPrice: isFlashSale ? originalPrice.trim() : null,
-      },
-    });
+    setIsUploadingImage(true);
+    try {
+      const image = imageAsset
+        ? await uploadCampusImage(imageAsset, "service-image", (request) =>
+            requestUploadUrl.mutateAsync({ data: request }),
+          )
+        : null;
+      createService.mutate({
+        data: {
+          title: title.trim(),
+          description: description.trim(),
+          category: selectedCategory,
+          price: price.trim() || undefined,
+          contactInfo: whatsapp.trim(),
+          isFlashSale,
+          originalPrice: isFlashSale ? originalPrice.trim() : null,
+          ...(image ? { imageUrl: image.imageUrl, blurDataUrl: image.blurDataUrl } : {}),
+        },
+      });
+    } catch (error) {
+      Alert.alert("Image upload failed", error instanceof Error ? error.message : "Could not upload the image.");
+    } finally {
+      setIsUploadingImage(false);
+    }
   };
 
   const serviceCategories = CATEGORIES.filter((c) => c !== "All");
@@ -601,10 +714,10 @@ function AddServiceModal({ visible, onClose }: { visible: boolean; onClose: () =
             <Text style={[styles.modalTitle, { color: colors.foreground }]}>List Your Hustle 💼</Text>
             <TouchableOpacity
               onPress={handleSubmit}
-              disabled={!isValid || createService.isPending}
-              style={[styles.submitBtn, { backgroundColor: isValid && !createService.isPending ? colors.primary : colors.muted }]}
+              disabled={!isValid || createService.isPending || isUploadingImage}
+              style={[styles.submitBtn, { backgroundColor: isValid && !createService.isPending && !isUploadingImage ? colors.primary : colors.muted }]}
             >
-              {createService.isPending ? (
+              {createService.isPending || isUploadingImage ? (
                 <ActivityIndicator color="#fff" size="small" />
               ) : (
                 <Text style={[styles.submitBtnText, { color: isValid ? "#fff" : colors.mutedForeground }]}>List It</Text>
@@ -622,6 +735,21 @@ function AddServiceModal({ visible, onClose }: { visible: boolean; onClose: () =
               <Text style={[styles.label, { color: colors.mutedForeground }]}>DESCRIPTION *</Text>
               <TextInput style={[styles.input, styles.textArea, { color: colors.foreground }]} value={description} onChangeText={setDescription} placeholder="Describe what you're offering..." placeholderTextColor={colors.mutedForeground} multiline maxLength={300} />
               <Text style={[styles.charHint, { color: colors.mutedForeground }]}>{description.length}/300</Text>
+            </View>
+            <View style={[styles.formGroup, { borderColor: colors.border }]}>
+              <Text style={[styles.label, { color: colors.mutedForeground }]}>LISTING IMAGE</Text>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                {imageAsset ? <ExpoImage source={{ uri: imageAsset.uri }} style={{ width: 56, height: 56, borderRadius: 9 }} contentFit="cover" /> : null}
+                <TouchableOpacity onPress={() => void pickImage()} style={[styles.categoryChip, { borderColor: colors.border }]}>
+                  <Feather name="image" size={14} color={colors.primary} />
+                  <Text style={[styles.chipText, { color: colors.primary }]}>{imageAsset ? "Change image" : "Choose image"}</Text>
+                </TouchableOpacity>
+                {imageAsset ? (
+                  <TouchableOpacity onPress={() => setImageAsset(null)} accessibilityLabel="Remove selected image">
+                    <Feather name="x-circle" size={20} color={colors.mutedForeground} />
+                  </TouchableOpacity>
+                ) : null}
+              </View>
             </View>
 
             <View style={styles.formRow}>
@@ -702,16 +830,34 @@ export default function HustleMarketplace() {
   const serviceParams = {
     ...(savedOnly ? { savedOnly: true } : {}),
     ...(flashSaleOnly ? { flashSale: true } : {}),
+    ...(activeCategory !== "All" ? { category: activeCategory } : {}),
   };
-  const queryParams = savedOnly || flashSaleOnly ? serviceParams : undefined;
-  const { data, isLoading, isError, refetch, isRefetching } = useListServices(queryParams, {
-    query: {
-      queryKey: getListServicesQueryKey(queryParams),
-      refetchInterval: 60_000,
-    },
+  const queryParams = Object.keys(serviceParams).length ? serviceParams : undefined;
+  const {
+    data,
+    isLoading,
+    isError,
+    refetch,
+    isRefetching,
+    hasNextPage,
+    fetchNextPage,
+    isFetchingNextPage,
+    isFetchNextPageError,
+  } = useInfiniteQuery({
+    queryKey: [getListServicesQueryKey()[0], queryParams, clerkUser?.id, "infinite"],
+    enabled: !!clerkUser?.id,
+    initialPageParam: undefined as string | undefined,
+    queryFn: ({ pageParam }) => listServices({
+      ...queryParams,
+      limit: 10,
+      ...(pageParam ? { cursor: pageParam } : {}),
+    }),
+    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+    staleTime: 30_000,
   });
-  const allServices = data?.services ?? [];
-  const filtered = allServices
+  const allServices = data?.pages.flatMap((page) => page.services) ?? [];
+  const dedupedServices = Array.from(new Map(allServices.map((service) => [service.id, service])).values());
+  const filtered = dedupedServices
     .filter((service) => !hiddenIds.includes(service.id))
     .filter((service) => !flashSaleOnly || (service.isFlashSale && service.flashExpiresAt && new Date(service.flashExpiresAt).getTime() > Date.now()))
     .filter((service) => activeCategory === "All" || service.category === activeCategory);
@@ -764,7 +910,7 @@ export default function HustleMarketplace() {
         <View style={styles.centered}>
           <ActivityIndicator color={colors.primary} size="large" />
         </View>
-      ) : isError ? (
+      ) : isError && !data ? (
         <View style={styles.centered}>
           <Feather name="wifi-off" size={40} color={colors.border} />
           <Text style={[styles.emptyTitle, { color: colors.foreground }]}>Couldn't load listings</Text>
@@ -774,6 +920,7 @@ export default function HustleMarketplace() {
         </View>
       ) : (
         <FlatList
+          key={`${savedOnly}-${flashSaleOnly}-${activeCategory}`}
           data={filtered}
           keyExtractor={(item) => String(item.id)}
           renderItem={({ item }) => (
@@ -793,6 +940,21 @@ export default function HustleMarketplace() {
               colors={[colors.primary]}
             />
           }
+          onEndReached={() => {
+            if (hasNextPage && !isFetchingNextPage) void fetchNextPage();
+          }}
+          onEndReachedThreshold={0.45}
+          ListFooterComponent={isFetchingNextPage ? (
+            <View style={{ paddingVertical: 18 }}><ActivityIndicator color={colors.primary} /></View>
+          ) : isFetchNextPageError ? (
+            <TouchableOpacity onPress={() => void fetchNextPage()} style={{ paddingVertical: 14, alignItems: "center" }}>
+              <Text style={{ color: colors.destructive ?? "#EF4444", fontWeight: "600" }}>Couldn't load more. Tap to retry.</Text>
+            </TouchableOpacity>
+          ) : hasNextPage ? (
+            <TouchableOpacity onPress={() => void fetchNextPage()} style={{ paddingVertical: 14, alignItems: "center" }}>
+              <Text style={{ color: colors.primary, fontWeight: "600" }}>Load more listings</Text>
+            </TouchableOpacity>
+          ) : null}
           ListEmptyComponent={
             <View style={styles.emptyState}>
               <Feather name="shopping-bag" size={40} color={colors.border} />
@@ -829,6 +991,7 @@ const styles = StyleSheet.create({
   centered: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12 },
   card: { borderRadius: 16, borderWidth: 1, overflow: "hidden" },
   cardTop: { padding: 16 },
+  serviceImage: { width: "100%", height: 190, borderRadius: 11, marginBottom: 10 },
   cardTitleRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8 },
   menuButton: { padding: 2 },
   categoryBadge: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },

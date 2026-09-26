@@ -309,6 +309,12 @@ export interface Post {
   category: PostCategory;
   /** @nullable */
   imageUrl: string | null;
+  /**
+   * @maxLength 10950
+   * @nullable
+   * @pattern ^data:image/webp;base64,[A-Za-z0-9+/]+={0,2}$
+   */
+  blurDataUrl: string | null;
   /** @nullable */
   videoUrl: string | null;
   likesCount: number;
@@ -330,6 +336,8 @@ export interface Post {
 export interface ListPostsResponse {
   posts: Post[];
   total: number;
+  /** @nullable */
+  nextCursor: string | null;
 }
 
 export type CreatePostBodyCategory =
@@ -360,6 +368,12 @@ export interface CreatePostBody {
   category?: CreatePostBodyCategory;
   /** @nullable */
   imageUrl?: string | null;
+  /**
+   * @maxLength 10950
+   * @nullable
+   * @pattern ^data:image/webp;base64,[A-Za-z0-9+/]+={0,2}$
+   */
+  blurDataUrl?: string | null;
   /** @nullable */
   videoUrl?: string | null;
   isAnonymous?: boolean;
@@ -369,6 +383,14 @@ export interface CreatePostBody {
 export interface UpdatePostBody {
   /** @maxLength 500 */
   content: string;
+  /** @nullable */
+  imageUrl?: string | null;
+  /**
+   * @maxLength 10950
+   * @nullable
+   * @pattern ^data:image/webp;base64,[A-Za-z0-9+/]+={0,2}$
+   */
+  blurDataUrl?: string | null;
 }
 
 export interface SaveResponse {
@@ -482,6 +504,14 @@ export interface Service {
   description: string;
   category: string;
   /** @nullable */
+  imageUrl: string | null;
+  /**
+   * @maxLength 10950
+   * @nullable
+   * @pattern ^data:image/webp;base64,[A-Za-z0-9+/]+={0,2}$
+   */
+  blurDataUrl: string | null;
+  /** @nullable */
   price: string | null;
   isFlashSale: boolean;
   /** @nullable */
@@ -499,12 +529,22 @@ export interface Service {
 export interface ListServicesResponse {
   services: Service[];
   total: number;
+  /** @nullable */
+  nextCursor: string | null;
 }
 
 export interface ServiceInput {
   title: string;
   description: string;
   category: string;
+  /** @nullable */
+  imageUrl?: string | null;
+  /**
+   * @maxLength 10950
+   * @nullable
+   * @pattern ^data:image/webp;base64,[A-Za-z0-9+/]+={0,2}$
+   */
+  blurDataUrl?: string | null;
   /** @nullable */
   price?: string | null;
   isFlashSale?: boolean;
@@ -523,6 +563,14 @@ export interface ServiceUpdate {
   /** @nullable */
   originalPrice?: string | null;
   contactInfo?: string;
+  /** @nullable */
+  imageUrl?: string | null;
+  /**
+   * @maxLength 10950
+   * @nullable
+   * @pattern ^data:image/webp;base64,[A-Za-z0-9+/]+={0,2}$
+   */
+  blurDataUrl?: string | null;
   isActive?: boolean;
 }
 
@@ -614,6 +662,14 @@ export interface AdminClaimResponse {
   message: string;
 }
 
+export type UploadUrlRequestPurpose =
+  (typeof UploadUrlRequestPurpose)[keyof typeof UploadUrlRequestPurpose];
+
+export const UploadUrlRequestPurpose = {
+  "post-image": "post-image",
+  "service-image": "service-image",
+} as const;
+
 export interface UploadUrlRequest {
   /** @minLength 1 */
   name: string;
@@ -621,6 +677,7 @@ export interface UploadUrlRequest {
   size: number;
   /** @minLength 1 */
   contentType: string;
+  purpose?: UploadUrlRequestPurpose;
 }
 
 export interface UploadUrlResponse {
@@ -859,7 +916,16 @@ export type GetUserServicesParams = {
 };
 
 export type ListPostsParams = {
+  /**
+   * @minimum 1
+   * @maximum 100
+   */
   limit?: number;
+  /**
+   * Opaque continuation cursor bound to the active filters.
+   * @maxLength 2048
+   */
+  cursor?: string;
   offset?: number;
   savedOnly?: boolean;
   /**
@@ -880,7 +946,16 @@ export const ListPostsCategory = {
 } as const;
 
 export type ListServicesParams = {
+  /**
+   * @minimum 1
+   * @maximum 100
+   */
   limit?: number;
+  /**
+   * Opaque continuation cursor bound to the active filters.
+   * @maxLength 2048
+   */
+  cursor?: string;
   offset?: number;
   savedOnly?: boolean;
   /**

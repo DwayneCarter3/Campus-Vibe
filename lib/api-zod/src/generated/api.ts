@@ -396,6 +396,12 @@ export const GetUserPostsQueryParams = zod.object({
   offset: zod.coerce.number().default(getUserPostsQueryOffsetDefault),
 });
 
+export const getUserPostsResponsePostsItemBlurDataUrlMax = 10950;
+
+export const getUserPostsResponsePostsItemBlurDataUrlRegExp = new RegExp(
+  "^data:image\/webp;base64,[A-Za-z0-9+\/]+={0,2}$",
+);
+
 export const GetUserPostsResponse = zod.object({
   posts: zod.array(
     zod.object({
@@ -439,6 +445,11 @@ export const GetUserPostsResponse = zod.object({
         "Amebo Hot",
       ]),
       imageUrl: zod.string().nullable(),
+      blurDataUrl: zod
+        .string()
+        .max(getUserPostsResponsePostsItemBlurDataUrlMax)
+        .regex(getUserPostsResponsePostsItemBlurDataUrlRegExp)
+        .nullable(),
       videoUrl: zod.string().nullable(),
       likesCount: zod.number(),
       isLikedByMe: zod.boolean(),
@@ -470,6 +481,7 @@ export const GetUserPostsResponse = zod.object({
     }),
   ),
   total: zod.number(),
+  nextCursor: zod.string().nullable(),
 });
 
 /**
@@ -486,6 +498,12 @@ export const GetUserServicesQueryParams = zod.object({
   limit: zod.coerce.number().default(getUserServicesQueryLimitDefault),
   offset: zod.coerce.number().default(getUserServicesQueryOffsetDefault),
 });
+
+export const getUserServicesResponseServicesItemBlurDataUrlMax = 10950;
+
+export const getUserServicesResponseServicesItemBlurDataUrlRegExp = new RegExp(
+  "^data:image\/webp;base64,[A-Za-z0-9+\/]+={0,2}$",
+);
 
 export const GetUserServicesResponse = zod.object({
   services: zod.array(
@@ -504,6 +522,12 @@ export const GetUserServicesResponse = zod.object({
       title: zod.string(),
       description: zod.string(),
       category: zod.string(),
+      imageUrl: zod.string().nullable(),
+      blurDataUrl: zod
+        .string()
+        .max(getUserServicesResponseServicesItemBlurDataUrlMax)
+        .regex(getUserServicesResponseServicesItemBlurDataUrlRegExp)
+        .nullable(),
       price: zod.string().nullable(),
       isFlashSale: zod.boolean(),
       originalPrice: zod.string().nullable(),
@@ -517,16 +541,30 @@ export const GetUserServicesResponse = zod.object({
     }),
   ),
   total: zod.number(),
+  nextCursor: zod.string().nullable(),
 });
 
 /**
  * @summary List feed posts
  */
 export const listPostsQueryLimitDefault = 20;
+export const listPostsQueryLimitMax = 100;
+
+export const listPostsQueryCursorMax = 2048;
+
 export const listPostsQueryOffsetDefault = 0;
 
 export const ListPostsQueryParams = zod.object({
-  limit: zod.coerce.number().default(listPostsQueryLimitDefault),
+  limit: zod.coerce
+    .number()
+    .min(1)
+    .max(listPostsQueryLimitMax)
+    .default(listPostsQueryLimitDefault),
+  cursor: zod.coerce
+    .string()
+    .max(listPostsQueryCursorMax)
+    .optional()
+    .describe("Opaque continuation cursor bound to the active filters."),
   offset: zod.coerce.number().default(listPostsQueryOffsetDefault),
   savedOnly: zod.coerce.boolean().optional(),
   faculty: zod.coerce.string().nullish(),
@@ -534,6 +572,12 @@ export const ListPostsQueryParams = zod.object({
     .enum(["Shuttle Updates", "Portal Down", "Exam Timetable", "Amebo Hot"])
     .optional(),
 });
+
+export const listPostsResponsePostsItemBlurDataUrlMax = 10950;
+
+export const listPostsResponsePostsItemBlurDataUrlRegExp = new RegExp(
+  "^data:image\/webp;base64,[A-Za-z0-9+\/]+={0,2}$",
+);
 
 export const ListPostsResponse = zod.object({
   posts: zod.array(
@@ -578,6 +622,11 @@ export const ListPostsResponse = zod.object({
         "Amebo Hot",
       ]),
       imageUrl: zod.string().nullable(),
+      blurDataUrl: zod
+        .string()
+        .max(listPostsResponsePostsItemBlurDataUrlMax)
+        .regex(listPostsResponsePostsItemBlurDataUrlRegExp)
+        .nullable(),
       videoUrl: zod.string().nullable(),
       likesCount: zod.number(),
       isLikedByMe: zod.boolean(),
@@ -609,11 +658,17 @@ export const ListPostsResponse = zod.object({
     }),
   ),
   total: zod.number(),
+  nextCursor: zod.string().nullable(),
 });
 
 /**
  * @summary Create a new feed post
  */
+export const createPostBodyBlurDataUrlMax = 10950;
+
+export const createPostBodyBlurDataUrlRegExp = new RegExp(
+  "^data:image\/webp;base64,[A-Za-z0-9+\/]+={0,2}$",
+);
 export const createPostBodyPollQuestionMax = 240;
 
 export const createPostBodyPollOptionsItemMax = 100;
@@ -627,6 +682,11 @@ export const CreatePostBody = zod.object({
     .enum(["Shuttle Updates", "Portal Down", "Exam Timetable", "Amebo Hot"])
     .optional(),
   imageUrl: zod.string().nullish(),
+  blurDataUrl: zod
+    .string()
+    .max(createPostBodyBlurDataUrlMax)
+    .regex(createPostBodyBlurDataUrlRegExp)
+    .nullish(),
   videoUrl: zod.string().nullish(),
   isAnonymous: zod.boolean().optional(),
   poll: zod
@@ -646,6 +706,12 @@ export const CreatePostBody = zod.object({
 export const GetPostParams = zod.object({
   postId: zod.coerce.number(),
 });
+
+export const getPostResponseBlurDataUrlMax = 10950;
+
+export const getPostResponseBlurDataUrlRegExp = new RegExp(
+  "^data:image\/webp;base64,[A-Za-z0-9+\/]+={0,2}$",
+);
 
 export const GetPostResponse = zod.object({
   id: zod.number(),
@@ -688,6 +754,11 @@ export const GetPostResponse = zod.object({
     "Amebo Hot",
   ]),
   imageUrl: zod.string().nullable(),
+  blurDataUrl: zod
+    .string()
+    .max(getPostResponseBlurDataUrlMax)
+    .regex(getPostResponseBlurDataUrlRegExp)
+    .nullable(),
   videoUrl: zod.string().nullable(),
   likesCount: zod.number(),
   isLikedByMe: zod.boolean(),
@@ -727,9 +798,27 @@ export const UpdatePostParams = zod.object({
 
 export const updatePostBodyContentMax = 500;
 
+export const updatePostBodyBlurDataUrlMax = 10950;
+
+export const updatePostBodyBlurDataUrlRegExp = new RegExp(
+  "^data:image\/webp;base64,[A-Za-z0-9+\/]+={0,2}$",
+);
+
 export const UpdatePostBody = zod.object({
   content: zod.string().max(updatePostBodyContentMax),
+  imageUrl: zod.string().nullish(),
+  blurDataUrl: zod
+    .string()
+    .max(updatePostBodyBlurDataUrlMax)
+    .regex(updatePostBodyBlurDataUrlRegExp)
+    .nullish(),
 });
+
+export const updatePostResponseBlurDataUrlMax = 10950;
+
+export const updatePostResponseBlurDataUrlRegExp = new RegExp(
+  "^data:image\/webp;base64,[A-Za-z0-9+\/]+={0,2}$",
+);
 
 export const UpdatePostResponse = zod.object({
   id: zod.number(),
@@ -772,6 +861,11 @@ export const UpdatePostResponse = zod.object({
     "Amebo Hot",
   ]),
   imageUrl: zod.string().nullable(),
+  blurDataUrl: zod
+    .string()
+    .max(updatePostResponseBlurDataUrlMax)
+    .regex(updatePostResponseBlurDataUrlRegExp)
+    .nullable(),
   videoUrl: zod.string().nullable(),
   likesCount: zod.number(),
   isLikedByMe: zod.boolean(),
@@ -931,15 +1025,34 @@ export const CreatePostCommentBody = zod.object({
  * @summary List marketplace services
  */
 export const listServicesQueryLimitDefault = 20;
+export const listServicesQueryLimitMax = 100;
+
+export const listServicesQueryCursorMax = 2048;
+
 export const listServicesQueryOffsetDefault = 0;
 
 export const ListServicesQueryParams = zod.object({
-  limit: zod.coerce.number().default(listServicesQueryLimitDefault),
+  limit: zod.coerce
+    .number()
+    .min(1)
+    .max(listServicesQueryLimitMax)
+    .default(listServicesQueryLimitDefault),
+  cursor: zod.coerce
+    .string()
+    .max(listServicesQueryCursorMax)
+    .optional()
+    .describe("Opaque continuation cursor bound to the active filters."),
   offset: zod.coerce.number().default(listServicesQueryOffsetDefault),
   savedOnly: zod.coerce.boolean().optional(),
   category: zod.coerce.string().nullish(),
   flashSale: zod.coerce.boolean().optional(),
 });
+
+export const listServicesResponseServicesItemBlurDataUrlMax = 10950;
+
+export const listServicesResponseServicesItemBlurDataUrlRegExp = new RegExp(
+  "^data:image\/webp;base64,[A-Za-z0-9+\/]+={0,2}$",
+);
 
 export const ListServicesResponse = zod.object({
   services: zod.array(
@@ -958,6 +1071,12 @@ export const ListServicesResponse = zod.object({
       title: zod.string(),
       description: zod.string(),
       category: zod.string(),
+      imageUrl: zod.string().nullable(),
+      blurDataUrl: zod
+        .string()
+        .max(listServicesResponseServicesItemBlurDataUrlMax)
+        .regex(listServicesResponseServicesItemBlurDataUrlRegExp)
+        .nullable(),
       price: zod.string().nullable(),
       isFlashSale: zod.boolean(),
       originalPrice: zod.string().nullable(),
@@ -971,15 +1090,28 @@ export const ListServicesResponse = zod.object({
     }),
   ),
   total: zod.number(),
+  nextCursor: zod.string().nullable(),
 });
 
 /**
  * @summary List a new service
  */
+export const createServiceBodyBlurDataUrlMax = 10950;
+
+export const createServiceBodyBlurDataUrlRegExp = new RegExp(
+  "^data:image\/webp;base64,[A-Za-z0-9+\/]+={0,2}$",
+);
+
 export const CreateServiceBody = zod.object({
   title: zod.string(),
   description: zod.string(),
   category: zod.string(),
+  imageUrl: zod.string().nullish(),
+  blurDataUrl: zod
+    .string()
+    .max(createServiceBodyBlurDataUrlMax)
+    .regex(createServiceBodyBlurDataUrlRegExp)
+    .nullish(),
   price: zod.string().nullish(),
   isFlashSale: zod.boolean().optional(),
   originalPrice: zod.string().nullish(),
@@ -992,6 +1124,12 @@ export const CreateServiceBody = zod.object({
 export const GetServiceParams = zod.object({
   serviceId: zod.coerce.number(),
 });
+
+export const getServiceResponseBlurDataUrlMax = 10950;
+
+export const getServiceResponseBlurDataUrlRegExp = new RegExp(
+  "^data:image\/webp;base64,[A-Za-z0-9+\/]+={0,2}$",
+);
 
 export const GetServiceResponse = zod.object({
   id: zod.number(),
@@ -1008,6 +1146,12 @@ export const GetServiceResponse = zod.object({
   title: zod.string(),
   description: zod.string(),
   category: zod.string(),
+  imageUrl: zod.string().nullable(),
+  blurDataUrl: zod
+    .string()
+    .max(getServiceResponseBlurDataUrlMax)
+    .regex(getServiceResponseBlurDataUrlRegExp)
+    .nullable(),
   price: zod.string().nullable(),
   isFlashSale: zod.boolean(),
   originalPrice: zod.string().nullable(),
@@ -1027,6 +1171,12 @@ export const UpdateServiceParams = zod.object({
   serviceId: zod.coerce.number(),
 });
 
+export const updateServiceBodyBlurDataUrlMax = 10950;
+
+export const updateServiceBodyBlurDataUrlRegExp = new RegExp(
+  "^data:image\/webp;base64,[A-Za-z0-9+\/]+={0,2}$",
+);
+
 export const UpdateServiceBody = zod.object({
   title: zod.string().optional(),
   description: zod.string().optional(),
@@ -1035,8 +1185,20 @@ export const UpdateServiceBody = zod.object({
   isFlashSale: zod.boolean().optional(),
   originalPrice: zod.string().nullish(),
   contactInfo: zod.string().optional(),
+  imageUrl: zod.string().nullish(),
+  blurDataUrl: zod
+    .string()
+    .max(updateServiceBodyBlurDataUrlMax)
+    .regex(updateServiceBodyBlurDataUrlRegExp)
+    .nullish(),
   isActive: zod.boolean().optional(),
 });
+
+export const updateServiceResponseBlurDataUrlMax = 10950;
+
+export const updateServiceResponseBlurDataUrlRegExp = new RegExp(
+  "^data:image\/webp;base64,[A-Za-z0-9+\/]+={0,2}$",
+);
 
 export const UpdateServiceResponse = zod.object({
   id: zod.number(),
@@ -1053,6 +1215,12 @@ export const UpdateServiceResponse = zod.object({
   title: zod.string(),
   description: zod.string(),
   category: zod.string(),
+  imageUrl: zod.string().nullable(),
+  blurDataUrl: zod
+    .string()
+    .max(updateServiceResponseBlurDataUrlMax)
+    .regex(updateServiceResponseBlurDataUrlRegExp)
+    .nullable(),
   price: zod.string().nullable(),
   isFlashSale: zod.boolean(),
   originalPrice: zod.string().nullable(),
@@ -1542,6 +1710,7 @@ export const RequestUploadUrlBody = zod.object({
   name: zod.string().min(1),
   size: zod.number().min(1),
   contentType: zod.string().min(1),
+  purpose: zod.enum(["post-image", "service-image"]).optional(),
 });
 
 export const RequestUploadUrlResponse = zod.object({
@@ -1552,6 +1721,7 @@ export const RequestUploadUrlResponse = zod.object({
       name: zod.string().min(1),
       size: zod.number().min(1),
       contentType: zod.string().min(1),
+      purpose: zod.enum(["post-image", "service-image"]).optional(),
     })
     .optional(),
 });

@@ -1,6 +1,7 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import {
-  useListServices,
+  type Service,
+  listServices,
   getListServicesQueryKey,
   useCreateService,
   useGetService,
@@ -8,12 +9,13 @@ import {
   useGetMyProfile,
   getGetMyProfileQueryKey,
 } from "@workspace/api-client-react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
+import { useWindowVirtualizer } from "@tanstack/react-virtual";
 import { ServiceCard } from "@/components/service-card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Plus, Search, ShieldAlert, X, Bookmark, ShoppingBag, Zap } from "lucide-react";
+import { Plus, Search, ShieldAlert, X, Bookmark, ShoppingBag, ImagePlus, Loader2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -39,10 +41,12 @@ import {
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { Link, useLocation, useSearch } from "wouter";
+import { useUser } from "@clerk/react";
 import { PullToRefresh } from "@/components/pull-to-refresh";
+import { uploadCampusImage } from "@/lib/image-upload";
 
 // ─── Categories ─────────────────────────────────────────────────────────────
 
@@ -99,11 +103,18 @@ const serviceSchema = z.object({
 export default function EarnPage() {
   const [activeTab, setActiveTab] = useState<string | null>(null);
   const [, setLocation] = useLocation();
+  const { user, isLoaded: isUserLoaded } = useUser();
   const locationSearch = useSearch();
   const listingParam = new URLSearchParams(locationSearch).get("listing");
   const listingId = listingParam && /^[1-9]\d*$/.test(listingParam) ? Number(listingParam) : 0;
   const { data: linkedService, isLoading: linkedLoading, isError: linkedError, refetch: retryLinked } = useGetService(listingId, { query: { queryKey: getGetServiceQueryKey(listingId), enabled: !!listingId, refetchInterval: 60_000 } });
   const [search, setSearch] = useState("");
+  const [listingImage, setListingImage] = useState<{ imageUrl: string; blurDataUrl: string } | null>(null);
+  const [imageUploading, setImageUploading] = useState(false);
+  const [imageError, setImageError] = useState<string | null>(null);
+  const listingImageInput = useRef<HTMLInputElement>(null);
+  const listingGridRef = useRef<HTMLDivElement>(null);
+  const [listingGridOffset, setListingGridOffset] = useState(0);
   const [dialogMode, setDialogMode] = useState<"form" | "verify" | null>(null);
   const queryClient = useQueryClient();
 
@@ -115,10 +126,26 @@ export default function EarnPage() {
   const savedOnly = activeTab === "saved" ? true : undefined;
   const flashSale = activeTab === "flash-sale" ? true : undefined;
 
-  const { data, isLoading, refetch } = useListServices(
-    { category: activeCategory, savedOnly, flashSale },
-    { query: { queryKey: getListServicesQueryKey({ category: activeCategory, savedOnly, flashSale }), refetchInterval: 60_000 } }
-  );
+  const serviceParams = { category: activeCategory, savedOnly, flashSale, limit: 10 };
+  const {
+    data,
+    isLoading,
+    isError,
+    error,
+    refetch,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+    isFetchNextPageError,
+  } = useInfiniteQuery({
+    queryKey: [...getListServicesQueryKey(serviceParams), user?.id ?? profile?.clerkUserId ?? null],
+    initialPageParam: undefined as string | undefined,
+    queryFn: ({ pageParam, signal }) => listServices({ ...serviceParams, cursor: pageParam }, { signal }),
+    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+    refetchInterval: 60_000,
+    enabled: isUserLoaded,
+  });
+  const listingsLoading = isLoading || !isUserLoaded;
 
   const createService = useCreateService();
 
@@ -128,17 +155,55 @@ export default function EarnPage() {
   });
 
   // Client-side keyword search across title, description, provider name
+  const services = useMemo(() => {
+    const byId = new Map<number, Service>();
+    data?.pages.forEach((page) => page.services.forEach((service) => byId.set(service.id, service)));
+    return [...byId.values()];
+  }, [data]);
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return data?.services ?? [];
-    return (data?.services ?? []).filter(
+    if (!q) return services;
+    return services.filter(
       (s) =>
         s.title.toLowerCase().includes(q) ||
         s.description.toLowerCase().includes(q) ||
         s.providerName.toLowerCase().includes(q) ||
         s.category.toLowerCase().includes(q)
     );
-  }, [data?.services, search]);
+  }, [services, search]);
+  const searchQuery = search.trim();
+
+  const [columns, setColumns] = useState(() => typeof window === "undefined" ? 1 : window.innerWidth >= 1280 ? 4 : window.innerWidth >= 1024 ? 3 : window.innerWidth >= 640 ? 2 : 1);
+  useEffect(() => {
+    const updateColumns = () => setColumns(window.innerWidth >= 1280 ? 4 : window.innerWidth >= 1024 ? 3 : window.innerWidth >= 640 ? 2 : 1);
+    window.addEventListener("resize", updateColumns);
+    return () => window.removeEventListener("resize", updateColumns);
+  }, []);
+  const virtualizer = useWindowVirtualizer({
+    count: filtered.length + (hasNextPage && !searchQuery ? 1 : 0),
+    lanes: columns,
+    estimateSize: () => 360,
+    getItemKey: (index) => filtered[index]?.id ?? `service-loader-${index}`,
+    scrollMargin: listingGridOffset,
+    overscan: 4,
+  });
+  const virtualItems = virtualizer.getVirtualItems();
+  const retryNextServicePage = () => { void fetchNextPage(); };
+  useEffect(() => {
+    if (searchQuery || isFetchNextPageError) return;
+    const highestVisibleIndex = Math.max(-1, ...virtualItems.map((item) => item.index));
+    if (highestVisibleIndex >= filtered.length - columns * 2 && hasNextPage && !isFetchingNextPage) {
+      void fetchNextPage();
+    }
+  }, [virtualItems, filtered.length, columns, hasNextPage, isFetchingNextPage, isFetchNextPageError, fetchNextPage, searchQuery]);
+  useEffect(() => {
+    const updateOffset = () => {
+      if (listingGridRef.current) setListingGridOffset(listingGridRef.current.getBoundingClientRect().top + window.scrollY);
+    };
+    updateOffset();
+    window.addEventListener("resize", updateOffset);
+    return () => window.removeEventListener("resize", updateOffset);
+  }, [activeTab, search, listingsLoading, columns]);
 
   const handleFabClick = () => {
     const hasMatric = profile?.matricNumber && profile.matricNumber.trim() !== "";
@@ -146,6 +211,7 @@ export default function EarnPage() {
   };
 
   const onSubmit = (values: z.infer<typeof serviceSchema>) => {
+    if (imageUploading) return;
     createService.mutate({ data: {
       title: values.title,
       price: values.price || undefined,
@@ -154,16 +220,32 @@ export default function EarnPage() {
       contactInfo: values.contactInfo,
       isFlashSale: values.isFlashSale,
       originalPrice: values.isFlashSale ? values.originalPrice || null : null,
+      imageUrl: listingImage?.imageUrl ?? null,
+      blurDataUrl: listingImage?.blurDataUrl ?? null,
     } }, {
       onSuccess: () => {
         setDialogMode(null);
         form.reset();
+        setListingImage(null);
         queryClient.invalidateQueries({ queryKey: getListServicesQueryKey() });
       },
     });
   };
 
-  const isFiltered = search.trim() !== "";
+  const isFiltered = searchQuery !== "";
+
+  const selectListingImage = async (file?: File) => {
+    if (!file) return;
+    setImageUploading(true);
+    setImageError(null);
+    try {
+      setListingImage(await uploadCampusImage(file, "service-image"));
+    } catch (uploadError) {
+      setImageError(uploadError instanceof Error ? uploadError.message : "Couldn't upload listing image.");
+    } finally {
+      setImageUploading(false);
+    }
+  };
 
   return (
     <PullToRefresh className="container mx-auto px-4 py-6 max-w-6xl relative min-h-screen pb-24" onRefresh={() => refetch()}>
@@ -222,39 +304,64 @@ export default function EarnPage() {
       </div>
 
       {/* Result count */}
-      {!isLoading && (
+      {!listingsLoading && (
         <p className="text-xs text-muted-foreground mb-4">
           {isFiltered
             ? `${filtered.length} result${filtered.length !== 1 ? "s" : ""} for "${search}"`
-            : `${data?.total ?? 0} ${flashSale ? "flash sale " : ""}listing${(data?.total ?? 0) !== 1 ? "s" : ""} available`}
+            : `${data?.pages[0]?.total ?? 0} ${flashSale ? "flash sale " : ""}listing${(data?.pages[0]?.total ?? 0) !== 1 ? "s" : ""} available`}
         </p>
       )}
 
-      {/* Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-        {isLoading ? (
+      {/* Virtualized marketplace grid */}
+      {isError && (
+        <div role="alert" className="mb-4 rounded-xl border border-white/10 p-5 text-sm">
+          <p>Couldn't load marketplace listings{error instanceof Error ? `: ${error.message}` : "."}</p>
+          <Button variant="outline" onClick={() => refetch()} className="mt-3">Try again</Button>
+        </div>
+      )}
+      <div ref={listingGridRef} className="relative" style={{ height: listingsLoading || filtered.length === 0 ? undefined : Math.max(0, virtualizer.getTotalSize() - listingGridOffset) }}>
+        {listingsLoading ? (
           Array.from({ length: 8 }).map((_, i) => (
             <Skeleton key={i} className="h-[320px] w-full rounded-2xl" />
           ))
         ) : filtered.length === 0 ? (
-          activeTab === "saved" && !search ? <div className="col-span-full text-center py-20 rounded-2xl border border-dashed border-white/10 bg-white/[.02]"><Bookmark className="h-10 w-10 mx-auto mb-4 text-primary/60" /><h3 className="font-bold text-lg">No saved listings yet</h3><p className="text-sm text-muted-foreground mt-1">Save listings from the three-dot menu to find them here.</p><Button className="mt-5" variant="outline" onClick={() => setActiveTab(null)}>Browse marketplace</Button></div> : <EmptyState query={search} onPost={handleFabClick} />
+          isFetchingNextPage ? <Skeleton className="h-[320px] w-full rounded-2xl" /> : (
+            activeTab === "saved" && !search ? <div className="text-center py-20 rounded-2xl border border-dashed border-white/10 bg-white/[.02]"><Bookmark className="h-10 w-10 mx-auto mb-4 text-primary/60" /><h3 className="font-bold text-lg">No saved listings yet</h3><p className="text-sm text-muted-foreground mt-1">Save listings from the three-dot menu to find them here.</p><Button className="mt-5" variant="outline" onClick={() => setActiveTab(null)}>Browse marketplace</Button></div> : <EmptyState query={search} onPost={handleFabClick} />
+          )
         ) : (
-          <AnimatePresence mode="popLayout">
-            {filtered.map((service, i) => (
-              <motion.div
-                key={service.id}
-                layout
-                initial={{ opacity: 0, scale: 0.92 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.9 }}
-                transition={{ delay: i * 0.04 }}
+          virtualItems.map((virtualItem) => {
+            const service = filtered[virtualItem.index];
+            const isLoader = virtualItem.index >= filtered.length;
+            return (
+              <div
+                key={isLoader ? "service-loader" : service.id}
+                data-index={virtualItem.index}
+                ref={virtualizer.measureElement}
+                className="absolute top-0"
+                style={{
+                  left: `calc((100% - ${(columns - 1) * 16}px) / ${columns} * ${virtualItem.lane} + ${virtualItem.lane * 16}px)`,
+                  width: `calc((100% - ${(columns - 1) * 16}px) / ${columns})`,
+                  transform: `translateY(${virtualItem.start - listingGridOffset}px)`,
+                }}
               >
-                <ServiceCard service={service} index={i} currentUserId={profile?.clerkUserId} />
-              </motion.div>
-            ))}
-          </AnimatePresence>
+                {isLoader
+                  ? <div className="rounded-2xl border border-white/10 p-5 text-center text-sm text-muted-foreground">{isFetchingNextPage ? "Loading more listings…" : isFetchNextPageError ? "Couldn't load more listings." : "Loading…"}</div>
+                  : <ServiceCard service={service} index={virtualItem.index} currentUserId={profile?.clerkUserId} />}
+              </div>
+            );
+          })
         )}
       </div>
+      {isFetchNextPageError && <div role="alert" className="py-3 text-center text-sm text-destructive">Couldn't load more listings. <Button variant="link" onClick={retryNextServicePage}>Retry</Button></div>}
+      {searchQuery && hasNextPage && !isFetchNextPageError && (
+        <div className="py-4 text-center">
+          <p className="mb-2 text-xs text-muted-foreground">Search is currently checking {services.length} loaded listings.</p>
+          <Button variant="outline" onClick={retryNextServicePage} disabled={isFetchingNextPage}>
+            {isFetchingNextPage ? "Loading more results…" : "Load more results"}
+          </Button>
+        </div>
+      )}
+      {!hasNextPage && filtered.length > 0 && <p className="py-5 text-center text-xs text-muted-foreground">You're all caught up.</p>}
       <Dialog open={!!listingParam} onOpenChange={(open) => { if (!open) setLocation("/earn"); }}>
         <DialogContent className="glass border-white/10 sm:max-w-md max-h-[90dvh] overflow-y-auto">
           <DialogTitle className="text-lg font-bold">Marketplace listing</DialogTitle>
@@ -323,6 +430,18 @@ export default function EarnPage() {
           <div className="p-6 overflow-y-auto max-h-[70vh]">
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+
+                <div className="space-y-2">
+                  <span className="text-sm font-medium">Listing photo <span className="text-xs text-muted-foreground">optional · WebP under 80 KB</span></span>
+                  <input ref={listingImageInput} type="file" accept="image/*" className="hidden" onChange={(event) => { void selectListingImage(event.target.files?.[0]); event.target.value = ""; }} />
+                  <div className="flex items-center gap-3">
+                    <Button type="button" variant="outline" disabled={imageUploading} onClick={() => listingImageInput.current?.click()}><ImagePlus className="mr-2 h-4 w-4" />{imageUploading ? "Compressing…" : "Choose photo"}</Button>
+                    {imageUploading && <Loader2 className="h-4 w-4 animate-spin text-primary" />}
+                    {listingImage && <button type="button" onClick={() => setListingImage(null)} className="text-xs text-muted-foreground hover:text-foreground">Remove photo</button>}
+                  </div>
+                  {listingImage && <img src={listingImage.imageUrl} alt="Listing preview" className="max-h-40 rounded-lg object-cover" />}
+                  {imageError && <p role="alert" className="text-xs text-destructive">{imageError}</p>}
+                </div>
 
                 {/* Item Name */}
                 <FormField control={form.control} name="title" render={({ field }) => (
@@ -434,7 +553,7 @@ export default function EarnPage() {
                 <Button
                   type="submit"
                   className="w-full gradient-btn h-11 font-semibold"
-                  disabled={createService.isPending}
+                  disabled={createService.isPending || imageUploading}
                 >
                   {createService.isPending ? "Posting..." : "Post My Hustle"}
                 </Button>

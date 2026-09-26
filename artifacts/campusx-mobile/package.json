@@ -58,6 +58,7 @@
   "dependencies": {
     "@clerk/expo": "^3.6.5",
     "date-fns": "^3.6.0",
+    "expo-image-manipulator": "~14.0.8",
     "expo-secure-store": "^15.0.8"
   }
 }

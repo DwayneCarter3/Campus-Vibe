@@ -1,7 +1,9 @@
-import { useState, useRef, useCallback, useEffect } from "react";
-import { useListPosts, useCreatePost, getListPostsQueryKey, useGetMyProfile, getGetMyProfileQueryKey, requestUploadUrl as requestUploadUrlApi, useGetShuttleStatus, getGetShuttleStatusQueryKey, useVoteShuttleStatus } from "@workspace/api-client-react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useState, useRef, useCallback, useEffect, useMemo } from "react";
+import { listPosts, useCreatePost, getListPostsQueryKey, useGetMyProfile, getGetMyProfileQueryKey, requestUploadUrl as requestUploadUrlApi, useGetShuttleStatus, getGetShuttleStatusQueryKey, useVoteShuttleStatus } from "@workspace/api-client-react";
+import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
+import { useWindowVirtualizer } from "@tanstack/react-virtual";
 import { useLocation } from "wouter";
+import { useUser } from "@clerk/react";
 import { PostCard } from "@/components/post-card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -14,11 +16,14 @@ import { cn } from "@/lib/utils";
 import { UserVerificationMarks } from "@/components/user-verification-marks";
 import { PullToRefresh } from "@/components/pull-to-refresh";
 import { POST_CATEGORIES, type PostCategory } from "@/components/post-categories";
+import { uploadCampusImage } from "@/lib/image-upload";
+import type { Post } from "@workspace/api-client-react";
 
 type MediaUpload = {
   type: "image" | "video";
   url: string;
   previewUrl: string;
+  blurDataUrl?: string;
 };
 
 const SHUTTLE_VOTE_OPTIONS = [
@@ -60,6 +65,7 @@ async function uploadToPresignedUrl(file: File, uploadURL: string): Promise<void
 
 export default function FeedPage() {
   const [, setLocation] = useLocation();
+  const { user, isLoaded: isUserLoaded } = useUser();
   const queryClient = useQueryClient();
   const [activeBubble, setActiveBubble] = useState("all");
   const [savedOnly, setSavedOnly] = useState(false);
@@ -67,6 +73,8 @@ export default function FeedPage() {
   const [postCategory, setPostCategory] = useState<PostCategory | "All">("Amebo Hot");
   const activeCategory = POST_CATEGORIES.find((bubble) => bubble.id === activeBubble)?.category;
   const scrollRef = useRef<HTMLDivElement>(null);
+  const feedListRef = useRef<HTMLDivElement>(null);
+  const [feedListOffset, setFeedListOffset] = useState(0);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
 
@@ -74,10 +82,55 @@ export default function FeedPage() {
     query: { retry: false, queryKey: getGetMyProfileQueryKey() }
   });
 
-  const { data, isLoading, isError, refetch } = useListPosts({ category: savedOnly ? undefined : activeCategory, savedOnly }, {
-    query: { queryKey: getListPostsQueryKey({ category: savedOnly ? undefined : activeCategory, savedOnly }), refetchInterval: 10_000 }
+  const postParams = { category: savedOnly ? undefined : activeCategory, savedOnly, limit: 10 };
+  const postsQueryKey = [...getListPostsQueryKey(postParams), user?.id ?? profile?.clerkUserId ?? null];
+  const {
+    data,
+    isLoading,
+    isError,
+    refetch,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+    isFetchNextPageError,
+  } = useInfiniteQuery({
+    queryKey: postsQueryKey,
+    initialPageParam: undefined as string | undefined,
+    queryFn: ({ pageParam, signal }) => listPosts({ ...postParams, cursor: pageParam }, { signal }),
+    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+    refetchInterval: 30_000,
+    enabled: isUserLoaded && !isProfileLoading,
   });
+  const posts = useMemo(() => {
+    const byId = new Map<number, Post>();
+    data?.pages.forEach((page) => page.posts.forEach((post) => byId.set(post.id, post)));
+    return [...byId.values()];
+  }, [data]);
+  const visiblePosts = useMemo(() => posts.filter((post) => !hiddenPostIds.has(post.id)), [posts, hiddenPostIds]);
+  const feedVirtualizer = useWindowVirtualizer({
+    count: visiblePosts.length + (hasNextPage ? 1 : 0),
+    estimateSize: () => 420,
+    getItemKey: (index) => visiblePosts[index]?.id ?? `feed-loader-${index}`,
+    scrollMargin: feedListOffset,
+    overscan: 4,
+  });
+  const virtualFeedItems = feedVirtualizer.getVirtualItems();
+  const retryNextFeedPage = () => { void fetchNextPage(); };
+  useEffect(() => {
+    const highestVisibleIndex = Math.max(-1, ...virtualFeedItems.map((item) => item.index));
+    if (highestVisibleIndex >= visiblePosts.length - 4 && hasNextPage && !isFetchingNextPage) {
+      void fetchNextPage();
+    }
+  }, [virtualFeedItems, visiblePosts.length, hasNextPage, isFetchingNextPage, fetchNextPage]);
   const showShuttleStatus = !savedOnly && activeCategory === "Shuttle Updates";
+  useEffect(() => {
+    const updateOffset = () => {
+      if (feedListRef.current) setFeedListOffset(feedListRef.current.getBoundingClientRect().top + window.scrollY);
+    };
+    updateOffset();
+    window.addEventListener("resize", updateOffset);
+    return () => window.removeEventListener("resize", updateOffset);
+  }, [showShuttleStatus, isProfileLoading]);
   const shuttleQueryKey = getGetShuttleStatusQueryKey();
   const { data: shuttleStatus } = useGetShuttleStatus({
     query: { queryKey: shuttleQueryKey, enabled: showShuttleStatus, refetchInterval: 15_000 },
@@ -112,12 +165,16 @@ export default function FeedPage() {
     setIsUploading(true);
     const previewUrl = URL.createObjectURL(file);
     try {
-      const { uploadURL, objectPath } = await requestUploadUrl(file);
-      await uploadToPresignedUrl(file, uploadURL);
-      const servingUrl = `/api/storage${objectPath}`;
-      setMedia({ type, url: servingUrl, previewUrl });
-    } catch {
-      setUploadError("Upload failed. Please try again.");
+      if (type === "image") {
+        const uploaded = await uploadCampusImage(file, "post-image");
+        setMedia({ type, url: uploaded.imageUrl, previewUrl, blurDataUrl: uploaded.blurDataUrl });
+      } else {
+        const { uploadURL, objectPath } = await requestUploadUrl(file);
+        await uploadToPresignedUrl(file, uploadURL);
+        setMedia({ type, url: `/api/storage${objectPath}`, previewUrl });
+      }
+    } catch (error) {
+      setUploadError(error instanceof Error ? error.message : "Upload failed. Please try again.");
       URL.revokeObjectURL(previewUrl);
     } finally {
       setIsUploading(false);
@@ -157,6 +214,7 @@ export default function FeedPage() {
         content: content.trim(),
         category: publishedCategory,
         imageUrl: media?.type === "image" ? media.url : null,
+        blurDataUrl: media?.type === "image" ? media.blurDataUrl : null,
         videoUrl: media?.type === "video" ? media.url : null,
         isAnonymous,
         ...(pollEnabled ? { poll: { question, options } } : {}),
@@ -184,7 +242,7 @@ export default function FeedPage() {
     }
   };
 
-  if (isProfileLoading) {
+  if (isProfileLoading || !isUserLoaded) {
     return <div className="flex-1 flex justify-center pt-20"><Skeleton className="h-10 w-10 rounded-full" /></div>;
   }
 
@@ -558,12 +616,12 @@ export default function FeedPage() {
            {savedOnly ? "Saved Gist" : activeCategory ? activeCategory === "Amebo Hot" ? "Amebo Hot Posts" : `${activeCategory} Gist` : "Campus Gist"}
         </h2>
         {data && (
-          <span className="text-xs text-muted-foreground">({data.total} posts)</span>
+          <span className="text-xs text-muted-foreground">({data.pages[0]?.total ?? posts.length} posts)</span>
         )}
       </div>
 
       {/* Feed */}
-      <div className="space-y-1">
+      <div ref={feedListRef} className="relative" style={{ height: isLoading || isError || visiblePosts.length === 0 ? undefined : Math.max(0, feedVirtualizer.getTotalSize() - feedListOffset) }}>
         {isLoading ? (
           Array.from({ length: 3 }).map((_, i) => (
             <div key={i} className="glass p-5 rounded-2xl space-y-4 mb-4">
@@ -587,7 +645,7 @@ export default function FeedPage() {
              <p className="text-sm text-muted-foreground mt-1">Check your connection and try again.</p>
              <Button variant="outline" onClick={() => refetch()} className="mt-4 border-white/10">Try again</Button>
            </div>
-         ) : data?.posts.filter((post) => !hiddenPostIds.has(post.id)).length === 0 ? (
+          ) : visiblePosts.length === 0 ? (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -597,23 +655,37 @@ export default function FeedPage() {
              <p className="font-medium">{savedOnly ? "No saved gist yet." : activeCategory ? "No posts in this category yet. Be the first to share an update!" : "No gist yet on campus."}</p>
              <p className="text-sm mt-1">{savedOnly ? "Save posts from their menu to find them here." : "Be the first to drop something."}</p>
           </motion.div>
-        ) : (
-           data?.posts.filter((post) => !hiddenPostIds.has(post.id)).map((post, i) => (
-            <motion.div
-              key={post.id}
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.04 }}
-            >
-               <PostCard post={post} onHide={(id) => setHiddenPostIds((previous) => {
-                 const next = new Set(previous).add(id);
-                 sessionStorage.setItem(HIDDEN_POSTS_KEY, JSON.stringify([...next]));
-                 return next;
-               })} />
-            </motion.div>
-          ))
+         ) : (
+           <>
+             {virtualFeedItems.map((virtualItem) => (
+               <div
+                 key={virtualItem.key}
+                 data-index={virtualItem.index}
+                 ref={feedVirtualizer.measureElement}
+                 className="absolute left-0 top-0 w-full"
+                 style={{ transform: `translateY(${virtualItem.start - feedListOffset}px)` }}
+               >
+                 {virtualItem.index < visiblePosts.length ? (
+                   <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
+                     <PostCard post={visiblePosts[virtualItem.index]} onHide={(id) => setHiddenPostIds((previous) => {
+                       const next = new Set(previous).add(id);
+                       sessionStorage.setItem(HIDDEN_POSTS_KEY, JSON.stringify([...next]));
+                       return next;
+                     })} />
+                   </motion.div>
+                 ) : (
+                   <div className="py-5 text-center text-sm text-muted-foreground">
+                     {isFetchingNextPage ? "Loading more posts…" : isFetchNextPageError ? "Couldn't load more posts." : "Loading…"}
+                    {isFetchNextPageError && <Button variant="link" onClick={retryNextFeedPage}>Try again</Button>}
+                   </div>
+                 )}
+               </div>
+             ))}
+             {isError && <p role="alert" className="text-center text-sm text-destructive">Couldn't load the feed. Check your connection and try again.</p>}
+           </>
         )}
       </div>
+      {!hasNextPage && visiblePosts.length > 0 && <p className="py-5 text-center text-xs text-muted-foreground">You're all caught up.</p>}
     </PullToRefresh>
   );
 }

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { lazy, Suspense, useEffect, useRef } from "react";
 import { Switch, Route, Redirect, Router as WouterRouter, useLocation } from "wouter";
 import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
 import { ClerkProvider, Show, useClerk } from "@clerk/react";
@@ -16,15 +16,16 @@ import Home from "@/pages/home";
 import SignInPage from "@/pages/sign-in";
 import SignUpPage from "@/pages/sign-up";
 import Onboarding from "@/pages/onboarding";
-import FeedPage from "@/pages/feed";
 import PostDetailPage from "@/pages/post-detail";
-import EarnPage from "@/pages/earn";
-import CgpaPage from "@/pages/cgpa";
-import MyProfilePage from "@/pages/profile";
 import UserProfilePage from "@/pages/user-profile";
-import MessagesPage from "@/pages/messages";
-import AdminPage from "@/pages/admin";
 import NotFound from "@/pages/not-found";
+
+const FeedPage = lazy(() => import("@/pages/feed"));
+const EarnPage = lazy(() => import("@/pages/earn"));
+const CgpaPage = lazy(() => import("@/pages/cgpa"));
+const MyProfilePage = lazy(() => import("@/pages/profile"));
+const MessagesPage = lazy(() => import("@/pages/messages"));
+const AdminPage = lazy(() => import("@/pages/admin"));
 
 const queryClient = new QueryClient();
 
@@ -158,21 +159,23 @@ function ClerkProviderWithRoutes() {
         <ClerkQueryClientCacheInvalidator />
         <NotificationProvider>
           <Layout>
-            <Switch>
-              <Route path="/" component={HomeRedirect} />
-              <Route path="/sign-in/*?" component={SignInPage} />
-              <Route path="/sign-up/*?" component={SignUpPage} />
-              <Route path="/onboarding" component={() => <ProtectedRoute component={Onboarding} />} />
-              <Route path="/feed" component={() => <ProtectedRoute component={FeedPage} />} />
-               <Route path="/post/:id" component={() => <ProtectedRoute component={PostDetailPage} />} />
-              <Route path="/earn" component={() => <ProtectedRoute component={EarnPage} />} />
-               <Route path="/cgpa" component={() => <ProtectedRoute component={CgpaPage} />} />
-              <Route path="/messages" component={() => <ProtectedRoute component={MessagesPage} />} />
-              <Route path="/admin" component={() => <ProtectedRoute component={AdminPage} />} />
-              <Route path="/profile" component={() => <ProtectedRoute component={MyProfilePage} />} />
-              <Route path="/profile/:userId" component={() => <ProtectedRoute component={UserProfilePage} />} />
-              <Route component={NotFound} />
-            </Switch>
+            <Suspense fallback={<div className="min-h-[40vh]" aria-busy="true" />}>
+              <Switch>
+                <Route path="/" component={HomeRedirect} />
+                <Route path="/sign-in/*?" component={SignInPage} />
+                <Route path="/sign-up/*?" component={SignUpPage} />
+                <Route path="/onboarding" component={() => <ProtectedRoute component={Onboarding} />} />
+                <Route path="/feed" component={() => <ProtectedRoute component={FeedPage} />} />
+                <Route path="/post/:id" component={() => <ProtectedRoute component={PostDetailPage} />} />
+                <Route path="/earn" component={() => <ProtectedRoute component={EarnPage} />} />
+                <Route path="/cgpa" component={() => <ProtectedRoute component={CgpaPage} />} />
+                <Route path="/messages" component={() => <ProtectedRoute component={MessagesPage} />} />
+                <Route path="/admin" component={() => <ProtectedRoute component={AdminPage} />} />
+                <Route path="/profile" component={() => <ProtectedRoute component={MyProfilePage} />} />
+                <Route path="/profile/:userId" component={() => <ProtectedRoute component={UserProfilePage} />} />
+                <Route component={NotFound} />
+              </Switch>
+            </Suspense>
           </Layout>
         </NotificationProvider>
       </QueryClientProvider>

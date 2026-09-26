@@ -463,6 +463,7 @@ router.get("/users/:userId/posts", async (req, res): Promise<void> => {
       content: postsTable.content,
       category: postsTable.category,
       imageUrl: postsTable.imageUrl,
+      blurDataUrl: postsTable.blurDataUrl,
       videoUrl: postsTable.videoUrl,
       likesCount: postsTable.likesCount,
       noCapsCount: postsTable.noCapsCount,
@@ -576,7 +577,7 @@ router.get("/users/:userId/posts", async (req, res): Promise<void> => {
   );
 
   res.setHeader("Cache-Control", "private, no-store");
-  res.json(GetUserPostsResponse.parse({ posts: postsWithReactions, total: count }));
+  res.json(GetUserPostsResponse.parse({ posts: postsWithReactions, total: count, nextCursor: null }));
 });
 
 router.get("/users/:userId/services", async (req, res): Promise<void> => {
@@ -599,6 +600,8 @@ router.get("/users/:userId/services", async (req, res): Promise<void> => {
       title: servicesTable.title,
       description: servicesTable.description,
       category: servicesTable.category,
+      imageUrl: servicesTable.imageUrl,
+      blurDataUrl: servicesTable.blurDataUrl,
       price: servicesTable.price,
       originalPrice: servicesTable.originalPrice,
       isFlashSale: servicesTable.isFlashSale,
@@ -661,7 +664,7 @@ router.get("/users/:userId/services", async (req, res): Promise<void> => {
     };
   }));
 
-  res.json(GetUserServicesResponse.parse({ services: enriched, total: count }));
+  res.json(GetUserServicesResponse.parse({ services: enriched, total: count, nextCursor: null }));
 });
 
 router.get("/users/:userId", async (req, res): Promise<void> => {

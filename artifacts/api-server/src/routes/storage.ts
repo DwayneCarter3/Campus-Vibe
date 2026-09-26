@@ -11,6 +11,7 @@ import { requireAuth } from "../middlewares/auth";
 
 const router: IRouter = Router();
 const objectStorageService = new ObjectStorageService();
+const MAX_IMAGE_UPLOAD_BYTES = 80 * 1024;
 
 /**
  * POST /storage/uploads/request-url
@@ -28,17 +29,27 @@ router.post("/storage/uploads/request-url", requireAuth, async (req: Request, re
 
   try {
     const uploaderId = (req as any).userId as string;
-    const { name, size, contentType } = parsed.data;
+    const { name, size, contentType, purpose } = parsed.data;
+    if (purpose && (contentType !== "image/webp" || size > MAX_IMAGE_UPLOAD_BYTES)) {
+      res.status(400).json({ error: "Post and service images must be WebP files no larger than 80 KB." });
+      return;
+    }
 
     const uploadURL = await objectStorageService.getObjectEntityUploadURL();
     const objectPath = objectStorageService.normalizeObjectEntityPath(uploadURL);
-    await db.insert(uploadedMediaTable).values({ objectPath, uploaderId });
+    await db.insert(uploadedMediaTable).values({
+      objectPath,
+      uploaderId,
+      purpose: purpose ?? null,
+      declaredContentType: contentType,
+      declaredSize: size,
+    });
 
     res.json(
       RequestUploadUrlResponse.parse({
         uploadURL,
         objectPath,
-        metadata: { name, size, contentType },
+        metadata: { name, size, contentType, ...(purpose ? { purpose } : {}) },
       }),
     );
   } catch (error) {

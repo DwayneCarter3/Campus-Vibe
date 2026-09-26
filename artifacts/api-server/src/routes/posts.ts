@@ -11,6 +11,9 @@ import { createNotification } from "../lib/notifications";
 import { publicPost } from "../lib/post-privacy";
 import { loadPublicPolls } from "../lib/polls";
 import { ObjectStorageService } from "../lib/objectStorage";
+import { cursorFilterHash, decodeFeedCursor, encodeFeedCursor } from "../lib/listCursor";
+import { validateUploadedWebpImage } from "../lib/image-upload-validation";
+import { isSmallWebpDataUrl } from "../lib/blur-data-url";
 import {
   ListPostsQueryParams,
   ListPostsResponse,
@@ -181,6 +184,7 @@ async function buildPostWithMeta(postId: number, clerkUserId?: string) {
       content: postsTable.content,
       category: postsTable.category,
       imageUrl: postsTable.imageUrl,
+      blurDataUrl: postsTable.blurDataUrl,
       videoUrl: postsTable.videoUrl,
       likesCount: postsTable.likesCount,
       noCapsCount: postsTable.noCapsCount,
@@ -303,7 +307,7 @@ router.get("/posts", async (req, res): Promise<void> => {
     return;
   }
 
-  const { limit, offset, category } = params.data;
+  const { limit, offset, category, faculty, cursor: cursorToken } = params.data;
   const clerkUserId = getAuth(req).userId ?? undefined;
   if (savedOnly && !clerkUserId) {
     res.status(401).json({ error: "Sign in to view saved posts." });
@@ -316,8 +320,32 @@ router.get("/posts", async (req, res): Promise<void> => {
       ? sql`exists (select 1 from saved_posts sp where sp.post_id = ${postsTable.id} and sp.user_id = ${clerkUserId})`
       : undefined,
   ];
+  const filterHash = cursorFilterHash({
+    category: category ?? null,
+    faculty: faculty ?? null,
+    savedOnly,
+    viewerId: savedOnly ? clerkUserId : null,
+  });
+  if (cursorToken && offset > 0) {
+    res.status(400).json({ error: "Cursor pagination cannot be combined with a positive offset." });
+    return;
+  }
+  const cursor = cursorToken !== undefined ? decodeFeedCursor(cursorToken, filterHash) : null;
+  if (cursorToken !== undefined && !cursor) {
+    res.status(400).json({ error: "Invalid or filter-mismatched cursor." });
+    return;
+  }
+  const cursorCondition = cursor ? sql`(
+    ${postsTable.isFeaturedTrending} < ${cursor.featured}
+    OR (${postsTable.isFeaturedTrending} = ${cursor.featured} AND ${postsTable.isPinnedToFeed} < ${cursor.pinned})
+    OR (${postsTable.isFeaturedTrending} = ${cursor.featured} AND ${postsTable.isPinnedToFeed} = ${cursor.pinned}
+      AND ${postsTable.createdAt} < ${cursor.createdAt}::timestamptz)
+    OR (${postsTable.isFeaturedTrending} = ${cursor.featured} AND ${postsTable.isPinnedToFeed} = ${cursor.pinned}
+      AND ${postsTable.createdAt} = ${cursor.createdAt}::timestamptz AND ${postsTable.id} < ${cursor.id})
+  )` : undefined;
+  const pageFilters = cursorCondition ? [...filters, cursorCondition] : filters;
 
-  const posts = await db
+  const fetchedPosts = await db
     .select({
       id: postsTable.id,
       authorId: postsTable.authorId,
@@ -325,6 +353,7 @@ router.get("/posts", async (req, res): Promise<void> => {
       content: postsTable.content,
       category: postsTable.category,
       imageUrl: postsTable.imageUrl,
+      blurDataUrl: postsTable.blurDataUrl,
       videoUrl: postsTable.videoUrl,
       likesCount: postsTable.likesCount,
       noCapsCount: postsTable.noCapsCount,
@@ -334,6 +363,7 @@ router.get("/posts", async (req, res): Promise<void> => {
       isPinnedToFeed: postsTable.isPinnedToFeed,
       isFeaturedTrending: postsTable.isFeaturedTrending,
       createdAt: postsTable.createdAt,
+      cursorCreatedAt: sql<string>`to_char(${postsTable.createdAt} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`,
       authorName: usersTable.fullName,
       authorFaculty: usersTable.faculty,
       authorLevel: usersTable.level,
@@ -357,10 +387,23 @@ router.get("/posts", async (req, res): Promise<void> => {
     .leftJoin(usersTable, eq(postsTable.authorId, usersTable.clerkUserId))
     .leftJoin(originalPostAlias, eq(postsTable.originalPostId, originalPostAlias.id))
     .leftJoin(originalUserAlias, eq(originalPostAlias.authorId, originalUserAlias.clerkUserId))
-    .where(and(...filters))
-    .orderBy(desc(postsTable.isFeaturedTrending), desc(postsTable.isPinnedToFeed), desc(postsTable.createdAt))
-    .limit(limit ?? 20)
-    .offset(offset ?? 0);
+    .where(and(...pageFilters))
+    .orderBy(desc(postsTable.isFeaturedTrending), desc(postsTable.isPinnedToFeed), desc(postsTable.createdAt), desc(postsTable.id))
+    .limit((limit ?? 20) + 1)
+    .offset(cursor ? 0 : (offset ?? 0));
+
+  const pageLimit = limit ?? 20;
+  const hasMore = fetchedPosts.length > pageLimit;
+  const posts = fetchedPosts.slice(0, pageLimit);
+  const lastPost = posts.at(-1);
+  const nextCursor = hasMore && lastPost
+    ? encodeFeedCursor({
+        featured: lastPost.isFeaturedTrending ?? false,
+        pinned: lastPost.isPinnedToFeed ?? false,
+        createdAt: lastPost.cursorCreatedAt,
+        id: lastPost.id,
+      }, filterHash)
+    : null;
 
   const [{ count }] = await db
     .select({ count: sql<number>`count(*)::int` })
@@ -394,6 +437,7 @@ router.get("/posts", async (req, res): Promise<void> => {
 
       const {
         authorMatricNumber,
+        cursorCreatedAt,
         opId, opAuthorId, opContent, opImageUrl, opCreatedAt,
         opAuthorName, opAuthorAvatarUrl, opAuthorVerificationStatus,
         opAuthorRole, opIsAnonymous,
@@ -439,7 +483,7 @@ router.get("/posts", async (req, res): Promise<void> => {
   );
 
   res.setHeader("Cache-Control", "private, no-store");
-  res.json(ListPostsResponse.parse({ posts: postsWithReactions, total: count }));
+  res.json(ListPostsResponse.parse({ posts: postsWithReactions, total: count, nextCursor }));
 });
 
 router.post("/posts", requireAuth, async (req, res): Promise<void> => {
@@ -447,6 +491,17 @@ router.post("/posts", requireAuth, async (req, res): Promise<void> => {
   const parsed = CreatePostBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+  if (!isSmallWebpDataUrl(parsed.data.blurDataUrl)) {
+    res.status(400).json({ error: "blurDataUrl must be a small valid WebP data URL." });
+    return;
+  }
+  if (
+    parsed.data.blurDataUrl !== undefined &&
+    (parsed.data.imageUrl === undefined || (parsed.data.blurDataUrl !== null && !parsed.data.imageUrl))
+  ) {
+    res.status(400).json({ error: "blurDataUrl can only be supplied with imageUrl." });
     return;
   }
 
@@ -471,6 +526,14 @@ router.post("/posts", requireAuth, async (req, res): Promise<void> => {
     res.status(hasMalformedPath ? 400 : 403).json({ error: mediaOwnershipError });
     return;
   }
+  const imagePath = getAppObjectPath(parsed.data.imageUrl);
+  if (imagePath) {
+    const imageError = await validateUploadedWebpImage(imagePath, userId, "post-image", objectStorageService, true);
+    if (imageError) {
+      res.status(403).json({ error: imageError });
+      return;
+    }
+  }
 
   const postId = await db.transaction(async (tx) => {
     const [post] = await tx.insert(postsTable).values({
@@ -478,6 +541,7 @@ router.post("/posts", requireAuth, async (req, res): Promise<void> => {
       content: parsed.data.content,
       category: parsed.data.category ?? "Amebo Hot",
       imageUrl: parsed.data.imageUrl ?? null,
+      blurDataUrl: parsed.data.blurDataUrl ?? null,
       videoUrl: parsed.data.videoUrl ?? null,
       isAnonymous: parsed.data.isAnonymous ?? false,
     }).returning({ id: postsTable.id });
@@ -524,6 +588,17 @@ router.patch("/posts/:postId", requireAuth, async (req, res): Promise<void> => {
     res.status(400).json({ error: body.error.message });
     return;
   }
+  if (!isSmallWebpDataUrl(body.data.blurDataUrl)) {
+    res.status(400).json({ error: "blurDataUrl must be a small valid WebP data URL." });
+    return;
+  }
+  if (
+    body.data.blurDataUrl !== undefined &&
+    (body.data.imageUrl === undefined || (body.data.blurDataUrl !== null && !body.data.imageUrl))
+  ) {
+    res.status(400).json({ error: "blurDataUrl can only be supplied with imageUrl." });
+    return;
+  }
 
   const [post] = await db.select().from(postsTable).where(eq(postsTable.id, params.data.postId));
   if (!post) {
@@ -535,15 +610,41 @@ router.patch("/posts/:postId", requireAuth, async (req, res): Promise<void> => {
     return;
   }
 
+  const finalImageUrl = body.data.imageUrl !== undefined ? body.data.imageUrl : post.imageUrl;
   if (!body.data.content.trim()) {
     const [poll] = await db.select({ id: pollsTable.id }).from(pollsTable).where(eq(pollsTable.postId, post.id)).limit(1);
-    if (!post.imageUrl && !post.videoUrl && !poll) {
+    if (!finalImageUrl && !post.videoUrl && !poll) {
       res.status(400).json({ error: "Post text cannot be empty unless the post has media or a poll." });
       return;
     }
   }
 
-  await db.update(postsTable).set({ content: body.data.content }).where(eq(postsTable.id, post.id));
+  if (body.data.imageUrl !== undefined && body.data.imageUrl !== post.imageUrl) {
+    if (body.data.imageUrl && hasMalformedPrivateObjectPath(body.data.imageUrl)) {
+      res.status(400).json({ error: "Private media object paths must be valid /objects/ paths." });
+      return;
+    }
+    const imagePath = getAppObjectPath(body.data.imageUrl);
+    if (imagePath) {
+      const mediaOwnershipError = await validateNewPostMediaOwnership([body.data.imageUrl], userId);
+      if (mediaOwnershipError) {
+        res.status(403).json({ error: mediaOwnershipError });
+        return;
+      }
+      const imageError = await validateUploadedWebpImage(imagePath, userId, "post-image", objectStorageService, true);
+      if (imageError) {
+        res.status(403).json({ error: imageError });
+        return;
+      }
+    }
+  }
+
+  await db.update(postsTable).set({
+    content: body.data.content,
+    ...(body.data.imageUrl !== undefined ? { imageUrl: body.data.imageUrl } : {}),
+    ...(body.data.blurDataUrl !== undefined ? { blurDataUrl: body.data.blurDataUrl } : {}),
+    ...(body.data.imageUrl === null && body.data.blurDataUrl === undefined ? { blurDataUrl: null } : {}),
+  }).where(eq(postsTable.id, post.id));
   const updated = await buildPostWithMeta(post.id, userId);
   res.json(UpdatePostResponse.parse(updated));
 });

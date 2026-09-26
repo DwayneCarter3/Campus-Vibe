@@ -7,6 +7,10 @@ import { broadcastNotification } from "../sse-manager";
 import { isVerifiedAccount, publicVerificationStatus } from "../lib/verification";
 import { getEffectiveLevel } from "../lib/academic-level";
 import { computeCampusTitle } from "./admin";
+import { ObjectStorageService } from "../lib/objectStorage";
+import { cursorFilterHash, decodeFeedCursor, encodeFeedCursor } from "../lib/listCursor";
+import { validateUploadedWebpImage } from "../lib/image-upload-validation";
+import { isSmallWebpDataUrl } from "../lib/blur-data-url";
 import {
   ListServicesQueryParams,
   ListServicesResponse,
@@ -29,6 +33,29 @@ import {
 
 const router: IRouter = Router();
 const FLASH_SALE_DURATION_MS = 24 * 60 * 60 * 1000;
+const objectStorageService = new ObjectStorageService();
+
+function getPrivateServiceObjectPath(rawUrl: string | null | undefined): string | null {
+  if (!rawUrl) return null;
+  try {
+    let normalized = objectStorageService.normalizeObjectEntityPath(rawUrl);
+    if (normalized.startsWith("/api/storage/objects/")) {
+      normalized = normalized.slice("/api/storage".length);
+    }
+    if (!normalized.startsWith("/objects/")) return null;
+    if (normalized.includes("?") || normalized.includes("#") || normalized.split("/").some((part) => part === "." || part === "..")) {
+      return null;
+    }
+    return normalized;
+  } catch {
+    return null;
+  }
+}
+
+function hasMalformedPrivateServicePath(rawUrl: string): boolean {
+  return (rawUrl.startsWith("/objects/") || rawUrl.startsWith("/api/storage/objects/"))
+    && getPrivateServiceObjectPath(rawUrl) === null;
+}
 
 function normalizePrice(value: string | null | undefined): string | null {
   if (typeof value !== "string") return null;
@@ -81,6 +108,8 @@ async function buildServiceWithMeta(serviceId: number, viewerId?: string) {
       title: servicesTable.title,
       description: servicesTable.description,
       category: servicesTable.category,
+      imageUrl: servicesTable.imageUrl,
+      blurDataUrl: servicesTable.blurDataUrl,
       price: servicesTable.price,
       originalPrice: servicesTable.originalPrice,
       isFlashSale: servicesTable.isFlashSale,
@@ -145,7 +174,7 @@ router.get("/services", async (req, res): Promise<void> => {
     return;
   }
 
-  const { limit, offset, category } = params.data;
+  const { limit, offset, category, cursor: cursorToken } = params.data;
   const savedOnly = savedOnlyQuery === "true";
   const flashSaleOnly = flashSaleQuery === "true";
   const viewerId = getAuth(req)?.userId;
@@ -170,14 +199,38 @@ router.get("/services", async (req, res): Promise<void> => {
       .where(eq(savedServicesTable.userId, viewerId));
     conditions.push(inArray(servicesTable.id, savedRows.map((row) => row.serviceId)));
   }
+  const filterHash = cursorFilterHash({
+    category: category ?? null,
+    savedOnly,
+    flashSaleOnly,
+    viewerId: savedOnly ? viewerId : null,
+  });
+  if (cursorToken && offset > 0) {
+    res.status(400).json({ error: "Cursor pagination cannot be combined with a positive offset." });
+    return;
+  }
+  const cursor = cursorToken !== undefined ? decodeFeedCursor(cursorToken, filterHash) : null;
+  if (cursorToken !== undefined && !cursor) {
+    res.status(400).json({ error: "Invalid or filter-mismatched cursor." });
+    return;
+  }
+  const cursorCondition = cursor ? sql`(
+    ${servicesTable.isFeatured} < ${cursor.featured}
+    OR (${servicesTable.isFeatured} = ${cursor.featured} AND ${servicesTable.createdAt} < ${cursor.createdAt}::timestamptz)
+    OR (${servicesTable.isFeatured} = ${cursor.featured} AND ${servicesTable.createdAt} = ${cursor.createdAt}::timestamptz
+      AND ${servicesTable.id} < ${cursor.id})
+  )` : undefined;
+  const pageConditions = cursorCondition ? [...conditions, cursorCondition] : conditions;
 
-  const services = await db
+  const fetchedServices = await db
     .select({
       id: servicesTable.id,
       providerId: servicesTable.providerId,
       title: servicesTable.title,
       description: servicesTable.description,
       category: servicesTable.category,
+      imageUrl: servicesTable.imageUrl,
+      blurDataUrl: servicesTable.blurDataUrl,
       price: servicesTable.price,
       originalPrice: servicesTable.originalPrice,
       isFlashSale: servicesTable.isFlashSale,
@@ -187,6 +240,7 @@ router.get("/services", async (req, res): Promise<void> => {
       isFeatured: servicesTable.isFeatured,
       isPinnedToProfile: servicesTable.isPinnedToProfile,
       createdAt: servicesTable.createdAt,
+      cursorCreatedAt: sql<string>`to_char(${servicesTable.createdAt} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`,
       providerName: usersTable.fullName,
       providerFaculty: usersTable.faculty,
       providerLevel: usersTable.level,
@@ -198,10 +252,23 @@ router.get("/services", async (req, res): Promise<void> => {
     })
     .from(servicesTable)
     .leftJoin(usersTable, eq(servicesTable.providerId, usersTable.clerkUserId))
-    .where(conditions.length === 1 ? conditions[0] : and(...conditions))
-    .orderBy(desc(servicesTable.isFeatured), desc(servicesTable.createdAt))
-    .limit(limit ?? 20)
-    .offset(offset ?? 0);
+    .where(pageConditions.length === 1 ? pageConditions[0] : and(...pageConditions))
+    .orderBy(desc(servicesTable.isFeatured), desc(servicesTable.createdAt), desc(servicesTable.id))
+    .limit((limit ?? 20) + 1)
+    .offset(cursor ? 0 : (offset ?? 0));
+
+  const pageLimit = limit ?? 20;
+  const hasMore = fetchedServices.length > pageLimit;
+  const services = fetchedServices.slice(0, pageLimit);
+  const lastService = services.at(-1);
+  const nextCursor = hasMore && lastService
+    ? encodeFeedCursor({
+        featured: lastService.isFeatured ?? false,
+        pinned: false,
+        createdAt: lastService.cursorCreatedAt,
+        id: lastService.id,
+      }, filterHash)
+    : null;
 
   const [{ count }] = await db
     .select({ count: sql<number>`count(*)::int` })
@@ -209,7 +276,7 @@ router.get("/services", async (req, res): Promise<void> => {
     .where(conditions.length === 1 ? conditions[0] : and(...conditions));
 
   const enriched = await Promise.all(services.map(async (s) => {
-    const { providerVerificationStatus, providerMatricNumber, ...rest } = s;
+    const { providerVerificationStatus, providerMatricNumber, cursorCreatedAt, ...rest } = s;
     const role = s.providerRole ?? "student";
     return {
       ...rest,
@@ -227,7 +294,7 @@ router.get("/services", async (req, res): Promise<void> => {
     };
   }));
 
-  res.json(ListServicesResponse.parse({ services: enriched, total: count }));
+  res.json(ListServicesResponse.parse({ services: enriched, total: count, nextCursor }));
 });
 
 router.post("/services", requireAuth, async (req, res): Promise<void> => {
@@ -236,6 +303,29 @@ router.post("/services", requireAuth, async (req, res): Promise<void> => {
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
     return;
+  }
+  if (!isSmallWebpDataUrl(parsed.data.blurDataUrl)) {
+    res.status(400).json({ error: "blurDataUrl must be a small valid WebP data URL." });
+    return;
+  }
+  if (
+    parsed.data.blurDataUrl !== undefined &&
+    (parsed.data.imageUrl === undefined || (parsed.data.blurDataUrl !== null && !parsed.data.imageUrl))
+  ) {
+    res.status(400).json({ error: "blurDataUrl can only be supplied with imageUrl." });
+    return;
+  }
+  if (parsed.data.imageUrl && hasMalformedPrivateServicePath(parsed.data.imageUrl)) {
+    res.status(400).json({ error: "Private media object paths must be valid /objects/ paths." });
+    return;
+  }
+  const imagePath = getPrivateServiceObjectPath(parsed.data.imageUrl);
+  if (imagePath) {
+    const imageError = await validateUploadedWebpImage(imagePath, userId, "service-image", objectStorageService);
+    if (imageError) {
+      res.status(403).json({ error: imageError });
+      return;
+    }
   }
 
   const flashSale = parsed.data.isFlashSale
@@ -305,6 +395,17 @@ router.patch("/services/:serviceId", requireAuth, async (req, res): Promise<void
     res.status(400).json({ error: parsed.error.message });
     return;
   }
+  if (!isSmallWebpDataUrl(parsed.data.blurDataUrl)) {
+    res.status(400).json({ error: "blurDataUrl must be a small valid WebP data URL." });
+    return;
+  }
+  if (
+    parsed.data.blurDataUrl !== undefined &&
+    (parsed.data.imageUrl === undefined || (parsed.data.blurDataUrl !== null && !parsed.data.imageUrl))
+  ) {
+    res.status(400).json({ error: "blurDataUrl can only be supplied with imageUrl." });
+    return;
+  }
 
   const [service] = await db.select().from(servicesTable).where(eq(servicesTable.id, params.data.serviceId));
   if (!service) {
@@ -317,11 +418,29 @@ router.patch("/services/:serviceId", requireAuth, async (req, res): Promise<void
     return;
   }
 
+  if (parsed.data.imageUrl !== undefined && parsed.data.imageUrl !== service.imageUrl) {
+    if (parsed.data.imageUrl && hasMalformedPrivateServicePath(parsed.data.imageUrl)) {
+      res.status(400).json({ error: "Private media object paths must be valid /objects/ paths." });
+      return;
+    }
+    const imagePath = getPrivateServiceObjectPath(parsed.data.imageUrl);
+    if (imagePath) {
+      const imageError = await validateUploadedWebpImage(imagePath, userId, "service-image", objectStorageService);
+      if (imageError) {
+        res.status(403).json({ error: imageError });
+        return;
+      }
+    }
+  }
+
   const { isFlashSale: requestedFlashSale, originalPrice: requestedOriginalPrice, ...serviceFields } = parsed.data;
+  const updateFields = parsed.data.imageUrl === null && parsed.data.blurDataUrl === undefined
+    ? { ...serviceFields, blurDataUrl: null }
+    : serviceFields;
   const now = new Date();
   if (requestedFlashSale === false) {
     await db.update(servicesTable).set({
-      ...serviceFields,
+      ...updateFields,
       isFlashSale: false,
       originalPrice: null,
       flashExpiresAt: null,
@@ -338,7 +457,7 @@ router.patch("/services/:serviceId", requireAuth, async (req, res): Promise<void
       }
       const activeExpiry = service.isFlashSale && service.flashExpiresAt && service.flashExpiresAt > now;
       await db.update(servicesTable).set({
-        ...serviceFields,
+        ...updateFields,
         price: flashSale.price,
         isFlashSale: true,
         originalPrice: flashSale.originalPrice,
@@ -352,7 +471,7 @@ router.patch("/services/:serviceId", requireAuth, async (req, res): Promise<void
         return;
       }
       await db.update(servicesTable).set({
-        ...serviceFields,
+        ...updateFields,
         isFlashSale: false,
         originalPrice: null,
         flashExpiresAt: null,

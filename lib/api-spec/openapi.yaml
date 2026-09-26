@@ -293,6 +293,14 @@ paths:
           schema:
             type: integer
             default: 20
+            minimum: 1
+            maximum: 100
+        - name: cursor
+          in: query
+          description: Opaque continuation cursor bound to the active filters.
+          schema:
+            type: string
+            maxLength: 2048
         - name: offset
           in: query
           schema:
@@ -595,6 +603,14 @@ paths:
           schema:
             type: integer
             default: 20
+            minimum: 1
+            maximum: 100
+        - name: cursor
+          in: query
+          description: Opaque continuation cursor bound to the active filters.
+          schema:
+            type: string
+            maxLength: 2048
         - name: offset
           in: query
           schema:
@@ -1855,6 +1871,10 @@ components:
           enum: [Shuttle Updates, Portal Down, Exam Timetable, Amebo Hot]
         imageUrl:
           type: ["string", "null"]
+        blurDataUrl:
+          type: ["string", "null"]
+          maxLength: 10950
+          pattern: '^data:image/webp;base64,[A-Za-z0-9+/]+={0,2}$'
         videoUrl:
           type: ["string", "null"]
         likesCount:
@@ -1906,6 +1926,7 @@ components:
         - content
         - category
         - imageUrl
+        - blurDataUrl
         - videoUrl
         - likesCount
         - isLikedByMe
@@ -1928,9 +1949,12 @@ components:
             $ref: "#/components/schemas/Post"
         total:
           type: integer
+        nextCursor:
+          type: ["string", "null"]
       required:
         - posts
         - total
+        - nextCursor
 
     CreatePostBody:
       type: object
@@ -1942,6 +1966,10 @@ components:
           enum: [Shuttle Updates, Portal Down, Exam Timetable, Amebo Hot]
         imageUrl:
           type: ["string", "null"]
+        blurDataUrl:
+          type: ["string", "null"]
+          maxLength: 10950
+          pattern: '^data:image/webp;base64,[A-Za-z0-9+/]+={0,2}$'
         videoUrl:
           type: ["string", "null"]
         isAnonymous:
@@ -1958,6 +1986,12 @@ components:
         content:
           type: string
           maxLength: 500
+        imageUrl:
+          type: ["string", "null"]
+        blurDataUrl:
+          type: ["string", "null"]
+          maxLength: 10950
+          pattern: '^data:image/webp;base64,[A-Za-z0-9+/]+={0,2}$'
 
     SaveResponse:
       type: object
@@ -2196,6 +2230,12 @@ components:
           type: string
         category:
           type: string
+        imageUrl:
+          type: ["string", "null"]
+        blurDataUrl:
+          type: ["string", "null"]
+          maxLength: 10950
+          pattern: '^data:image/webp;base64,[A-Za-z0-9+/]+={0,2}$'
         price:
           type: ["string", "null"]
         isFlashSale:
@@ -2242,6 +2282,8 @@ components:
         - isSavedByMe
         - isFeatured
         - isPinnedToProfile
+        - imageUrl
+        - blurDataUrl
         - createdAt
 
     ListServicesResponse:
@@ -2253,9 +2295,12 @@ components:
             $ref: "#/components/schemas/Service"
         total:
           type: integer
+        nextCursor:
+          type: ["string", "null"]
       required:
         - services
         - total
+        - nextCursor
 
     ServiceInput:
       type: object
@@ -2266,6 +2311,12 @@ components:
           type: string
         category:
           type: string
+        imageUrl:
+          type: ["string", "null"]
+        blurDataUrl:
+          type: ["string", "null"]
+          maxLength: 10950
+          pattern: '^data:image/webp;base64,[A-Za-z0-9+/]+={0,2}$'
         price:
           type: ["string", "null"]
         isFlashSale:
@@ -2297,6 +2348,12 @@ components:
           type: ["string", "null"]
         contactInfo:
           type: string
+        imageUrl:
+          type: ["string", "null"]
+        blurDataUrl:
+          type: ["string", "null"]
+          maxLength: 10950
+          pattern: '^data:image/webp;base64,[A-Za-z0-9+/]+={0,2}$'
         isActive:
           type: boolean
 
@@ -2445,6 +2502,9 @@ components:
         contentType:
           type: string
           minLength: 1
+        purpose:
+          type: string
+          enum: [post-image, service-image]
     UploadUrlResponse:
       type: object
       required: [uploadURL, objectPath]

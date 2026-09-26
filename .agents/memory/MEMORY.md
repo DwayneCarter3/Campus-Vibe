@@ -19,3 +19,4 @@
 - [Boolean query coercion](boolean-query-coercion.md) — zod.coerce.boolean treats the query string "false" as true; parse query booleans strictly before using them.
 - [Shuttle status majority](shuttle-status-majority.md) — a crowd status requires more than half of active unique reports; ties/pluralities show no clear majority.
 - [Private academic plans](private-academic-plans.md) — keep student academic planning data behind self-only session identity, not profile or admin lookups.
+- [Image upload rollout](image-upload-rollout.md) — new image receipts are verified WebP, but owner-verified older post receipts need compatibility during client rollout.

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Service, ReportBodyReason } from "@workspace/api-client-react";
 import { useUpdateService, useDeleteService, useToggleSaveService, useReportService, useToggleFeatureService, usePinServiceToProfile, useGetMyProfile, getGetMyProfileQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Link, useLocation } from "wouter";
 import { motion } from "framer-motion";
-import { MapPin, AlertTriangle, MessageCircle, MoreVertical, Bookmark, Link2, EyeOff, Flag, Pencil, Trash2, Pin, Sparkles } from "lucide-react";
+import { MapPin, AlertTriangle, MessageCircle, MoreVertical, Bookmark, Link2, EyeOff, Flag, Pencil, Trash2, Pin, Sparkles, ImagePlus, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   Dialog,
@@ -20,6 +20,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { UserVerificationMarks } from "@/components/user-verification-marks";
 import { useStartConversation } from "@workspace/api-client-react";
+import { uploadCampusImage } from "@/lib/image-upload";
+import { LazyBlurImage } from "@/components/lazy-blur-image";
 
 async function notifyWhatsappClick(serviceId: number) {
   try {
@@ -67,7 +69,10 @@ export function ServiceCard({ service, index = 0, currentUserId, directView = fa
     try { return JSON.parse(sessionStorage.getItem("campusx-hidden-listings") || "[]").includes(service.id); } catch { return false; }
   });
   const [reason, setReason] = useState<ReportBodyReason>("Spam");
-  const [draft, setDraft] = useState({ title: service.title, description: service.description, category: service.category, price: service.price ?? "", contactInfo: service.contactInfo, isFlashSale: Boolean(service.originalPrice && service.flashExpiresAt), originalPrice: service.originalPrice ?? "" });
+  const [draft, setDraft] = useState({ title: service.title, description: service.description, category: service.category, price: service.price ?? "", contactInfo: service.contactInfo, isFlashSale: Boolean(service.originalPrice && service.flashExpiresAt), originalPrice: service.originalPrice ?? "", imageUrl: service.imageUrl ?? "", blurDataUrl: service.blurDataUrl ?? "" });
+  const [imageUploading, setImageUploading] = useState(false);
+  const [imageError, setImageError] = useState<string | null>(null);
+  const editImageInput = useRef<HTMLInputElement>(null);
   const [countdownNow, setCountdownNow] = useState(Date.now());
   const queryClient = useQueryClient();
   const { data: profile } = useGetMyProfile({ query: { queryKey: getGetMyProfileQueryKey(), retry: false } });
@@ -97,6 +102,7 @@ export function ServiceCard({ service, index = 0, currentUserId, directView = fa
   const countdownLabel = `${Math.floor(secondsRemaining / 3600)}h ${Math.floor((secondsRemaining % 3600) / 60)}m`;
   const saveEdit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (imageUploading) return;
     if (draft.isFlashSale) {
       const currentPrice = Number(draft.price.replace(/[^\d.]/g, ""));
       const originalPrice = Number(draft.originalPrice.replace(/[^\d.]/g, ""));
@@ -115,6 +121,8 @@ export function ServiceCard({ service, index = 0, currentUserId, directView = fa
         contactInfo: draft.contactInfo,
         isFlashSale: draft.isFlashSale,
         originalPrice: draft.isFlashSale ? draft.originalPrice || null : null,
+        imageUrl: draft.imageUrl || null,
+        blurDataUrl: draft.blurDataUrl || null,
       },
     }, { onSuccess: () => { setDialog(null); refresh(); toast({ title: "Listing updated" }); }, onError: failed });
   };
@@ -170,6 +178,19 @@ export function ServiceCard({ service, index = 0, currentUserId, directView = fa
       }
     );
   };
+  const selectEditImage = async (file?: File) => {
+    if (!file) return;
+    setImageUploading(true);
+    setImageError(null);
+    try {
+      const uploaded = await uploadCampusImage(file, "service-image");
+      setDraft((current) => ({ ...current, imageUrl: uploaded.imageUrl, blurDataUrl: uploaded.blurDataUrl }));
+    } catch (error) {
+      setImageError(error instanceof Error ? error.message : "Couldn't upload listing image.");
+    } finally {
+      setImageUploading(false);
+    }
+  };
 
   if (hidden && !directView) return null;
   return (
@@ -181,6 +202,8 @@ export function ServiceCard({ service, index = 0, currentUserId, directView = fa
         className="glass rounded-2xl overflow-hidden flex flex-col group border border-white/5 hover:border-primary/25 transition-all hover:shadow-lg hover:shadow-primary/5"
       >
         <div className="p-5 flex-1 flex flex-col gap-3">
+
+          {service.imageUrl && <LazyBlurImage src={service.imageUrl} blurDataUrl={service.blurDataUrl} alt={service.title} className="-mx-5 -mt-5 mb-1 aspect-[4/3] bg-white/5" imageClassName="h-full w-full object-cover" />}
 
           {/* Top row: category, price and listing controls */}
           <div className="flex justify-between items-center gap-2">
@@ -203,7 +226,7 @@ export function ServiceCard({ service, index = 0, currentUserId, directView = fa
                 <DropdownMenuTrigger asChild><button data-testid={`button-listing-more-${service.id}`} aria-label={`More options for ${service.title}`} className="p-1.5 rounded-lg text-muted-foreground hover:bg-white/10 hover:text-foreground"><MoreVertical className="h-4 w-4" /></button></DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="min-w-48 bg-[#1d202c] border-white/10 text-foreground">
                   {isMyService ? <>
-                    <DropdownMenuItem onSelect={() => { setDraft({ title: service.title, description: service.description, category: service.category, price: service.price ?? "", contactInfo: service.contactInfo, isFlashSale: Boolean(service.originalPrice && service.flashExpiresAt && new Date(service.flashExpiresAt).getTime() > Date.now()), originalPrice: service.originalPrice ?? "" }); setDialog("edit"); }}><Pencil className="h-4 w-4 mr-2" />Edit listing</DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => { setDraft({ title: service.title, description: service.description, category: service.category, price: service.price ?? "", contactInfo: service.contactInfo, isFlashSale: Boolean(service.originalPrice && service.flashExpiresAt && new Date(service.flashExpiresAt).getTime() > Date.now()), originalPrice: service.originalPrice ?? "", imageUrl: service.imageUrl ?? "", blurDataUrl: service.blurDataUrl ?? "" }); setImageError(null); setDialog("edit"); }}><Pencil className="h-4 w-4 mr-2" />Edit listing</DropdownMenuItem>
                     <DropdownMenuItem disabled={busy} onSelect={() => pinService.mutate({ serviceId: service.id }, { onSuccess: () => { refresh(); toast({ title: service.isPinnedToProfile ? "Removed from profile" : "Pinned to profile" }); }, onError: failed })}><Pin className="h-4 w-4 mr-2" />{service.isPinnedToProfile ? "Unpin from Profile" : "Pin to Profile"}</DropdownMenuItem>
                     <DropdownMenuItem onSelect={() => setDialog("delete")} className="text-rose-400"><Trash2 className="h-4 w-4 mr-2" />Delete listing</DropdownMenuItem>
                   </> : <>
@@ -333,11 +356,22 @@ export function ServiceCard({ service, index = 0, currentUserId, directView = fa
         <DialogContent className="glass border-white/10 sm:max-w-lg max-h-[90dvh] overflow-y-auto">
           <DialogTitle>Edit listing</DialogTitle>
           <form className="space-y-4" onSubmit={saveEdit}>
+            <div className="space-y-2">
+              <span className="text-sm font-medium">Listing photo <span className="text-xs text-muted-foreground">optional · WebP under 80 KB</span></span>
+              <input ref={editImageInput} type="file" accept="image/*" className="hidden" onChange={(event) => { void selectEditImage(event.target.files?.[0]); event.target.value = ""; }} />
+              <div className="flex items-center gap-3">
+                <Button type="button" variant="outline" disabled={imageUploading} onClick={() => editImageInput.current?.click()}><ImagePlus className="mr-2 h-4 w-4" />{imageUploading ? "Compressing…" : draft.imageUrl ? "Replace photo" : "Choose photo"}</Button>
+                {imageUploading && <Loader2 className="h-4 w-4 animate-spin text-primary" />}
+                {draft.imageUrl && <button type="button" className="text-xs text-muted-foreground hover:text-foreground" onClick={() => setDraft((current) => ({ ...current, imageUrl: "", blurDataUrl: "" }))}>Remove photo</button>}
+              </div>
+              {draft.imageUrl && <img src={draft.imageUrl} alt="Listing preview" className="max-h-40 rounded-lg object-cover" />}
+              {imageError && <p role="alert" className="text-xs text-destructive">{imageError}</p>}
+            </div>
             {(["title", "category", "price", "contactInfo"] as const).map((key) => <label key={key} className="block text-sm font-medium capitalize">{key === "contactInfo" ? "WhatsApp number" : key}<Input data-testid={`input-listing-${key}-${service.id}`} className="mt-1.5 bg-background/50 border-white/10" value={draft[key]} onChange={(e) => setDraft({ ...draft, [key]: e.target.value })} required={key !== "price"} minLength={key === "title" ? 3 : undefined} /></label>)}
             <label className="block text-sm font-medium">Description<Textarea data-testid={`input-listing-description-${service.id}`} className="mt-1.5 bg-background/50 border-white/10" value={draft.description} onChange={(e) => setDraft({ ...draft, description: e.target.value })} required minLength={10} /></label>
             <label className="flex items-center gap-2 rounded-xl border border-amber-400/20 bg-amber-500/[0.06] p-3 text-sm font-medium"><input data-testid={`input-listing-flash-sale-${service.id}`} type="checkbox" checked={draft.isFlashSale} onChange={(e) => setDraft({ ...draft, isFlashSale: e.target.checked })} className="h-4 w-4 accent-amber-400" />⚡ Mark as a Flash Sale</label>
             {draft.isFlashSale && <label className="block text-sm font-medium">Original Price (₦)<Input data-testid={`input-listing-original-price-${service.id}`} inputMode="decimal" className="mt-1.5 bg-background/50 border-white/10" value={draft.originalPrice} onChange={(e) => setDraft({ ...draft, originalPrice: e.target.value })} required /></label>}
-            <Button type="submit" className="w-full gradient-btn" disabled={busy}>{updateService.isPending ? "Saving…" : "Save changes"}</Button>
+            <Button type="submit" className="w-full gradient-btn" disabled={busy || imageUploading}>{updateService.isPending ? "Saving…" : "Save changes"}</Button>
           </form>
         </DialogContent>
       </Dialog>
