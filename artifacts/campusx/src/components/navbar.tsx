@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { NotificationBell } from "@/components/notification-bell";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { StudentSearch } from "@/components/student-search";
+import { CampusXLogo } from "@/components/campusx-logo";
 import { Calculator, MessageCircle, Shield } from "lucide-react";
 import { useGetMyProfile, getGetMyProfileQueryKey, useListConversations, getListConversationsQueryKey } from "@workspace/api-client-react";
 
@@ -29,8 +30,8 @@ export function Navbar() {
   return (
     <nav aria-label="CampusX header" className="fixed top-0 left-0 right-0 z-50 glass h-16">
       <div className="container mx-auto px-2 sm:px-4 h-full flex items-center gap-1 sm:gap-2">
-        <Link href="/" className="shrink-0 whitespace-nowrap text-2xl font-bold tracking-tighter gradient-text">
-          CampusX
+        <Link href="/" aria-label="CampusX home" data-testid="link-campusx-home" className="shrink-0">
+          <CampusXLogo width={148} height={38} className="h-[34px] w-[130px] text-foreground sm:h-[38px] sm:w-[148px]" glow />
         </Link>
 
         <Show when="signed-in">
