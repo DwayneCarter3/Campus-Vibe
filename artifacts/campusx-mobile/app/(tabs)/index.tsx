@@ -531,10 +531,12 @@ export function PostCard({ post, onHide }: { post: Post; onHide?: () => void }) 
                   <Feather name="trash-2" size={18} color={colors.destructive ?? "#ef4444"} />
                   <Text style={[styles.menuText, { color: colors.destructive ?? "#ef4444" }]}>Delete Post</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.menuItem} onPress={() => { pinMutation.mutate({ postId: post.id }); setMenuOpen(false); }}>
-                  <Feather name="map-pin" size={18} color={colors.foreground} />
-                  <Text style={[styles.menuText, { color: colors.foreground }]}>{post.isPinnedToProfile ? "Unpin from Profile" : "Pin Profile"}</Text>
-                </TouchableOpacity>
+                {!post.isAnonymous && (
+                  <TouchableOpacity style={styles.menuItem} onPress={() => { pinMutation.mutate({ postId: post.id }); setMenuOpen(false); }}>
+                    <Feather name="map-pin" size={18} color={colors.foreground} />
+                    <Text style={[styles.menuText, { color: colors.foreground }]}>{post.isPinnedToProfile ? "Unpin from Profile" : "Pin Profile"}</Text>
+                  </TouchableOpacity>
+                )}
               </>
             ) : (
               <>

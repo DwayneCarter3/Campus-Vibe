@@ -107,7 +107,6 @@ export function PostCard({ post, isAdmin, isModerator, moderationMode = false, o
   const isPrivileged = myProfile?.role === "ceo" || myProfile?.role === "admin";
   const canModerate = moderationMode && (isAdmin || isModerator || isPrivileged || myProfile?.role === "moderator");
   const isAnon = post.isAnonymous;
-  const isMyAnonPost = isAnon && isOwner;
 
   const fireLit = optimisticFire !== null ? optimisticFire.active : post.isLikedByMe;
   const fireCount = optimisticFire !== null ? optimisticFire.count : post.likesCount;
@@ -268,8 +267,7 @@ export function PostCard({ post, isAdmin, isModerator, moderationMode = false, o
         data-testid={`card-post-${post.id}`}
         className={cn(
           "glass rounded-2xl mb-4 group border hover:border-primary/20 transition-colors overflow-hidden",
-          "border-white/5",
-          isMyAnonPost && "border-dashed border-white/20"
+          "border-white/5"
         )}
       >
         <div className="p-4">
@@ -314,9 +312,6 @@ export function PostCard({ post, isAdmin, isModerator, moderationMode = false, o
                         <Ghost className="h-2.5 w-2.5" />
                          Anon Post
                       </Badge>
-                    )}
-                    {isMyAnonPost && (
-                      <span className="text-[10px] text-muted-foreground italic">(your post)</span>
                     )}
                   </div>
                   {!isAnon && (
