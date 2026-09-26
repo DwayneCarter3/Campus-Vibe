@@ -19,7 +19,7 @@ import { Link, useLocation } from "wouter";
 import { PostCard } from "@/components/post-card";
 import { ServiceCard } from "@/components/service-card";
 import { cn } from "@/lib/utils";
-import { VerificationBadge } from "@/components/verification-badge";
+import { UserVerificationMarks } from "@/components/user-verification-marks";
 
 type Tab = "posts" | "hustles";
 
@@ -104,13 +104,8 @@ export default function UserProfilePage() {
               <div className="flex items-center gap-2 flex-wrap mb-2">
                 <h1 className="text-xl font-bold inline-flex items-center gap-1.5">
                   {profile.fullName}
-                  {profile.isVerified && <VerificationBadge size="lg" />}
                 </h1>
-                {profile.verificationStatus === "Premium_Approved" && (
-                  <Badge className="text-[10px] bg-blue-500/20 text-blue-200 border border-blue-400/40">
-                    Premium Blue Tick
-                  </Badge>
-                )}
+                <UserVerificationMarks status={profile.verificationStatus} />
               </div>
 
               <div className="flex flex-wrap gap-2 mb-2">

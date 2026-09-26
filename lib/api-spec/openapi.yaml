@@ -1268,6 +1268,8 @@ components:
           type: string
         authorIsVerified:
           type: boolean
+        authorVerificationStatus:
+          type: string
         isAnonymous:
           type: boolean
         content:
@@ -1312,6 +1314,7 @@ components:
         - authorCampusTitle
         - authorRole
         - authorIsVerified
+        - authorVerificationStatus
         - isAnonymous
         - content
         - imageUrl
@@ -1392,6 +1395,8 @@ components:
           type: string
         authorIsVerified:
           type: boolean
+        authorVerificationStatus:
+          type: string
         content:
           type: string
         createdAt:
@@ -1404,6 +1409,7 @@ components:
         - authorName
         - authorLevel
         - authorIsVerified
+        - authorVerificationStatus
         - content
         - createdAt
 
@@ -1447,6 +1453,8 @@ components:
           type: string
         providerIsVerified:
           type: boolean
+        providerVerificationStatus:
+          type: string
         providerAvatarUrl:
           type: ["string", "null"]
         providerCampusTitle:
@@ -1476,6 +1484,7 @@ components:
         - providerLevel
         - providerCampusLocation
         - providerIsVerified
+        - providerVerificationStatus
         - providerAvatarUrl
         - providerCampusTitle
         - providerRole
@@ -1588,7 +1597,7 @@ components:
 
     EmbeddedPost:
       type: object
-      required: [id, authorId, authorName, authorAvatarUrl, authorIsVerified, content, imageUrl, createdAt]
+      required: [id, authorId, authorName, authorAvatarUrl, authorIsVerified, authorVerificationStatus, content, imageUrl, createdAt]
       properties:
         id:
           type: integer
@@ -1600,6 +1609,8 @@ components:
           type: ["string", "null"]
         authorIsVerified:
           type: boolean
+        authorVerificationStatus:
+          type: string
         content:
           type: string
         imageUrl:

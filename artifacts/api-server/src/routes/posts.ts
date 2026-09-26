@@ -5,7 +5,7 @@ import { db, postsTable, postLikesTable, postNoCapsTable, postCommentsTable, use
 import { requireAuth } from "../middlewares/auth";
 import { broadcastNotification } from "../sse-manager";
 import { computeCampusTitle } from "./admin";
-import { isVerifiedAccount } from "../lib/verification";
+import { isVerifiedAccount, publicVerificationStatus } from "../lib/verification";
 import { getEffectiveLevel } from "../lib/academic-level";
 import {
   ListPostsQueryParams,
@@ -80,6 +80,7 @@ function maskAnonymousPost(post: any, requesterId?: string) {
       authorCampusTitle: "",
       authorRole: "student",
       authorIsVerified: false,
+      authorVerificationStatus: "none",
     };
   }
   return post;
@@ -159,6 +160,7 @@ async function buildPostWithMeta(postId: number, clerkUserId?: string) {
     authorCampusTitle: campusTitle,
     authorRole: role,
     authorIsVerified: isVerifiedAccount(post.authorVerificationStatus, role),
+    authorVerificationStatus: publicVerificationStatus(post.authorVerificationStatus, role),
     isAnonymous: post.isAnonymous ?? false,
     commentsCount: commentsCount ?? 0,
     reshareCount: post.reshareCount ?? 0,
@@ -169,6 +171,7 @@ async function buildPostWithMeta(postId: number, clerkUserId?: string) {
       authorName: post.opAuthorName ?? "Unknown",
       authorAvatarUrl: post.opAuthorAvatarUrl ?? null,
       authorIsVerified: !post.opIsAnonymous && isVerifiedAccount(post.opAuthorVerificationStatus, post.opAuthorRole),
+      authorVerificationStatus: post.opIsAnonymous ? "none" : publicVerificationStatus(post.opAuthorVerificationStatus, post.opAuthorRole),
       content: post.opContent ?? "",
       imageUrl: post.opImageUrl ?? null,
       createdAt: (post.opCreatedAt ?? new Date()).toISOString(),
@@ -270,6 +273,7 @@ router.get("/posts", async (req, res): Promise<void> => {
         authorCampusTitle: campusTitle,
         authorRole: role,
         authorIsVerified: isVerifiedAccount(post.authorVerificationStatus, role),
+        authorVerificationStatus: publicVerificationStatus(post.authorVerificationStatus, role),
         isAnonymous: post.isAnonymous ?? false,
         commentsCount: commentsCount ?? 0,
         reshareCount: post.reshareCount ?? 0,
@@ -280,6 +284,7 @@ router.get("/posts", async (req, res): Promise<void> => {
           authorName: post.opAuthorName ?? "Unknown",
           authorAvatarUrl: post.opAuthorAvatarUrl ?? null,
           authorIsVerified: !post.opIsAnonymous && isVerifiedAccount(post.opAuthorVerificationStatus, post.opAuthorRole),
+          authorVerificationStatus: post.opIsAnonymous ? "none" : publicVerificationStatus(post.opAuthorVerificationStatus, post.opAuthorRole),
           content: post.opContent ?? "",
           imageUrl: post.opImageUrl ?? null,
           createdAt: (post.opCreatedAt ?? new Date()).toISOString(),
@@ -551,6 +556,7 @@ router.get("/posts/:postId/comments", async (req, res): Promise<void> => {
     authorName: c.authorName ?? "Unknown",
     authorLevel: getEffectiveLevel(c.authorLevel, authorMatricNumber),
     authorIsVerified: isVerifiedAccount(c.authorVerificationStatus, c.authorRole),
+    authorVerificationStatus: publicVerificationStatus(c.authorVerificationStatus, c.authorRole),
   }));
 
   res.json(ListPostCommentsResponse.parse({ comments: mapped, total: mapped.length }));
@@ -602,6 +608,7 @@ router.post("/posts/:postId/comments", requireAuth, async (req, res): Promise<vo
     authorName: author?.fullName ?? "Unknown",
     authorLevel: getEffectiveLevel(author?.level, author?.matricNumber),
     authorIsVerified: isVerifiedAccount(author?.verificationStatus, author?.role),
+    authorVerificationStatus: publicVerificationStatus(author?.verificationStatus, author?.role),
   });
 });
 

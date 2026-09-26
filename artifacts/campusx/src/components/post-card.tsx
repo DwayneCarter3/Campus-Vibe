@@ -33,16 +33,16 @@ import { useUser } from "@clerk/react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { AvatarModal } from "@/components/avatar-modal";
-import { CampusTitleBadge } from "@/components/campus-title-badge";
-import { VerificationBadge } from "@/components/verification-badge";
+import { UserVerificationMarks } from "@/components/user-verification-marks";
 
 interface PostCardProps {
   post: Post;
   isAdmin?: boolean;
   isModerator?: boolean;
+  moderationMode?: boolean;
 }
 
-export function PostCard({ post, isAdmin, isModerator }: PostCardProps) {
+export function PostCard({ post, isAdmin, isModerator, moderationMode = false }: PostCardProps) {
   const { user } = useUser();
   const queryClient = useQueryClient();
   const likePost = useLikePost();
@@ -76,7 +76,7 @@ export function PostCard({ post, isAdmin, isModerator }: PostCardProps) {
   }, [commentsData?.comments.length, commentsOpen]);
 
   const isOwner = user?.id === post.authorId;
-  const canModerate = isAdmin || isModerator;
+  const canModerate = moderationMode && (isAdmin || isModerator);
   const isAnon = post.isAnonymous;
   const isMyAnonPost = isAnon && isOwner;
 
@@ -223,16 +223,8 @@ export function PostCard({ post, isAdmin, isModerator }: PostCardProps) {
                       ) : (
                         <span className="font-semibold text-muted-foreground">{authorName}</span>
                       )}
-                      {!isAnon && post.authorIsVerified && <VerificationBadge />}
+                      {!isAnon && <UserVerificationMarks status={post.authorVerificationStatus} />}
                     </span>
-                    {!isAnon && (
-                      <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 border-primary/30 text-primary shrink-0">
-                        {post.authorLevel}
-                      </Badge>
-                    )}
-                    {!isAnon && post.authorCampusTitle && (
-                      <CampusTitleBadge title={post.authorCampusTitle} role={post.authorRole} />
-                    )}
                     {isAnon && (
                       <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 border-white/20 text-muted-foreground shrink-0 flex items-center gap-0.5">
                         <Ghost className="h-2.5 w-2.5" />
@@ -246,6 +238,8 @@ export function PostCard({ post, isAdmin, isModerator }: PostCardProps) {
                   {!isAnon && (
                     <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-0.5 flex-wrap">
                       <span className="font-medium text-foreground/70">{post.authorFaculty}</span>
+                      <span>•</span>
+                      <span>{post.authorLevel}</span>
                       <span>•</span>
                       <span className="flex items-center gap-0.5">
                         <MapPin className="h-2.5 w-2.5" />
@@ -284,7 +278,7 @@ export function PostCard({ post, isAdmin, isModerator }: PostCardProps) {
                           {post.isPinnedToProfile ? "Unpin from Profile" : "Pin to Profile"}
                         </DropdownMenuItem>
                       )}
-                      {isAdmin && (
+                      {moderationMode && isAdmin && (
                         <DropdownMenuItem
                           onClick={handlePinToFeed}
                           disabled={pinToFeed.isPending}
@@ -342,7 +336,7 @@ export function PostCard({ post, isAdmin, isModerator }: PostCardProps) {
                       <Link href={`/profile/${post.originalPost.authorId}`} className="text-xs font-semibold hover:text-primary transition-colors truncate">
                         {post.originalPost.authorName}
                       </Link>
-                      {post.originalPost.authorIsVerified && <span className="text-xs"><VerificationBadge /></span>}
+                      <UserVerificationMarks status={post.originalPost.authorVerificationStatus} />
                       <span className="text-[10px] text-muted-foreground ml-auto shrink-0">
                         {formatDistanceToNow(new Date(post.originalPost.createdAt), { addSuffix: true })}
                       </span>
@@ -464,7 +458,7 @@ export function PostCard({ post, isAdmin, isModerator }: PostCardProps) {
                     </AvatarFallback>
                   </Avatar>
                   <span className="text-xs font-semibold truncate">{post.originalPost?.authorName ?? post.authorName}</span>
-                  {(post.originalPost?.authorIsVerified ?? post.authorIsVerified) && <span className="text-xs"><VerificationBadge /></span>}
+                  <UserVerificationMarks status={post.originalPost?.authorVerificationStatus ?? post.authorVerificationStatus} />
                 </div>
                 <p className="text-xs text-foreground/70 line-clamp-3 leading-relaxed">
                   {post.originalPost?.content || post.content || <span className="italic text-muted-foreground">No text</span>}
@@ -576,11 +570,8 @@ function CommentRow({ comment, currentUserId }: { comment: Comment; currentUserI
         <div className="flex items-baseline gap-1.5 flex-wrap">
           <span className="text-xs font-semibold leading-none inline-flex items-center gap-1">
             {comment.authorName}
-            {comment.authorIsVerified && <VerificationBadge />}
+            <UserVerificationMarks status={comment.authorVerificationStatus} />
           </span>
-          <Badge variant="outline" className="text-[9px] px-1 py-0 h-3.5 border-primary/25 text-primary/80 leading-none">
-            {comment.authorLevel}
-          </Badge>
           <span className="text-[10px] text-muted-foreground ml-auto">
             {formatDistanceToNow(new Date(comment.createdAt), { addSuffix: true })}
           </span>

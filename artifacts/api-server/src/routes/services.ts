@@ -3,7 +3,7 @@ import { eq, desc, sql, and } from "drizzle-orm";
 import { db, servicesTable, usersTable, postsTable, notificationsTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/auth";
 import { broadcastNotification } from "../sse-manager";
-import { isVerifiedAccount } from "../lib/verification";
+import { isVerifiedAccount, publicVerificationStatus } from "../lib/verification";
 import { getEffectiveLevel } from "../lib/academic-level";
 import { computeCampusTitle } from "./admin";
 import {
@@ -66,6 +66,7 @@ async function buildServiceWithMeta(serviceId: number) {
     providerCampusLocation: service.providerCampusLocation ?? "Ojo",
     providerAvatarUrl: service.providerAvatarUrl ?? null,
     providerIsVerified: isVerifiedAccount(providerVerificationStatus, role),
+    providerVerificationStatus: publicVerificationStatus(providerVerificationStatus, role),
     providerRole: role,
     providerCampusTitle: await getProviderTitle(service.providerId, role),
   };
@@ -128,6 +129,7 @@ router.get("/services", async (req, res): Promise<void> => {
       providerCampusLocation: s.providerCampusLocation ?? "Ojo",
       providerAvatarUrl: s.providerAvatarUrl ?? null,
       providerIsVerified: isVerifiedAccount(providerVerificationStatus, role),
+      providerVerificationStatus: publicVerificationStatus(providerVerificationStatus, role),
       providerRole: role,
       providerCampusTitle: await getProviderTitle(s.providerId, role),
     };

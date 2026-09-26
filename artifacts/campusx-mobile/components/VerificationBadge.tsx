@@ -2,7 +2,7 @@ import React, { useRef, useState } from "react";
 import { Dimensions, Modal, Pressable, Text, View } from "react-native";
 import Svg, { Circle, Defs, LinearGradient, Path, Stop } from "react-native-svg";
 
-type BadgeType = "blue" | "rounded" | "gold";
+type BadgeType = "blue" | "green" | "rounded" | "gold";
 type BadgeKind = "student" | "business";
 
 interface VerificationBadgeProps {
@@ -23,8 +23,8 @@ export function VerificationBadge({
   const anchor = useRef<View>(null);
   const [tip, setTip] = useState<{ left: number; top: number } | null>(null);
   const iconSize = Math.round((fontSize ?? { sm: 14, md: 17, lg: 22 }[size]) * (size === "lg" ? 1.1 : 1));
-  const label = kind === "business" ? "Verified LASU CampusX Business" : "Verified Student Account";
-  const color = type === "gold" ? "#FFD700" : type === "rounded" ? "#0095F6" : "#1DA1F2";
+  const label = type === "green" ? "Green Tick verification" : type === "blue" ? "Premium Blue Tick" : kind === "business" ? "Verified LASU CampusX Business" : "Verified Student Account";
+  const color = type === "green" ? "#22C55E" : type === "gold" ? "#FFD700" : type === "rounded" ? "#0095F6" : "#1DA1F2";
 
   const showTip = () => {
     if (tip) {

@@ -10,6 +10,10 @@ export function isPrivilegedRole(role: string | null | undefined): boolean {
   return role === "ceo" || role === "admin";
 }
 
+export function publicVerificationStatus(status: string | null | undefined, role?: string | null): string {
+  return isPrivilegedRole(role) ? "Premium_Approved" : status ?? "none";
+}
+
 export function isVerifiedAccount(status: string | null | undefined, role?: string | null): boolean {
   return isPrivilegedRole(role) ||
     status === "approved" ||

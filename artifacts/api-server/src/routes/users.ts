@@ -16,7 +16,7 @@ import {
   GetUserServicesResponse,
 } from "@workspace/api-zod";
 import { CEO_EMAIL, computeCampusTitle } from "./admin";
-import { isPrivilegedRole, isVerifiedAccount, PENDING_VERIFICATION_STATUSES } from "../lib/verification";
+import { isPrivilegedRole, isVerifiedAccount, publicVerificationStatus, PENDING_VERIFICATION_STATUSES } from "../lib/verification";
 import { decodeMatricEntryYear, getEffectiveLevel } from "../lib/academic-level";
 
 const opAlias = alias(postsTable, "op");
@@ -446,6 +446,7 @@ router.get("/users/:userId/posts", async (req, res): Promise<void> => {
         authorCampusTitle: campusTitle,
         authorRole: role,
         authorIsVerified: isVerifiedAccount(post.authorVerificationStatus, role),
+        authorVerificationStatus: publicVerificationStatus(post.authorVerificationStatus, role),
         isAnonymous: post.isAnonymous ?? false,
         commentsCount: commentsCount ?? 0,
         reshareCount: post.reshareCount ?? 0,
@@ -456,6 +457,7 @@ router.get("/users/:userId/posts", async (req, res): Promise<void> => {
           authorName: post.opAuthorName ?? "Unknown",
           authorAvatarUrl: post.opAuthorAvatarUrl ?? null,
           authorIsVerified: !post.opIsAnonymous && isVerifiedAccount(post.opAuthorVerificationStatus, post.opAuthorRole),
+          authorVerificationStatus: post.opIsAnonymous ? "none" : publicVerificationStatus(post.opAuthorVerificationStatus, post.opAuthorRole),
           content: post.opContent ?? "",
           imageUrl: post.opImageUrl ?? null,
           createdAt: (post.opCreatedAt ?? new Date()).toISOString(),
@@ -527,6 +529,7 @@ router.get("/users/:userId/services", async (req, res): Promise<void> => {
       providerCampusLocation: s.providerCampusLocation ?? "Ojo",
       providerAvatarUrl: s.providerAvatarUrl ?? null,
       providerIsVerified: isVerifiedAccount(providerVerificationStatus, role),
+      providerVerificationStatus: publicVerificationStatus(providerVerificationStatus, role),
       providerCampusTitle: computeCampusTitle(role, postCount),
       providerRole: role,
     };
@@ -575,10 +578,10 @@ router.get("/users/:userId", async (req, res): Promise<void> => {
   res.json(GetUserProfileResponse.parse({
     ...publicUser,
     level: getEffectiveLevel(user.level, matricNumber),
+    verificationStatus: publicVerificationStatus(user.verificationStatus, user.role),
     isVerified: isVerifiedAccount(user.verificationStatus, user.role),
     role: user.role ?? "student",
     campusTitle,
-    verificationStatus: user.verificationStatus ?? "none",
   }));
 });
 

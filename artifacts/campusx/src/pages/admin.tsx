@@ -10,6 +10,9 @@ import {
   useSetUserVerification,
   useGetMyProfile,
   getGetMyProfileQueryKey,
+  useListPosts,
+  getListPostsQueryKey,
+  useClaimAdmin,
 } from "@workspace/api-client-react";
 import type { AdminUserItem, PendingVerificationItem } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -26,14 +29,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Shield, Users, CheckCircle, Crown, Search, ShieldCheck, Lock } from "lucide-react";
+import { Shield, Users, CheckCircle, Crown, Search, ShieldCheck, Lock, FileText } from "lucide-react";
 import { motion } from "framer-motion";
-import { CampusTitleBadge } from "@/components/campus-title-badge";
+import { PostCard } from "@/components/post-card";
 import { cn } from "@/lib/utils";
 import { useLocation } from "wouter";
 import { toast } from "@/hooks/use-toast";
 
-type AdminTab = "users" | "verifications";
+type AdminTab = "users" | "verifications" | "posts";
 
 const CEO_EMAIL = "dwaynecartergabriel@gmail.com";
 
@@ -51,6 +54,15 @@ export default function AdminPage() {
   const clerkEmail = clerkUser?.primaryEmailAddress?.emailAddress ?? "";
   const isCEO = profile?.role === "ceo" || clerkEmail === CEO_EMAIL;
   const isAdminOrCEO = isCEO || profile?.role === "admin";
+  const isModerator = profile?.role === "moderator";
+  const displayedTab = isModerator && !isAdminOrCEO ? "posts" : activeTab;
+
+  const { data: postsData, isLoading: postsLoading } = useListPosts(undefined, {
+    query: {
+      queryKey: getListPostsQueryKey(),
+      enabled: (isAdminOrCEO || isModerator) && displayedTab === "posts",
+    },
+  });
 
   const { data: usersData, isLoading: usersLoading } = useListAdminUsers(
     { search: search || undefined },
@@ -76,6 +88,7 @@ export default function AdminPage() {
   const approveBadge = useApproveBadge();
   const rejectBadge = useRejectBadge();
   const setUserVerification = useSetUserVerification();
+  const claimAdmin = useClaimAdmin();
 
   if (profileLoading) {
     return (
@@ -85,12 +98,23 @@ export default function AdminPage() {
     );
   }
 
-  if (!isAdminOrCEO) {
+  if (!isAdminOrCEO && !isModerator) {
     return (
       <div className="container mx-auto px-4 py-20 max-w-xl text-center">
         <Lock className="h-16 w-16 mx-auto mb-4 text-primary/40" />
         <h2 className="text-xl font-bold mb-2">Access Denied</h2>
-        <p className="text-muted-foreground text-sm">This area is for CampusX admins only.</p>
+        <p className="text-muted-foreground text-sm">This area is for CampusX admins and moderators only.</p>
+        <Button
+          variant="outline"
+          className="mt-5 border-white/10"
+          disabled={claimAdmin.isPending}
+          onClick={() => claimAdmin.mutate(undefined, {
+            onSuccess: () => queryClient.invalidateQueries({ queryKey: getGetMyProfileQueryKey() }),
+            onError: () => toast({ title: "An admin already exists. You cannot claim this role.", variant: "destructive" }),
+          })}
+        >
+          {claimAdmin.isPending ? "Checking…" : "Claim first admin role"}
+        </Button>
         <Button className="mt-6 gradient-btn" onClick={() => setLocation("/feed")}>Back to Feed</Button>
       </div>
     );
@@ -161,7 +185,8 @@ export default function AdminPage() {
 
   const tabs: { id: AdminTab; label: string; icon: React.ReactNode }[] = [
     ...(isAdminOrCEO ? [{ id: "users" as AdminTab, label: "All Users", icon: <Users className="h-4 w-4" /> }] : []),
-    { id: "verifications", label: "Pending Verifications", icon: <CheckCircle className="h-4 w-4" /> },
+    ...(isAdminOrCEO ? [{ id: "verifications" as AdminTab, label: "Pending Verifications", icon: <CheckCircle className="h-4 w-4" /> }] : []),
+    { id: "posts", label: "Moderate Posts", icon: <FileText className="h-4 w-4" /> },
   ];
 
   return (
@@ -189,7 +214,7 @@ export default function AdminPage() {
             onClick={() => setActiveTab(tab.id)}
             className={cn(
               "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all",
-              activeTab === tab.id
+              displayedTab === tab.id
                 ? "bg-primary/20 text-primary border border-primary/30"
                 : "text-muted-foreground hover:text-foreground hover:bg-white/5"
             )}
@@ -204,6 +229,17 @@ export default function AdminPage() {
           </button>
         ))}
       </div>
+
+      {displayedTab === "posts" && (
+        <div className="space-y-4">
+          <p className="text-sm text-muted-foreground">Review posts here. Moderation actions are only available in this dashboard.</p>
+          {postsLoading && <Skeleton className="h-28 rounded-xl" />}
+          {!postsLoading && !postsData?.posts.length && <p className="text-sm text-muted-foreground">No posts to review.</p>}
+          {postsData?.posts.map((post) => (
+            <PostCard key={post.id} post={post} moderationMode isAdmin={isAdminOrCEO} isModerator={isModerator} />
+          ))}
+        </div>
+      )}
 
       {/* Users Tab */}
       {activeTab === "users" && isAdminOrCEO && (
@@ -242,7 +278,6 @@ export default function AdminPage() {
                   <div className="flex-1 min-w-[160px]">
                     <div className="flex items-center gap-1.5 flex-wrap">
                       <span className="font-semibold text-sm truncate">{u.fullName}</span>
-                      <CampusTitleBadge title={u.campusTitle} role={u.role} />
                     </div>
                     <div className="text-[11px] text-muted-foreground mt-0.5 flex items-center gap-2 flex-wrap">
                       <span>{u.faculty} · {u.level}</span>

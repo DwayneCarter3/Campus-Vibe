@@ -27,7 +27,7 @@ import {
   Post,
 } from "@workspace/api-client-react";
 import { useColors } from "@/hooks/useColors";
-import { VerificationBadge } from "@/components/VerificationBadge";
+import { UserVerificationMarks } from "@/components/UserVerificationMarks";
 
 const FACULTIES = [
   "Arts", "Science", "Law", "Social Sciences", "Education",
@@ -72,7 +72,7 @@ function PostCard({ post }: { post: Post }) {
         <View style={styles.authorInfo}>
           <View style={{ flexDirection: "row", alignItems: "center" }}>
             <Text style={[styles.authorName, { color: colors.foreground }]} numberOfLines={1}>{post.authorName}</Text>
-            {!post.isAnonymous && post.authorIsVerified && <VerificationBadge fontSize={15} />}
+            {!post.isAnonymous && <UserVerificationMarks status={post.authorVerificationStatus} />}
           </View>
           <View style={styles.metaRow}>
             <View style={[styles.badge, { backgroundColor: colors.primary + "22" }]}>

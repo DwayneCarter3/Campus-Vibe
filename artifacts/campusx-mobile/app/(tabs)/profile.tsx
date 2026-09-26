@@ -35,21 +35,10 @@ import type { PaymentPackage, UpdateProfileBodyLevel } from "@workspace/api-clie
 import { useColors } from "@/hooks/useColors";
 import * as ImagePicker from "expo-image-picker";
 import { PRIVACY_POLICY, TERMS_OF_SERVICE } from "@/constants/legal";
-import { VerificationBadge } from "@/components/VerificationBadge";
+import { UserVerificationMarks } from "@/components/UserVerificationMarks";
 
 const CEO_EMAIL = "dwaynecartergabriel@gmail.com";
 const ACADEMIC_LEVELS = ["100L", "200L", "300L", "400L", "500L", "Alumni/Postgrad"] as const;
-
-const CAMPUS_TITLE_COLORS: Record<string, string> = {
-  "CEO": "#F59E0B",
-  "Admin": "#A855F7",
-  "Moderator": "#3B82F6",
-  "Campus Daddy": "#F97316",
-  "Godfather": "#EC4899",
-  "Big Daddy": "#FF3399",
-  "Campus Rep": "#10B981",
-  "Rising Star": "#38BDF8",
-};
 
 export default function ProfileScreen() {
   const colors = useColors();
@@ -175,8 +164,6 @@ export default function ProfileScreen() {
   const faculty = profile?.faculty ?? "—";
   const level = profile?.level ?? "—";
   const campus = profile?.campus ?? "LASU Ojo";
-  const campusTitle = profile?.campusTitle;
-  const titleColor = campusTitle ? (CAMPUS_TITLE_COLORS[campusTitle] ?? colors.primary) : null;
   const hasMatric = !!(profile?.matricNumber && profile.matricNumber.trim());
   const verificationStatus = (profile as any)?.verificationStatus ?? "none";
   const isVerified = verificationStatus === "approved" || verificationStatus === "Student_Verified";
@@ -224,22 +211,11 @@ export default function ProfileScreen() {
             )}
           </TouchableOpacity>
 
-          {/* Name + campus title */}
-          <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 6 }}>
+          {/* Public identity markers only */}
+          <View style={{ flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 5, marginBottom: 6 }}>
             <Text style={[styles.profileName, { color: colors.foreground, marginBottom: 0 }]}>{displayName}</Text>
-            {(isVerified || isPremium) && <VerificationBadge size="lg" fontSize={20} />}
+            <UserVerificationMarks status={verificationStatus} />
           </View>
-          {isPremium && (
-            <View style={{ backgroundColor: "#2563EB22", borderColor: "#60A5FA70", borderWidth: 1, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 4, marginBottom: 6 }}>
-              <Text style={{ color: "#BFDBFE", fontSize: 11, fontWeight: "700" }}>Premium Blue Tick</Text>
-            </View>
-          )}
-          {campusTitle && (
-            <View style={[styles.titlePill, { backgroundColor: (titleColor ?? colors.primary) + "20", borderColor: (titleColor ?? colors.primary) + "40" }]}>
-              {isCEO && <Feather name="award" size={10} color={titleColor ?? colors.primary} />}
-              <Text style={[styles.titlePillText, { color: titleColor ?? colors.primary }]}>{campusTitle}</Text>
-            </View>
-          )}
 
           {profile && (
             <View style={styles.profileBadges}>
@@ -436,7 +412,7 @@ export default function ProfileScreen() {
           </View>
         </View>
 
-        {/* ── Admin Control Panel ─────────────────── */}
+        {/* Navigation only; administrative actions remain inside the dashboard. */}
         {isAdminOrCEO && (
           <TouchableOpacity
             activeOpacity={0.75}
@@ -459,9 +435,7 @@ export default function ProfileScreen() {
               <Feather name="award" size={16} color={isCEO ? "#F59E0B" : colors.primary} />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={[styles.actionTitle, { color: isCEO ? "#FCD34D" : colors.primary }]}>
-                {isCEO ? "CEO Control Panel" : "Campus Admin Panel"}
-              </Text>
+              <Text style={[styles.actionTitle, { color: isCEO ? "#FCD34D" : colors.primary }]}>Admin Dashboard</Text>
               <Text style={[styles.actionSub, { color: colors.mutedForeground }]}>
                 {isCEO
                   ? "Manage roles, approve badges, view all users"

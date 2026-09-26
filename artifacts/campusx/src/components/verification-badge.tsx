@@ -3,7 +3,7 @@ import { BadgeCheck, CheckCircle2 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
-export type VerificationBadgeType = "blue" | "rounded" | "gold";
+export type VerificationBadgeType = "blue" | "green" | "rounded" | "gold";
 export type VerificationBadgeKind = "student" | "business";
 
 interface VerificationBadgeProps {
@@ -21,7 +21,7 @@ export function VerificationBadge({
   className,
 }: VerificationBadgeProps) {
   const [open, setOpen] = useState(false);
-  const label = kind === "business" ? "Verified LASU CampusX Business" : "Verified Student Account";
+  const label = type === "green" ? "Green Tick verification" : type === "blue" ? "Premium Blue Tick" : kind === "business" ? "Verified LASU CampusX Business" : "Verified Student Account";
   const Icon = type === "rounded" ? CheckCircle2 : BadgeCheck;
 
   return (
@@ -51,7 +51,7 @@ export function VerificationBadge({
               "block drop-shadow-[0_1px_3px_rgba(0,0,0,0.3)]",
               size === "sm" ? "h-[1em] w-[1em]" : size === "md" ? "h-[1.08em] w-[1.08em]" : "h-[1.16em] w-[1.16em]",
             )}
-            fill={type === "gold" ? "#FFD700" : type === "rounded" ? "#0095F6" : "#1DA1F2"}
+            fill={type === "green" ? "#22C55E" : type === "gold" ? "#FFD700" : type === "rounded" ? "#0095F6" : "#1DA1F2"}
             stroke="#fff"
             strokeWidth={2.5}
             strokeLinejoin="round"

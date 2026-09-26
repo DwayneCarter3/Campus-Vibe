@@ -12,8 +12,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { CampusTitleBadge } from "@/components/campus-title-badge";
-import { VerificationBadge } from "@/components/verification-badge";
+import { UserVerificationMarks } from "@/components/user-verification-marks";
 import { useStartConversation } from "@workspace/api-client-react";
 
 async function notifyWhatsappClick(serviceId: number) {
@@ -133,7 +132,7 @@ export function ServiceCard({ service, index = 0, currentUserId }: ServiceCardPr
               <div className="min-w-0">
                 <div className="text-sm font-semibold leading-tight flex items-center gap-1">
                   <Link href={`/profile/${service.providerId}`} className="truncate hover:text-primary transition-colors">{service.providerName}</Link>
-                  {service.providerIsVerified && <VerificationBadge kind="business" />}
+                  <UserVerificationMarks status={service.providerVerificationStatus} />
                 </div>
                 <div className="flex items-center gap-1 text-[11px] text-muted-foreground mt-0.5 flex-wrap">
                   <span>{service.providerFaculty}</span>
@@ -150,9 +149,6 @@ export function ServiceCard({ service, index = 0, currentUserId }: ServiceCardPr
               <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 border-primary/30 text-primary font-medium">
                 {service.providerLevel}
               </Badge>
-              {service.providerCampusTitle && (
-                <CampusTitleBadge title={service.providerCampusTitle} role={service.providerRole} />
-              )}
             </div>
           </div>
         </div>

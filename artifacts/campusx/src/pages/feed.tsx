@@ -11,7 +11,7 @@ import { Sparkles, Radio, Camera, Video, X, Loader2, Ghost } from "lucide-react"
 import { Skeleton } from "@/components/ui/skeleton";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
-import { VerificationBadge } from "@/components/verification-badge";
+import { UserVerificationMarks } from "@/components/user-verification-marks";
 
 const TRENDING_BUBBLES = [
   { id: "shuttle", label: "Shuttle Updates", emoji: "🚌", color: "from-orange-500/20 to-orange-500/5 border-orange-500/30 hover:border-orange-500/60" },
@@ -212,7 +212,7 @@ export default function FeedPage() {
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 <span className="font-semibold text-foreground/80 inline-flex items-center gap-1">
                   {profile.fullName}
-                  {["approved", "Student_Verified", "Premium_Approved"].includes(profile.verificationStatus) && <VerificationBadge />}
+                  <UserVerificationMarks status={profile.verificationStatus} />
                 </span>
                 <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 border-primary/30 text-primary">
                   {profile.level}
@@ -400,7 +400,7 @@ export default function FeedPage() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.04 }}
             >
-              <PostCard post={post} isAdmin={profile?.isAdmin} isModerator={profile?.role === "moderator"} />
+              <PostCard post={post} />
             </motion.div>
           ))
         )}

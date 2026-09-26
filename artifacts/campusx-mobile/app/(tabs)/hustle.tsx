@@ -28,7 +28,7 @@ import {
   Service,
 } from "@workspace/api-client-react";
 import { useColors } from "@/hooks/useColors";
-import { VerificationBadge } from "@/components/VerificationBadge";
+import { UserVerificationMarks } from "@/components/UserVerificationMarks";
 
 const CATEGORIES = ["All", "Clothing", "Electronics", "Books", "Hostels/Accommodation", "Food & Pastries", "Services", "Others"];
 
@@ -86,7 +86,7 @@ function ServiceCard({ service }: { service: Service }) {
           <View>
             <View style={{ flexDirection: "row", alignItems: "center" }}>
               <Text style={[styles.authorName, { color: colors.foreground }]} numberOfLines={1}>{service.providerName}</Text>
-              {service.providerIsVerified && <VerificationBadge fontSize={13} kind="business" />}
+              <UserVerificationMarks status={service.providerVerificationStatus} />
             </View>
             <Text style={[styles.priceText, { color: colors.mutedForeground }]}>{service.providerLevel}</Text>
             {service.price ? (

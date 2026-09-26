@@ -8,7 +8,6 @@ import {
   useGetUserServices,
   getGetUserServicesQueryKey,
   useRequestUploadUrl,
-  useClaimAdmin,
   useInitializePayment,
 } from "@workspace/api-client-react";
 import type { PaymentPackage, UpdateProfileBodyLevel } from "@workspace/api-client-react";
@@ -35,7 +34,6 @@ import {
   Briefcase,
   Camera,
   Loader2,
-  Crown,
   Star,
   Settings,
   ScrollText,
@@ -44,8 +42,7 @@ import {
 import { motion } from "framer-motion";
 import { PostCard } from "@/components/post-card";
 import { ServiceCard } from "@/components/service-card";
-import { CampusTitleBadge } from "@/components/campus-title-badge";
-import { VerificationBadge } from "@/components/verification-badge";
+import { UserVerificationMarks } from "@/components/user-verification-marks";
 import { AvatarModal } from "@/components/avatar-modal";
 import { cn } from "@/lib/utils";
 import { PRIVACY_POLICY, TERMS_OF_SERVICE } from "@/lib/legal";
@@ -68,7 +65,6 @@ export default function MyProfilePage() {
   const avatarFileRef = useRef<HTMLInputElement>(null);
 
   const requestUploadUrl = useRequestUploadUrl();
-  const claimAdmin = useClaimAdmin();
   const initializePayment = useInitializePayment();
 
   const { data: profile, isLoading } = useGetMyProfile({
@@ -140,17 +136,6 @@ export default function MyProfilePage() {
     }
   };
 
-  const handleClaimAdmin = () => {
-    claimAdmin.mutate(undefined, {
-      onSuccess: (res) => {
-        alert(res.message);
-        queryClient.invalidateQueries({ queryKey: getGetMyProfileQueryKey() });
-      },
-      onError: () => {
-        alert("An admin already exists. You cannot claim this role.");
-      },
-    });
-  };
 
   const handleSaveEdit = () => {
     if (!profile) return;
@@ -184,9 +169,6 @@ export default function MyProfilePage() {
   if (!profile) return null;
 
   const hasMatric = !!(profile.matricNumber && profile.matricNumber.trim());
-  const CEO_EMAIL = "dwaynecartergabriel@gmail.com";
-  const clerkEmail = clerkUser?.primaryEmailAddress?.emailAddress ?? "";
-  const effectiveIsAdmin = profile.isAdmin || clerkEmail === CEO_EMAIL;
 
   return (
     <div className="container mx-auto px-4 py-6 max-w-3xl pb-24">
@@ -212,18 +194,8 @@ export default function MyProfilePage() {
               <div className="flex items-center gap-2 flex-wrap mb-1">
                 <h1 className="text-xl font-bold inline-flex items-center gap-1.5">
                   {profile.fullName}
-                  {["approved", "Student_Verified", "Premium_Approved"].includes(profile.verificationStatus) && (
-                    <VerificationBadge size="lg" />
-                  )}
                 </h1>
-                {profile.verificationStatus === "Premium_Approved" && (
-                  <Badge className="text-[10px] bg-blue-500/20 text-blue-200 border border-blue-400/40">
-                    Premium Blue Tick
-                  </Badge>
-                )}
-                {profile.campusTitle && (
-                  <CampusTitleBadge title={profile.campusTitle} role={profile.role ?? undefined} />
-                )}
+                <UserVerificationMarks status={profile.verificationStatus} />
               </div>
 
               <div className="flex flex-wrap gap-2 mb-2">
@@ -401,54 +373,6 @@ export default function MyProfilePage() {
           </div>
         )}
 
-        {/* ── Admin Section ──────────────────────────────── */}
-        {effectiveIsAdmin ? (
-          <button
-            onClick={() => setLocation("/admin")}
-            className="w-full text-left rounded-2xl border border-primary/25 bg-primary/5 p-4 flex items-center gap-3 hover:bg-primary/10 hover:border-primary/40 transition-all group"
-          >
-            <div className="h-9 w-9 rounded-full bg-primary/20 border border-primary/30 flex items-center justify-center shrink-0 group-hover:bg-primary/30 transition-colors">
-              <Crown className="h-4 w-4 text-primary" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-primary">
-                {(profile.role === "ceo" || clerkEmail === CEO_EMAIL) ? "CEO Control Panel" : "Campus Admin Panel"}
-              </p>
-              <p className="text-[11px] text-muted-foreground mt-0.5">
-                {(profile.role === "ceo" || clerkEmail === CEO_EMAIL)
-                  ? "Manage roles, approve badges, view all users →"
-                  : "Approve student verification badges →"}
-              </p>
-            </div>
-            <div className="text-primary/50 group-hover:text-primary transition-colors shrink-0">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M9 18l6-6-6-6"/>
-              </svg>
-            </div>
-          </button>
-        ) : (
-          <div className="rounded-2xl border border-white/5 bg-background/40 p-4 flex items-center justify-between gap-4">
-            <div className="flex items-center gap-3 min-w-0">
-              <div className="h-8 w-8 rounded-full bg-white/5 border border-white/10 flex items-center justify-center shrink-0">
-                <Crown className="h-4 w-4 text-muted-foreground" />
-              </div>
-              <div className="min-w-0">
-                <p className="text-sm font-medium">Claim Admin Role</p>
-                <p className="text-[11px] text-muted-foreground">First-come, first-served. Only one admin per campus.</p>
-              </div>
-            </div>
-            <Button
-              size="sm"
-              variant="outline"
-              className="border-white/10 text-xs shrink-0"
-              onClick={handleClaimAdmin}
-              disabled={claimAdmin.isPending}
-            >
-              {claimAdmin.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Become Admin"}
-            </Button>
-          </div>
-        )}
-
         <div className="rounded-2xl border border-white/10 bg-background/30 p-4">
           <div className="flex items-center gap-2 mb-3">
             <Settings className="h-4 w-4 text-muted-foreground" />
@@ -508,7 +432,7 @@ export default function MyProfilePage() {
             ) : (
               <div className="space-y-1">
                 {postsData?.posts.map((post) => (
-                  <PostCard key={post.id} post={post} isAdmin={profile?.isAdmin} />
+                  <PostCard key={post.id} post={post} />
                 ))}
               </div>
             )}
