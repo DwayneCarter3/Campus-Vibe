@@ -5,6 +5,7 @@
 - [Campus titles + role system](campus-roles.md) — computeCampusTitle in admin.ts, imported by users.ts and posts.ts; CEO_EMAIL env auto-upgrades on login; role values: ceo/admin/moderator/student.
 - [CEO access guard pattern](ceo-access-guard.md) — DB email may be empty if not sent during onboarding; use Clerk email as frontend bypass + sync email via clerkClient in GET /users/me.
 - [System DM actors](system-dm-actors.md) — automation in DMs should use a reserved actor, never a fabricated student/Clerk account.
+- [Gemini model availability](gemini-model-availability.md) — model listing alone does not prove generateContent works; probe a candidate before relying on it.
 - [Mobile avatar upload flow](mobile-avatar-upload.md) — expo-image-picker already installed; signed URL flow matches web (requestUploadUrl → PUT → /api/storage+objectPath); Change Photo button in avatar modal.
 - [Early-bird launch eligibility](early-bird-launch.md) — use the database registration sequence/rank, case-insensitive non-empty email uniqueness, explicit promo expiry fields, and paid-tier fallback after expiry.
 - [Role verification invariant](role-verification.md) — CEO/admin accounts stay Premium_Approved and display both trust badges across reads, role changes, and expiry paths.

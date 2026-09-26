@@ -94,7 +94,7 @@ async function generateReply(
 
   const response = process.env.GEMINI_API_KEY
     ? await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(process.env.GEMINI_MODEL || "gemini-2.5-flash")}:generateContent`,
+      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(process.env.GEMINI_MODEL || "gemini-3-flash-preview")}:generateContent`,
       {
         method: "POST",
         headers: {
