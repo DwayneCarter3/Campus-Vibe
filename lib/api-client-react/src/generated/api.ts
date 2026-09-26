@@ -58,11 +58,13 @@ import type {
   RequestBadgeResponse,
   ResharePostBody,
   ResharePostResponse,
+  SearchStudentsParams,
   SendMessageBody,
   Service,
   SetUserVerificationBody,
   SetUserVerificationResponse,
   StartConversationBody,
+  StudentSearchResponse,
   TrackWhatsappClick200,
   UpdateProfileBody,
   UpdateServiceBody,
@@ -403,6 +405,100 @@ export const useRequestPremiumBadge = <
 > => {
   return useMutation(getRequestPremiumBadgeMutationOptions(options));
 };
+
+/**
+ * @summary Search peers within the signed-in user's institution
+ */
+export const getSearchStudentsUrl = (params: SearchStudentsParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/users/search?${stringifiedParams}`
+    : `/api/users/search`;
+};
+
+export const searchStudents = async (
+  params: SearchStudentsParams,
+  options?: RequestInit,
+): Promise<StudentSearchResponse> => {
+  return customFetch<StudentSearchResponse>(getSearchStudentsUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getSearchStudentsQueryKey = (params?: SearchStudentsParams) => {
+  return [`/api/users/search`, ...(params ? [params] : [])] as const;
+};
+
+export const getSearchStudentsQueryOptions = <
+  TData = Awaited<ReturnType<typeof searchStudents>>,
+  TError = ErrorType<void>,
+>(
+  params: SearchStudentsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof searchStudents>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getSearchStudentsQueryKey(params);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof searchStudents>>> = ({
+    signal,
+  }) => searchStudents(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof searchStudents>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type SearchStudentsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof searchStudents>>
+>;
+export type SearchStudentsQueryError = ErrorType<void>;
+
+/**
+ * @summary Search peers within the signed-in user's institution
+ */
+
+export function useSearchStudents<
+  TData = Awaited<ReturnType<typeof searchStudents>>,
+  TError = ErrorType<void>,
+>(
+  params: SearchStudentsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof searchStudents>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getSearchStudentsQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
 
 /**
  * @summary Get a public user profile (private fields excluded)
@@ -2016,6 +2112,90 @@ export const useMarkNotificationsRead = <
   TContext
 > => {
   return useMutation(getMarkNotificationsReadMutationOptions(options));
+};
+
+/**
+ * @summary Mark one of the current user's notifications as read
+ */
+export const getMarkNotificationReadUrl = (notificationId: number) => {
+  return `/api/notifications/${notificationId}/read`;
+};
+
+export const markNotificationRead = async (
+  notificationId: number,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getMarkNotificationReadUrl(notificationId), {
+    ...options,
+    method: "PATCH",
+  });
+};
+
+export const getMarkNotificationReadMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof markNotificationRead>>,
+    TError,
+    { notificationId: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof markNotificationRead>>,
+  TError,
+  { notificationId: number },
+  TContext
+> => {
+  const mutationKey = ["markNotificationRead"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof markNotificationRead>>,
+    { notificationId: number }
+  > = (props) => {
+    const { notificationId } = props ?? {};
+
+    return markNotificationRead(notificationId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type MarkNotificationReadMutationResult = NonNullable<
+  Awaited<ReturnType<typeof markNotificationRead>>
+>;
+
+export type MarkNotificationReadMutationError = ErrorType<void>;
+
+/**
+ * @summary Mark one of the current user's notifications as read
+ */
+export const useMarkNotificationRead = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof markNotificationRead>>,
+    TError,
+    { notificationId: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof markNotificationRead>>,
+  TError,
+  { notificationId: number },
+  TContext
+> => {
+  return useMutation(getMarkNotificationReadMutationOptions(options));
 };
 
 /**

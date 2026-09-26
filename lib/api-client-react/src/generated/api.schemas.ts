@@ -11,6 +11,11 @@ export interface AppNotification {
   /** @nullable */
   actorName: string | null;
   message: string;
+  content: string;
+  /** @nullable */
+  targetType: string | null;
+  /** @nullable */
+  targetId: string | null;
   isRead: boolean;
   createdAt: string;
 }
@@ -28,6 +33,10 @@ export interface UserProfile {
   id: number;
   clerkUserId: string;
   fullName: string;
+  /** @nullable */
+  username: string | null;
+  /** @nullable */
+  department: string | null;
   email: string;
   school: string;
   campusLocation: string;
@@ -59,6 +68,10 @@ export interface PublicUserProfile {
   id: number;
   clerkUserId: string;
   fullName: string;
+  /** @nullable */
+  username: string | null;
+  /** @nullable */
+  department: string | null;
   school: string;
   campusLocation: string;
   level: string;
@@ -93,6 +106,16 @@ export const UpdateProfileBodyLevel = {
 
 export interface UpdateProfileBody {
   fullName?: string;
+  /**
+   * Optional unique lowercase handle (3–24 letters, numbers, or underscores); null clears it.
+   * @nullable
+   */
+  username?: string | null;
+  /**
+   * Optional department name; null clears it.
+   * @nullable
+   */
+  department?: string | null;
   school?: string;
   campusLocation?: string;
   /** A manually selected level, or an empty string for automatic matric-based level. */
@@ -105,6 +128,22 @@ export interface UpdateProfileBody {
   bio?: string | null;
   /** @nullable */
   avatarUrl?: string | null;
+}
+
+export interface StudentSearchResult {
+  userId: string;
+  fullName: string;
+  /** @nullable */
+  username: string | null;
+  /** @nullable */
+  department: string | null;
+  /** @nullable */
+  avatarUrl: string | null;
+  verificationStatus: string;
+}
+
+export interface StudentSearchResponse {
+  students: StudentSearchResult[];
 }
 
 export type RequestBadgeBodyBadgeType =
@@ -488,6 +527,14 @@ export interface ListMessagesResponse {
   messages: DirectMessage[];
   total: number;
 }
+
+export type SearchStudentsParams = {
+  /**
+   * @minLength 2
+   * @maxLength 80
+   */
+  q: string;
+};
 
 export type GetUserPostsParams = {
   limit?: number;

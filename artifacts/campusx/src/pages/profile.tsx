@@ -58,6 +58,9 @@ export default function MyProfilePage() {
   const [editOpen, setEditOpen] = useState(false);
   const [avatarModalOpen, setAvatarModalOpen] = useState(false);
   const [editBio, setEditBio] = useState("");
+  const [editUsername, setEditUsername] = useState("");
+  const [editDepartment, setEditDepartment] = useState("");
+  const [editError, setEditError] = useState("");
   const [editLevel, setEditLevel] = useState<UpdateProfileBodyLevel>("");
   const [editAvatarUrl, setEditAvatarUrl] = useState("");
   const [isAvatarUploading, setIsAvatarUploading] = useState(false);
@@ -109,6 +112,9 @@ export default function MyProfilePage() {
 
   const openEdit = () => {
     setEditBio(profile?.bio ?? "");
+    setEditUsername(profile?.username ?? "");
+    setEditDepartment(profile?.department ?? "");
+    setEditError("");
     const savedLevel = profile?.manualLevel ?? "";
     setEditLevel((["", "100L", "200L", "300L", "400L", "500L", "Alumni/Postgrad"].includes(savedLevel) ? savedLevel : "") as UpdateProfileBodyLevel);
     setEditAvatarUrl(profile?.avatarUrl ?? "");
@@ -139,14 +145,25 @@ export default function MyProfilePage() {
 
   const handleSaveEdit = () => {
     if (!profile) return;
+    const username = editUsername.trim();
+    const department = editDepartment.trim();
+    if (username && !/^[a-z0-9_]{3,24}$/.test(username)) {
+      setEditError("Username must be 3–24 lowercase letters, numbers, or underscores.");
+      return;
+    }
+    if (department.length > 80) {
+      setEditError("Department must be 80 characters or fewer.");
+      return;
+    }
+    setEditError("");
     updateProfile.mutate(
-      { data: { bio: editBio || null, avatarUrl: editAvatarUrl || null, level: editLevel } },
+      { data: { bio: editBio || null, avatarUrl: editAvatarUrl || null, level: editLevel, username: username || null, department: department || null } },
       {
         onSuccess: () => {
           queryClient.invalidateQueries();
           setEditOpen(false);
         },
-        onError: () => alert("Could not save your profile. Please try again."),
+        onError: (error) => setEditError(error instanceof Error ? error.message : "Could not save your profile. Please try again."),
       }
     );
   };
@@ -197,6 +214,11 @@ export default function MyProfilePage() {
                 </h1>
                 <UserVerificationMarks status={profile.verificationStatus} />
               </div>
+              {(profile.username || profile.department) && (
+                <p className="text-xs text-muted-foreground mb-2">
+                  {[profile.username ? `@${profile.username}` : null, profile.department].filter(Boolean).join(" · ")}
+                </p>
+              )}
 
               <div className="flex flex-wrap gap-2 mb-2">
                 <Badge variant="outline" className="text-xs border-primary/30 text-primary">{profile.level}</Badge>
@@ -462,14 +484,50 @@ export default function MyProfilePage() {
 
       {/* ── Edit Profile Dialog ─────────────────────────── */}
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent className="sm:max-w-[480px] glass border-primary/20 p-0 overflow-hidden">
+        <DialogContent className="sm:max-w-[480px] glass border-primary/20 p-0 max-h-[90dvh] overflow-y-auto">
           <div className="bg-gradient-to-br from-primary/10 to-transparent p-6 border-b border-white/5">
             <DialogHeader>
               <DialogTitle className="gradient-text font-bold">Edit Profile</DialogTitle>
-              <p className="text-sm text-muted-foreground mt-1">Update your photo, academic level, and bio.</p>
+               <p className="text-sm text-muted-foreground mt-1">Make it easier for classmates to find you.</p>
             </DialogHeader>
           </div>
           <div className="p-6 space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="edit-username" className="text-sm font-medium">Username</Label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground" aria-hidden="true">@</span>
+                <Input
+                  id="edit-username"
+                  autoComplete="off"
+                  maxLength={24}
+                  placeholder="your_username"
+                  className="bg-background/40 border-white/10 focus:border-primary/40 pl-7"
+                  value={editUsername}
+                  onChange={(e) => {
+                    setEditUsername(e.target.value.toLowerCase());
+                    setEditError("");
+                  }}
+                  aria-describedby="username-help"
+                  aria-invalid={!!editUsername && !/^[a-z0-9_]{3,24}$/.test(editUsername.trim())}
+                />
+              </div>
+              <p id="username-help" className="text-xs text-muted-foreground">3–24 lowercase letters, numbers, or underscores. Leave blank to remove.</p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-department" className="text-sm font-medium">Department</Label>
+              <Input
+                id="edit-department"
+                maxLength={80}
+                placeholder="e.g. Computer Science"
+                className="bg-background/40 border-white/10 focus:border-primary/40"
+                value={editDepartment}
+                onChange={(e) => {
+                  setEditDepartment(e.target.value);
+                  setEditError("");
+                }}
+              />
+              <p className="text-xs text-muted-foreground">Your department appears on your profile and in student search.</p>
+            </div>
             <div className="space-y-2">
               <Label className="text-sm font-medium">Profile Photo</Label>
               <div className="flex items-center gap-3">
@@ -537,6 +595,7 @@ export default function MyProfilePage() {
                 onChange={(e) => setEditBio(e.target.value)}
               />
             </div>
+            {editError && <p role="alert" className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">{editError}</p>}
             <div className="flex gap-3 pt-2">
               <Button
                 onClick={handleSaveEdit}

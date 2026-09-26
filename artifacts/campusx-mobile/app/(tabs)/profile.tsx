@@ -13,6 +13,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -51,6 +52,9 @@ export default function ProfileScreen() {
   const [avatarModalOpen, setAvatarModalOpen] = useState(false);
   const [levelModalOpen, setLevelModalOpen] = useState(false);
   const [editLevel, setEditLevel] = useState<UpdateProfileBodyLevel>("");
+  const [identityModalOpen, setIdentityModalOpen] = useState(false);
+  const [editUsername, setEditUsername] = useState("");
+  const [editDepartment, setEditDepartment] = useState("");
   const [isAvatarUploading, setIsAvatarUploading] = useState(false);
   const [legalOpen, setLegalOpen] = useState<"privacy" | "terms" | null>(null);
 
@@ -152,6 +156,32 @@ export default function ProfileScreen() {
     }
   };
 
+  const openIdentityEditor = () => {
+    setEditUsername(profile?.username ?? "");
+    setEditDepartment(profile?.department ?? "");
+    setIdentityModalOpen(true);
+  };
+
+  const saveIdentity = async () => {
+    const username = editUsername.trim().toLowerCase();
+    if (username && !/^[a-z0-9_]{3,24}$/.test(username)) {
+      Alert.alert("Check your username", "Use 3–24 lowercase letters, numbers, or underscores.");
+      return;
+    }
+    try {
+      await updateProfile.mutateAsync({
+        data: {
+          username: username || null,
+          department: editDepartment.trim() || null,
+        },
+      });
+      await queryClient.invalidateQueries({ queryKey: getGetMyProfileQueryKey() });
+      setIdentityModalOpen(false);
+    } catch {
+      Alert.alert("Could not save profile", "Please try again.");
+    }
+  };
+
   if (isLoading) {
     return (
       <View style={[styles.centered, { backgroundColor: colors.background }]}>
@@ -237,6 +267,16 @@ export default function ProfileScreen() {
               </TouchableOpacity>
             </View>
           )}
+
+          <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityLabel="Edit username and department"
+            onPress={openIdentityEditor}
+            style={[styles.identityEditButton, { borderColor: colors.border }]}
+          >
+            <Feather name="edit-2" size={12} color={colors.primary} />
+            <Text style={[styles.identityEditText, { color: colors.primary }]}>Edit identity</Text>
+          </TouchableOpacity>
 
           <View style={[styles.campusRow, { backgroundColor: colors.surface }]}>
             <Feather name="map-pin" size={12} color={colors.mutedForeground} />
@@ -555,6 +595,64 @@ export default function ProfileScreen() {
       </Modal>
 
       <Modal
+        visible={identityModalOpen}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setIdentityModalOpen(false)}
+      >
+        <View style={[styles.legalModal, { backgroundColor: colors.background }]}>
+          <View style={[styles.legalHeader, { borderBottomColor: colors.border }]}>
+            <Text style={[styles.legalTitle, { color: colors.foreground }]}>Edit identity</Text>
+            <TouchableOpacity onPress={() => setIdentityModalOpen(false)} accessibilityLabel="Close">
+              <Feather name="x" size={20} color={colors.mutedForeground} />
+            </TouchableOpacity>
+          </View>
+          <ScrollView contentContainerStyle={styles.identityForm} keyboardShouldPersistTaps="handled">
+            <Text style={[styles.identityHint, { color: colors.mutedForeground }]}>
+              These details help other students find and recognize you. Both fields are optional.
+            </Text>
+            <Text style={[styles.fieldLabel, { color: colors.foreground }]}>Username</Text>
+            <View style={[styles.identityInputWrap, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <Text style={[styles.usernamePrefix, { color: colors.mutedForeground }]}>@</Text>
+              <TextInput
+                accessibilityLabel="Username"
+                testID="profile-username-input"
+                value={editUsername}
+                onChangeText={setEditUsername}
+                placeholder="your_handle"
+                placeholderTextColor={colors.mutedForeground}
+                autoCapitalize="none"
+                autoCorrect={false}
+                maxLength={24}
+                style={[styles.identityInput, { color: colors.foreground }]}
+              />
+            </View>
+            <Text style={[styles.fieldHint, { color: colors.mutedForeground }]}>3–24 lowercase letters, numbers, or underscores.</Text>
+            <Text style={[styles.fieldLabel, { color: colors.foreground, marginTop: 20 }]}>Department</Text>
+            <TextInput
+              accessibilityLabel="Department"
+              testID="profile-department-input"
+              value={editDepartment}
+              onChangeText={setEditDepartment}
+              placeholder="e.g. Computer Science"
+              placeholderTextColor={colors.mutedForeground}
+              maxLength={100}
+              returnKeyType="done"
+              style={[styles.identityInput, styles.departmentInput, { color: colors.foreground, backgroundColor: colors.surface, borderColor: colors.border }]}
+            />
+            <TouchableOpacity
+              accessibilityRole="button"
+              disabled={updateProfile.isPending}
+              onPress={saveIdentity}
+              style={[styles.levelSave, { backgroundColor: colors.primary, opacity: updateProfile.isPending ? 0.7 : 1 }]}
+            >
+              <Text style={styles.changePhotoBtnText}>{updateProfile.isPending ? "Saving..." : "Save identity"}</Text>
+            </TouchableOpacity>
+          </ScrollView>
+        </View>
+      </Modal>
+
+      <Modal
         visible={levelModalOpen}
         animationType="slide"
         presentationStyle="pageSheet"
@@ -626,6 +724,16 @@ const styles = StyleSheet.create({
   levelOptions: { padding: 20, paddingBottom: 40 },
   levelOption: { borderWidth: 1, borderRadius: 12, padding: 15, marginBottom: 9, flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   levelSave: { borderRadius: 12, alignItems: "center", padding: 16, marginTop: 12 },
+  identityForm: { padding: 20, paddingBottom: 40 },
+  identityHint: { fontSize: 14, lineHeight: 20, marginBottom: 22 },
+  fieldLabel: { fontSize: 13, fontWeight: "700", marginBottom: 8 },
+  identityInputWrap: { minHeight: 50, borderWidth: 1, borderRadius: 12, flexDirection: "row", alignItems: "center", paddingHorizontal: 14 },
+  usernamePrefix: { fontSize: 16, marginRight: 4 },
+  identityInput: { flex: 1, fontSize: 15, paddingVertical: 13 },
+  departmentInput: { minHeight: 50, borderWidth: 1, borderRadius: 12, paddingHorizontal: 14 },
+  fieldHint: { fontSize: 11, marginTop: 7 },
+  identityEditButton: { flexDirection: "row", alignItems: "center", gap: 6, borderWidth: 1, borderRadius: 20, paddingHorizontal: 10, paddingVertical: 6, marginBottom: 10 },
+  identityEditText: { fontSize: 11, fontWeight: "700" },
   container: { flex: 1 },
   centered: { flex: 1, alignItems: "center", justifyContent: "center" },
   header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, paddingBottom: 14, borderBottomWidth: 1 },

@@ -107,6 +107,11 @@ export default function UserProfilePage() {
                 </h1>
                 <UserVerificationMarks status={profile.verificationStatus} />
               </div>
+              {(profile.username || profile.department) && (
+                <p className="text-xs text-muted-foreground mb-2">
+                  {[profile.username ? `@${profile.username}` : null, profile.department].filter(Boolean).join(" · ")}
+                </p>
+              )}
 
               <div className="flex flex-wrap gap-2 mb-2">
                 <Badge variant="outline" className="text-xs border-primary/30 text-primary">{profile.level}</Badge>

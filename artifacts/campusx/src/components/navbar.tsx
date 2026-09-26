@@ -3,6 +3,7 @@ import { Show, useUser } from "@clerk/react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { NotificationBell } from "@/components/notification-bell";
+import { StudentSearch } from "@/components/student-search";
 import { MessageCircle, Shield } from "lucide-react";
 import { useGetMyProfile, getGetMyProfileQueryKey, useListConversations, getListConversationsQueryKey } from "@workspace/api-client-react";
 
@@ -31,17 +32,18 @@ export function Navbar() {
           CampusX
         </Link>
 
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-1.5 sm:gap-4 min-w-0">
           <Show when="signed-in">
+            <StudentSearch />
             <Link
               href="/feed"
-              className={`text-sm font-medium transition-colors ${isActive('/feed') ? 'text-primary' : 'text-muted-foreground hover:text-foreground'}`}
+              className={`hidden md:inline text-sm font-medium transition-colors ${isActive('/feed') ? 'text-primary' : 'text-muted-foreground hover:text-foreground'}`}
             >
               Feed
             </Link>
             <Link
               href="/earn"
-              className={`text-sm font-medium transition-colors ${isActive('/earn') ? 'text-primary' : 'text-muted-foreground hover:text-foreground'}`}
+              className={`hidden md:inline text-sm font-medium transition-colors ${isActive('/earn') ? 'text-primary' : 'text-muted-foreground hover:text-foreground'}`}
             >
               Marketplace
             </Link>

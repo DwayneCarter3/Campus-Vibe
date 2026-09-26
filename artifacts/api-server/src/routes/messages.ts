@@ -3,6 +3,7 @@ import { eq, or, and, desc, sql } from "drizzle-orm";
 import { db, conversationsTable, messagesTable, usersTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/auth";
 import { broadcastDm } from "../sse-manager";
+import { createNotification } from "../lib/notifications";
 
 const router: IRouter = Router();
 
@@ -220,15 +221,37 @@ router.post("/messages/conversations/:conversationId/messages", requireAuth, asy
 
   // Push real-time DM event to the recipient via SSE
   const recipientId = conv.participant1Id === userId ? conv.participant2Id : conv.participant1Id;
+  let senderName = "Someone";
   try {
     const [sender] = await db
       .select({ fullName: usersTable.fullName })
       .from(usersTable)
       .where(eq(usersTable.clerkUserId, userId));
+    senderName = sender?.fullName ?? senderName;
+  } catch {
+    // Name lookup is best-effort; message delivery must still complete.
+  }
+
+  await createNotification({
+    userId: recipientId,
+    actorId: userId,
+    actorName: senderName,
+    type: "message",
+    content: `${senderName} sent you a message.`,
+    targetType: "conversation",
+    targetId: conversationId,
+  }).catch((error) => {
+    req.log.error(
+      { err: error, conversationId, recipientId, senderId: userId },
+      "Failed to create direct-message notification",
+    );
+  });
+
+  try {
     broadcastDm(recipientId, {
       conversationId,
       senderId: userId,
-      senderName: sender?.fullName ?? "Someone",
+      senderName,
       content: content.trim(),
     });
   } catch {

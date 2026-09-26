@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, desc, and, sql } from "drizzle-orm";
+import { eq, desc, and, ne, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { clerkClient } from "@clerk/express";
 import { db, usersTable, postsTable, postLikesTable, postNoCapsTable, postCommentsTable, servicesTable } from "@workspace/db";
@@ -14,6 +14,8 @@ import {
   GetUserPostsResponse,
   GetUserServicesParams,
   GetUserServicesResponse,
+  SearchStudentsQueryParams,
+  SearchStudentsResponse,
 } from "@workspace/api-zod";
 import { CEO_EMAIL, computeCampusTitle } from "./admin";
 import { isPrivilegedRole, isVerifiedAccount, publicVerificationStatus, PENDING_VERIFICATION_STATUSES } from "../lib/verification";
@@ -23,6 +25,46 @@ const opAlias = alias(postsTable, "op");
 const ouAlias = alias(usersTable, "ou");
 
 const router: IRouter = Router();
+
+router.get("/users/search", requireAuth, async (req, res): Promise<void> => {
+  const parsed = SearchStudentsQueryParams.safeParse(req.query);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Enter at least two characters to search students." });
+    return;
+  }
+  const userId = (req as any).userId as string;
+  const [currentUser] = await db.select({ school: usersTable.school })
+    .from(usersTable).where(eq(usersTable.clerkUserId, userId)).limit(1);
+  if (!currentUser) {
+    res.status(403).json({ error: "Complete your profile before searching students." });
+    return;
+  }
+  const query = parsed.data.q.trim().toLowerCase();
+  if (query.length < 2) {
+    res.status(400).json({ error: "Enter at least two characters to search students." });
+    return;
+  }
+  const matches = await db.select({
+    userId: usersTable.clerkUserId,
+    fullName: usersTable.fullName,
+    username: usersTable.username,
+    department: usersTable.department,
+    avatarUrl: usersTable.avatarUrl,
+    verificationStatus: usersTable.verificationStatus,
+    role: usersTable.role,
+  }).from(usersTable).where(and(
+    eq(usersTable.school, currentUser.school),
+    ne(usersTable.clerkUserId, userId),
+    sql`(strpos(lower(${usersTable.fullName}), ${query}) > 0
+      OR strpos(lower(coalesce(${usersTable.username}, '')), ${query}) > 0
+      OR strpos(lower(coalesce(${usersTable.department}, '')), ${query}) > 0)`,
+  )).orderBy(usersTable.fullName).limit(8);
+
+  res.json(SearchStudentsResponse.parse({ students: matches.map(({ role, ...student }) => ({
+    ...student,
+    verificationStatus: publicVerificationStatus(student.verificationStatus, role),
+  })) }));
+});
 
 // How many registrants get the early-bird perk
 const EARLY_BIRD_LIMIT = 100;
@@ -129,6 +171,32 @@ router.put("/users/me", requireAuth, async (req, res): Promise<void> => {
     return;
   }
 
+  const profileData = { ...parsed.data };
+  if (profileData.username !== undefined) {
+    const username = profileData.username?.trim().toLowerCase() || null;
+    if (username && !/^[a-z0-9_]{3,24}$/.test(username)) {
+      res.status(400).json({ error: "Username must be 3–24 letters, numbers, or underscores." });
+      return;
+    }
+    profileData.username = username;
+    if (username) {
+      const [duplicate] = await db.select({ id: usersTable.id }).from(usersTable)
+        .where(and(sql`lower(${usersTable.username}) = ${username}`, ne(usersTable.clerkUserId, userId))).limit(1);
+      if (duplicate) {
+        res.status(409).json({ error: "This username is already taken." });
+        return;
+      }
+    }
+  }
+  if (profileData.department !== undefined) {
+    const department = profileData.department?.trim() || null;
+    if (department && department.length > 80) {
+      res.status(400).json({ error: "Department must be at most 80 characters." });
+      return;
+    }
+    profileData.department = department;
+  }
+
   const existing = await db
     .select()
     .from(usersTable)
@@ -194,6 +262,8 @@ router.put("/users/me", requireAuth, async (req, res): Promise<void> => {
         .values({
           clerkUserId: userId,
           fullName: data.fullName,
+          username: profileData.username ?? null,
+          department: profileData.department ?? null,
           email: emailVal,
           school: data.school || "Lagos State University (LASU)",
           campusLocation: data.campusLocation || "Ojo",
@@ -217,6 +287,8 @@ router.put("/users/me", requireAuth, async (req, res): Promise<void> => {
           res.status(409).json({ error: "This Matriculation Number is already registered to another account." });
         } else if (constraint.includes("email")) {
           res.status(409).json({ error: "This email address is already registered to another account." });
+        } else if (constraint.includes("username")) {
+          res.status(409).json({ error: "This username is already taken." });
         } else {
           res.status(409).json({ error: "An account with these details already exists." });
         }
@@ -265,11 +337,19 @@ router.put("/users/me", requireAuth, async (req, res): Promise<void> => {
       }
     }
 
-    [user] = await db
-      .update(usersTable)
-      .set(parsed.data)
-      .where(eq(usersTable.clerkUserId, userId))
-      .returning();
+    try {
+      [user] = await db
+        .update(usersTable)
+        .set(profileData)
+        .where(eq(usersTable.clerkUserId, userId))
+        .returning();
+    } catch (error: any) {
+      if (error?.code === "23505" && error?.constraint?.includes("username")) {
+        res.status(409).json({ error: "This username is already taken." });
+        return;
+      }
+      throw error;
+    }
 
     if (user.email.trim().toLowerCase() === CEO_EMAIL && user.role !== "ceo") {
       [user] = await db
@@ -551,6 +631,8 @@ router.get("/users/:userId", async (req, res): Promise<void> => {
       id: usersTable.id,
       clerkUserId: usersTable.clerkUserId,
       fullName: usersTable.fullName,
+      username: usersTable.username,
+      department: usersTable.department,
       school: usersTable.school,
       campusLocation: usersTable.campusLocation,
       level: usersTable.level,

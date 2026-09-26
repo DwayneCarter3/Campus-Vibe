@@ -4,6 +4,7 @@ import { db, usersTable, postsTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/auth";
 import { isPrivilegedRole, PENDING_VERIFICATION_STATUSES } from "../lib/verification";
 import { getEffectiveLevel } from "../lib/academic-level";
+import { createNotification } from "../lib/notifications";
 
 const router: IRouter = Router();
 
@@ -155,6 +156,18 @@ router.patch("/admin/users/:userId/role", requireAuth, async (req, res): Promise
     })
     .where(eq(usersTable.clerkUserId, targetUserId));
 
+  await createNotification({
+    userId: targetUserId,
+    actorId: (req as any).userId as string,
+    actorName: "CampusX Admin",
+    type: "account_update",
+    content: `Your CampusX role was updated to ${role}.`,
+    targetType: "user",
+    targetId: targetUserId,
+  }).catch((error) => {
+    req.log.error({ err: error, targetUserId }, "Failed to create role-update notification");
+  });
+
   res.json({ success: true, role });
 });
 
@@ -227,6 +240,18 @@ router.post("/admin/users/:userId/approve-badge", requireAuth, async (req, res):
     })
     .where(eq(usersTable.clerkUserId, targetUserId));
 
+  await createNotification({
+    userId: targetUserId,
+    actorId: (req as any).userId as string,
+    actorName: "CampusX Admin",
+    type: "admin_approval",
+    content: "Your verification badge has been approved.",
+    targetType: "user",
+    targetId: targetUserId,
+  }).catch((error) => {
+    req.log.error({ err: error, targetUserId }, "Failed to create badge-approval notification");
+  });
+
   res.json({ success: true });
 });
 
@@ -256,6 +281,18 @@ router.post("/admin/users/:userId/reject-badge", requireAuth, async (req, res): 
       premiumBadgeDiscountPercent: 0,
     })
     .where(eq(usersTable.clerkUserId, targetUserId));
+
+  await createNotification({
+    userId: targetUserId,
+    actorId: (req as any).userId as string,
+    actorName: "CampusX Admin",
+    type: "verification_rejected",
+    content: "Your verification badge request was rejected.",
+    targetType: "user",
+    targetId: targetUserId,
+  }).catch((error) => {
+    req.log.error({ err: error, targetUserId }, "Failed to create badge-rejection notification");
+  });
 
   res.json({ success: true });
 });
@@ -287,6 +324,20 @@ router.patch("/admin/users/:userId/verification", requireAuth, async (req, res):
     .update(usersTable)
     .set({ verificationStatus, promoExpiresAt: null, premiumBadgeDiscountPercent: 0 })
     .where(eq(usersTable.clerkUserId, targetUserId));
+
+  await createNotification({
+    userId: targetUserId,
+    actorId: (req as any).userId as string,
+    actorName: "CampusX Admin",
+    type: "verification_updated",
+    content: req.body.verified
+      ? "Your verification status has been approved."
+      : "Your verification status has been removed.",
+    targetType: "user",
+    targetId: targetUserId,
+  }).catch((error) => {
+    req.log.error({ err: error, targetUserId }, "Failed to create verification-update notification");
+  });
 
   res.json({ success: true, verificationStatus });
 });

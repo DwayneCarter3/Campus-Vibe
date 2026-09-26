@@ -1,12 +1,12 @@
 import { Router, type IRouter } from "express";
 import { eq, desc, and, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
-import { db, postsTable, postLikesTable, postNoCapsTable, postCommentsTable, usersTable, notificationsTable } from "@workspace/db";
+import { db, postsTable, postLikesTable, postNoCapsTable, postCommentsTable, usersTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/auth";
-import { broadcastNotification } from "../sse-manager";
 import { computeCampusTitle } from "./admin";
 import { isVerifiedAccount, publicVerificationStatus } from "../lib/verification";
 import { getEffectiveLevel } from "../lib/academic-level";
+import { createNotification } from "../lib/notifications";
 import {
   ListPostsQueryParams,
   ListPostsResponse,
@@ -59,11 +59,15 @@ async function notifyPostAuthor(postId: number, actorId: string, type: string, m
     .where(eq(postsTable.id, postId));
   if (!post || post.authorId === actorId) return;
   const actorName = await getActorName(actorId);
-  const [notification] = await db
-    .insert(notificationsTable)
-    .values({ userId: post.authorId, type, actorName, message })
-    .returning();
-  broadcastNotification(post.authorId, notification);
+  await createNotification({
+    userId: post.authorId,
+    actorId,
+    actorName,
+    type,
+    content: message,
+    targetType: "post",
+    targetId: postId,
+  });
 }
 
 function maskAnonymousPost(post: any, requesterId?: string) {
@@ -481,7 +485,9 @@ router.post("/posts/:postId/like", requireAuth, async (req, res): Promise<void> 
     await db.insert(postLikesTable).values({ postId, userId });
     await db.update(postsTable).set({ likesCount: sql`${postsTable.likesCount} + 1` }).where(eq(postsTable.id, postId));
     liked = true;
-    notifyPostAuthor(postId, userId, "fire", "Someone gassed up your post! 🔥").catch(() => {});
+    notifyPostAuthor(postId, userId, "like", "Someone gassed up your post! 🔥").catch((error) => {
+      req.log.error({ err: error, postId, userId }, "Failed to create like notification");
+    });
   }
 
   const [updated] = await db.select({ likesCount: postsTable.likesCount }).from(postsTable).where(eq(postsTable.id, postId));
@@ -512,7 +518,9 @@ router.post("/posts/:postId/nocap", requireAuth, async (req, res): Promise<void>
     await db.insert(postNoCapsTable).values({ postId, userId });
     await db.update(postsTable).set({ noCapsCount: sql`${postsTable.noCapsCount} + 1` }).where(eq(postsTable.id, postId));
     noCaped = true;
-    notifyPostAuthor(postId, userId, "nocap", "Someone said No Cap to your post! 🧢").catch(() => {});
+    notifyPostAuthor(postId, userId, "nocap", "Someone said No Cap to your post! 🧢").catch((error) => {
+      req.log.error({ err: error, postId, userId }, "Failed to create No Cap notification");
+    });
   }
 
   const [updated] = await db.select({ noCapsCount: postsTable.noCapsCount }).from(postsTable).where(eq(postsTable.id, postId));
@@ -577,7 +585,10 @@ router.post("/posts/:postId/comments", requireAuth, async (req, res): Promise<vo
     return;
   }
 
-  const [post] = await db.select({ id: postsTable.id }).from(postsTable).where(eq(postsTable.id, params.data.postId));
+  const [post] = await db
+    .select({ id: postsTable.id, authorId: postsTable.authorId })
+    .from(postsTable)
+    .where(eq(postsTable.id, params.data.postId));
   if (!post) {
     res.status(404).json({ error: "Post not found" });
     return;
@@ -598,6 +609,20 @@ router.post("/posts/:postId/comments", requireAuth, async (req, res): Promise<vo
     })
     .from(usersTable)
     .where(eq(usersTable.clerkUserId, userId));
+
+  if (post.authorId !== userId) {
+    await createNotification({
+      userId: post.authorId,
+      actorId: userId,
+      actorName: author?.fullName ?? "A student",
+      type: "comment",
+      content: "Someone commented on your post.",
+      targetType: "post",
+      targetId: params.data.postId,
+    }).catch((error) => {
+      req.log.error({ err: error, postId: params.data.postId, userId }, "Failed to create comment notification");
+    });
+  }
 
   res.status(201).json({
     id: inserted.id,

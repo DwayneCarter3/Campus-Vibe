@@ -97,6 +97,31 @@ paths:
         "401":
           description: Unauthorized
 
+  /users/search:
+    get:
+      operationId: searchStudents
+      tags: [users]
+      summary: Search peers within the signed-in user's institution
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 2
+            maxLength: 80
+      responses:
+        "200":
+          description: Matching student profiles
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StudentSearchResponse"
+        "401":
+          description: Unauthorized
+        "400":
+          description: Search term must contain at least two characters
+
   /users/{userId}:
     get:
       operationId: getUserProfile
@@ -506,6 +531,25 @@ paths:
           description: All notifications marked as read
         "401":
           description: Unauthorized
+
+  /notifications/{notificationId}/read:
+    patch:
+      operationId: markNotificationRead
+      tags: [notifications]
+      summary: Mark one of the current user's notifications as read
+      parameters:
+        - name: notificationId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Notification marked as read
+        "401":
+          description: Unauthorized
+        "404":
+          description: Notification not found for this user
 
   /services/{serviceId}/whatsapp-click:
     post:
@@ -1041,6 +1085,12 @@ components:
           type: ["string", "null"]
         message:
           type: string
+        content:
+          type: string
+        targetType:
+          type: ["string", "null"]
+        targetId:
+          type: ["string", "null"]
         isRead:
           type: boolean
         createdAt:
@@ -1050,6 +1100,9 @@ components:
         - type
         - actorName
         - message
+        - content
+        - targetType
+        - targetId
         - isRead
         - createdAt
 
@@ -1083,6 +1136,10 @@ components:
           type: string
         fullName:
           type: string
+        username:
+          type: ["string", "null"]
+        department:
+          type: ["string", "null"]
         email:
           type: string
         school:
@@ -1131,6 +1188,8 @@ components:
         - id
         - clerkUserId
         - fullName
+        - username
+        - department
         - email
         - school
         - campusLocation
@@ -1161,6 +1220,10 @@ components:
           type: string
         fullName:
           type: string
+        username:
+          type: ["string", "null"]
+        department:
+          type: ["string", "null"]
         school:
           type: string
         campusLocation:
@@ -1189,6 +1252,8 @@ components:
         - id
         - clerkUserId
         - fullName
+        - username
+        - department
         - school
         - campusLocation
         - level
@@ -1207,6 +1272,12 @@ components:
       properties:
         fullName:
           type: string
+        username:
+          type: ["string", "null"]
+          description: "Optional unique lowercase handle (3–24 letters, numbers, or underscores); null clears it."
+        department:
+          type: ["string", "null"]
+          description: "Optional department name; null clears it."
         school:
           type: string
         campusLocation:
@@ -1227,6 +1298,32 @@ components:
           type: ["string", "null"]
         avatarUrl:
           type: ["string", "null"]
+
+    StudentSearchResult:
+      type: object
+      properties:
+        userId:
+          type: string
+        fullName:
+          type: string
+        username:
+          type: ["string", "null"]
+        department:
+          type: ["string", "null"]
+        avatarUrl:
+          type: ["string", "null"]
+        verificationStatus:
+          type: string
+      required: [userId, fullName, username, department, avatarUrl, verificationStatus]
+
+    StudentSearchResponse:
+      type: object
+      properties:
+        students:
+          type: array
+          items:
+            $ref: "#/components/schemas/StudentSearchResult"
+      required: [students]
 
     RequestBadgeBody:
       type: object

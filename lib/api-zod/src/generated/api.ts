@@ -21,6 +21,8 @@ export const GetMyProfileResponse = zod.object({
   id: zod.number(),
   clerkUserId: zod.string(),
   fullName: zod.string(),
+  username: zod.string().nullable(),
+  department: zod.string().nullable(),
   email: zod.string(),
   school: zod.string(),
   campusLocation: zod.string(),
@@ -52,6 +54,16 @@ export const GetMyProfileResponse = zod.object({
  */
 export const UpdateMyProfileBody = zod.object({
   fullName: zod.string().optional(),
+  username: zod
+    .string()
+    .nullish()
+    .describe(
+      "Optional unique lowercase handle (3–24 letters, numbers, or underscores); null clears it.",
+    ),
+  department: zod
+    .string()
+    .nullish()
+    .describe("Optional department name; null clears it."),
   school: zod.string().optional(),
   campusLocation: zod.string().optional(),
   level: zod
@@ -72,6 +84,8 @@ export const UpdateMyProfileResponse = zod.object({
   id: zod.number(),
   clerkUserId: zod.string(),
   fullName: zod.string(),
+  username: zod.string().nullable(),
+  department: zod.string().nullable(),
   email: zod.string(),
   school: zod.string(),
   campusLocation: zod.string(),
@@ -111,6 +125,32 @@ export const RequestPremiumBadgeResponse = zod.object({
 });
 
 /**
+ * @summary Search peers within the signed-in user's institution
+ */
+export const searchStudentsQueryQMin = 2;
+export const searchStudentsQueryQMax = 80;
+
+export const SearchStudentsQueryParams = zod.object({
+  q: zod.coerce
+    .string()
+    .min(searchStudentsQueryQMin)
+    .max(searchStudentsQueryQMax),
+});
+
+export const SearchStudentsResponse = zod.object({
+  students: zod.array(
+    zod.object({
+      userId: zod.string(),
+      fullName: zod.string(),
+      username: zod.string().nullable(),
+      department: zod.string().nullable(),
+      avatarUrl: zod.string().nullable(),
+      verificationStatus: zod.string(),
+    }),
+  ),
+});
+
+/**
  * @summary Get a public user profile (private fields excluded)
  */
 export const GetUserProfileParams = zod.object({
@@ -121,6 +161,8 @@ export const GetUserProfileResponse = zod.object({
   id: zod.number(),
   clerkUserId: zod.string(),
   fullName: zod.string(),
+  username: zod.string().nullable(),
+  department: zod.string().nullable(),
   school: zod.string(),
   campusLocation: zod.string(),
   level: zod.string(),
@@ -561,11 +603,21 @@ export const ListNotificationsResponse = zod.object({
       type: zod.string(),
       actorName: zod.string().nullable(),
       message: zod.string(),
+      content: zod.string(),
+      targetType: zod.string().nullable(),
+      targetId: zod.string().nullable(),
       isRead: zod.boolean(),
       createdAt: zod.string(),
     }),
   ),
   unreadCount: zod.number(),
+});
+
+/**
+ * @summary Mark one of the current user's notifications as read
+ */
+export const MarkNotificationReadParams = zod.object({
+  notificationId: zod.coerce.number(),
 });
 
 /**

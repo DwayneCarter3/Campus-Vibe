@@ -18,9 +18,12 @@ import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { formatDistanceToNow } from "date-fns";
 import { useQueryClient } from "@tanstack/react-query";
+import { useRouter } from "expo-router";
 import {
   useListPosts,
   getListPostsQueryKey,
+  useListNotifications,
+  getListNotificationsQueryKey,
   useLikePost,
   useNoCapPost,
   useCreatePost,
@@ -202,10 +205,21 @@ function ComposeModal({ visible, onClose }: { visible: boolean; onClose: () => v
 export default function AmeboFeed() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const [composeOpen, setComposeOpen] = useState(false);
 
   const { data, isLoading, isError, refetch, isRefetching } = useListPosts();
+  const { data: notificationData } = useListNotifications(
+    { limit: 50 },
+    {
+      query: {
+        queryKey: getListNotificationsQueryKey({ limit: 50 }),
+        refetchInterval: 12_000,
+      },
+    },
+  );
   const posts = data?.posts ?? [];
+  const unreadNotifications = notificationData?.notifications?.filter((item) => !item.isRead).length ?? 0;
 
   const isWeb = Platform.OS === "web";
   const topPad = isWeb ? 67 : insets.top;
@@ -220,9 +234,26 @@ export default function AmeboFeed() {
           <Text style={[styles.headerTitle, { color: colors.foreground }]}>Amebo</Text>
           <Text style={[styles.headerSub, { color: colors.mutedForeground }]}>LASU Ojo campus gist 🏛️</Text>
         </View>
-        <TouchableOpacity onPress={() => setComposeOpen(true)} style={[styles.composeBtn, { backgroundColor: colors.primary }]}>
-          <Feather name="edit-3" size={18} color="#fff" />
-        </TouchableOpacity>
+        <View style={styles.headerActions}>
+          <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityLabel="Notifications"
+            onPress={() => router.push("/notifications")}
+            style={styles.notificationBtn}
+          >
+            <Feather name="bell" size={20} color={colors.foreground} />
+            {unreadNotifications > 0 && (
+              <View style={styles.notificationBadge}>
+                <Text style={styles.notificationBadgeText}>
+                  {unreadNotifications > 9 ? "9+" : unreadNotifications}
+                </Text>
+              </View>
+            )}
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => setComposeOpen(true)} style={[styles.composeBtn, { backgroundColor: colors.primary }]}>
+            <Feather name="edit-3" size={18} color="#fff" />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {isLoading ? (
@@ -283,6 +314,13 @@ const styles = StyleSheet.create({
   },
   headerTitle: { fontSize: 26, fontWeight: "700", letterSpacing: -0.5 },
   headerSub: { fontSize: 13, marginTop: 2 },
+  headerActions: { flexDirection: "row", alignItems: "center", gap: 10 },
+  notificationBtn: { width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center", position: "relative" },
+  notificationBadge: {
+    position: "absolute", top: 0, right: 0, minWidth: 16, height: 16, borderRadius: 8,
+    paddingHorizontal: 3, alignItems: "center", justifyContent: "center", backgroundColor: "#ef4444",
+  },
+  notificationBadgeText: { color: "#fff", fontSize: 9, fontWeight: "700" },
   composeBtn: { width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center" },
   listContent: { paddingTop: 12, paddingHorizontal: 16, gap: 12 },
   centered: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12 },

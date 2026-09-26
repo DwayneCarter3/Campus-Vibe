@@ -10,6 +10,8 @@ export const usersTable = pgTable(
     registrationRank: serial("registration_rank").notNull().unique(),
     clerkUserId: text("clerk_user_id").notNull().unique(),
     fullName: text("full_name").notNull(),
+    username: text("username"),
+    department: text("department"),
     email: text("email").notNull().default(""),
     school: text("school").notNull().default("Lagos State University (LASU)"),
     campusLocation: text("campus_location").notNull().default("Ojo"),
@@ -33,6 +35,7 @@ export const usersTable = pgTable(
     // Partial unique index: only enforce email uniqueness when email is non-empty
     // (new users may register without email; empty string is allowed multiple times)
     uniqueIndex("users_email_nonempty_unique").on(sql`lower(${table.email})`).where(sql`${table.email} != ''`),
+    uniqueIndex("users_username_nonempty_unique").on(sql`lower(${table.username})`).where(sql`${table.username} IS NOT NULL AND ${table.username} != ''`),
   ]
 );
 

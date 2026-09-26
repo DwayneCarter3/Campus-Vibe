@@ -12,3 +12,4 @@
 - [Pending verification and promo expiry](pending-verification-expiry.md) — expiring launch perks must not erase a submitted pending review; manual admin overrides must outlive a promo timer.
 - [Academic level session anchor](academic-level-session.md) — matric-based level uses the 2025/26 session (start year 2025), not the 2026 calendar year.
 - [Verification badge tiers](verification-badge-tiers.md) — public headers show student/paid tier marks, never role badges; gold needs a real vendor entitlement.
+- [Drizzle serial push mismatch](drizzle-serial-push.md) — Drizzle push can emit invalid SQL for an existing serial-backed rank; avoid force or sequence drops.
