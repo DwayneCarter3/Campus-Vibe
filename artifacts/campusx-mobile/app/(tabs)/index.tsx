@@ -360,6 +360,9 @@ export function PostCard({ post, onHide }: { post: Post; onHide?: () => void }) 
           <View style={{ flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 5 }}>
             <Text style={[styles.authorName, { color: colors.foreground }]} numberOfLines={1}>{isDispatch ? "CampusX Dispatch" : post.authorName}</Text>
             {!post.isAnonymous && <UserVerificationMarks status={post.authorVerificationStatus} role={post.authorRole} />}
+            {!post.isAnonymous && post.authorUsername && (
+              <Text style={{ color: colors.mutedForeground, fontSize: 12 }}>@{post.authorUsername}</Text>
+            )}
             {post.isAnonymous && (
               <View style={{ backgroundColor: "#8B5CF622", borderColor: "#8B5CF666", borderWidth: 1, borderRadius: 12, paddingHorizontal: 7, paddingVertical: 2 }}>
                 <Text style={{ fontSize: 10, color: "#C4B5FD", fontWeight: "600" }}>Anon Post</Text>
@@ -419,6 +422,9 @@ export function PostCard({ post, onHide }: { post: Post; onHide?: () => void }) 
               <View style={styles.reshareMetaRow}>
                 <Text style={[styles.reshareAuthorName, { color: colors.foreground }]}>{post.originalPost.authorName}</Text>
                 {!post.originalPost.isAnonymous && <UserVerificationMarks status={post.originalPost.authorVerificationStatus} />}
+                {!post.originalPost.isAnonymous && post.originalPost.authorUsername && (
+                  <Text style={{ color: colors.mutedForeground, fontSize: 11 }}>@{post.originalPost.authorUsername}</Text>
+                )}
                 <Text style={[styles.reshareLabel, { color: colors.mutedForeground, borderColor: colors.border }]}>Original post</Text>
                 <Text style={[styles.timeTextSmall, { color: colors.mutedForeground }]}>
                   {formatDistanceToNow(new Date(post.originalPost.createdAt), { addSuffix: true })}

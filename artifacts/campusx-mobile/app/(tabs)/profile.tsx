@@ -258,6 +258,7 @@ export default function ProfileScreen() {
           <View style={{ flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 5, marginBottom: 6 }}>
             <Text style={[styles.profileName, { color: colors.foreground, marginBottom: 0 }]}>{displayName}</Text>
             <UserVerificationMarks status={verificationStatus} role={profile?.role} />
+            {profile?.username && <Text style={{ color: colors.mutedForeground, fontSize: 13 }}>@{profile.username}</Text>}
           </View>
 
           {profile && (

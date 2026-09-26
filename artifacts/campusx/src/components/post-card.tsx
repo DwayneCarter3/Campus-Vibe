@@ -318,6 +318,9 @@ export function PostCard({ post, isAdmin, isModerator, moderationMode = false, o
                         <span className="font-semibold text-muted-foreground">{authorName}</span>
                       )}
                       {!isAnon && <UserVerificationMarks status={post.authorVerificationStatus} role={post.authorRole} />}
+                      {!isAnon && post.authorUsername && (
+                        <span className="text-xs font-normal text-muted-foreground truncate">@{post.authorUsername}</span>
+                      )}
                     </span>
                     {!isAnon && !isDispatch && (
                       <Badge variant="outline" className="h-5 px-1.5 text-[10px] border-white/15 text-muted-foreground">
@@ -471,6 +474,9 @@ export function PostCard({ post, isAdmin, isModerator, moderationMode = false, o
                             ? <span className="text-xs font-semibold">{post.originalPost.authorName}</span>
                             : <Link href={`/profile/${post.originalPost.authorId}`} className="text-xs font-semibold hover:text-primary transition-colors">{post.originalPost.authorName}</Link>}
                           {!post.originalPost.isAnonymous && <UserVerificationMarks status={post.originalPost.authorVerificationStatus} />}
+                          {!post.originalPost.isAnonymous && post.originalPost.authorUsername && (
+                            <span className="text-[10px] text-muted-foreground">@{post.originalPost.authorUsername}</span>
+                          )}
                           <span className="rounded-full border border-white/10 px-1.5 py-0.5 text-[10px] text-muted-foreground">Original post</span>
                           <span className="text-[10px] text-muted-foreground">
                             {formatDistanceToNow(new Date(post.originalPost.createdAt), { addSuffix: true })}
@@ -596,6 +602,9 @@ export function PostCard({ post, isAdmin, isModerator, moderationMode = false, o
                   </Avatar>
                   <span className="text-xs font-semibold truncate">{post.originalPost?.authorName ?? post.authorName}</span>
                    {!(post.originalPost?.isAnonymous ?? post.isAnonymous) && <UserVerificationMarks status={post.originalPost?.authorVerificationStatus ?? post.authorVerificationStatus} />}
+                   {!(post.originalPost?.isAnonymous ?? post.isAnonymous) && (post.originalPost?.authorUsername ?? post.authorUsername) && (
+                     <span className="text-[10px] text-muted-foreground">@{post.originalPost?.authorUsername ?? post.authorUsername}</span>
+                   )}
                 </div>
                 <p className="text-xs text-foreground/70 line-clamp-3 leading-relaxed">
                   {post.originalPost?.content || post.content || <span className="italic text-muted-foreground">No text</span>}
@@ -745,6 +754,7 @@ function CommentRow({ comment, currentUserId }: { comment: Comment; currentUserI
           <span className="text-xs font-semibold leading-none inline-flex items-center gap-1">
             {comment.authorName}
             <UserVerificationMarks status={comment.authorVerificationStatus} />
+            {comment.authorUsername && <span className="font-normal text-muted-foreground">@{comment.authorUsername}</span>}
           </span>
           <span className="text-[10px] text-muted-foreground ml-auto">
             {formatDistanceToNow(new Date(comment.createdAt), { addSuffix: true })}

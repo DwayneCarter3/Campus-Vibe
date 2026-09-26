@@ -1,6 +1,7 @@
 type EmbeddedAuthor = {
   authorId: string;
   authorName: string;
+  authorUsername?: string | null;
   authorAvatarUrl: string | null;
   authorIsVerified: boolean;
   authorVerificationStatus: string;
@@ -14,6 +15,7 @@ export function publicEmbeddedPost<T extends EmbeddedAuthor>(post: T): T {
     ...post,
     authorId: "anonymous",
     authorName: "Anonymous LASUite",
+    authorUsername: null,
     authorAvatarUrl: null,
     authorIsVerified: false,
     authorVerificationStatus: "none",
@@ -36,6 +38,7 @@ export function publicPost<T extends PostAuthor>(post: T, requesterId?: string) 
     ...post,
     authorId: "anonymous",
     authorName: "Anonymous LASUite",
+    authorUsername: null,
     authorFaculty: "LASU",
     authorLevel: "—",
     authorCampusLocation: "Ojo",

@@ -282,17 +282,14 @@ export default function MyProfilePage() {
             </div>
 
             <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 flex-wrap mb-1">
+              <div className="flex items-center gap-x-2 gap-y-1 flex-wrap mb-1">
                 <h1 className="text-xl font-bold inline-flex items-center gap-1.5">
                   {profile.fullName}
                   <UserVerificationMarks status={profile.verificationStatus} role={profile.role} />
                 </h1>
+                {profile.username && <span className="text-sm text-muted-foreground">@{profile.username}</span>}
               </div>
-              {(profile.username || profile.department) && (
-                <p className="text-xs text-muted-foreground mb-2">
-                  {[profile.username ? `@${profile.username}` : null, profile.department].filter(Boolean).join(" · ")}
-                </p>
-              )}
+              {profile.department && <p className="text-xs text-muted-foreground mb-2">{profile.department}</p>}
 
               <div className="flex flex-wrap gap-2 mb-2">
                 <Badge variant="outline" className="text-xs border-primary/30 text-primary">{profile.level}</Badge>

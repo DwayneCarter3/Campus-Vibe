@@ -2142,6 +2142,8 @@ components:
           type: string
         authorName:
           type: string
+        authorUsername:
+          type: ["string", "null"]
         authorFaculty:
           type: string
         authorLevel:
@@ -2456,6 +2458,8 @@ components:
           type: string
         authorName:
           type: string
+        authorUsername:
+          type: ["string", "null"]
         authorLevel:
           type: string
         authorIsVerified:
@@ -2744,6 +2748,8 @@ components:
           type: string
         authorName:
           type: string
+        authorUsername:
+          type: ["string", "null"]
         authorAvatarUrl:
           type: ["string", "null"]
         authorIsVerified:

@@ -281,6 +281,8 @@ export interface EmbeddedPost {
   authorId: string;
   authorName: string;
   /** @nullable */
+  authorUsername?: string | null;
+  /** @nullable */
   authorAvatarUrl: string | null;
   authorIsVerified: boolean;
   authorVerificationStatus: string;
@@ -295,6 +297,8 @@ export interface Post {
   id: number;
   authorId: string;
   authorName: string;
+  /** @nullable */
+  authorUsername?: string | null;
   authorFaculty: string;
   authorLevel: string;
   authorCampusLocation: string;
@@ -471,6 +475,8 @@ export interface Comment {
   postId: number;
   authorId: string;
   authorName: string;
+  /** @nullable */
+  authorUsername?: string | null;
   authorLevel: string;
   authorIsVerified: boolean;
   authorVerificationStatus: string;
