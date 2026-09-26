@@ -252,6 +252,8 @@ export const PostCategory = {
   Portal_Down: "Portal Down",
   Exam_Timetable: "Exam Timetable",
   Amebo_Hot: "Amebo Hot",
+  Campus_News: "Campus News",
+  Strike_Update: "Strike Update",
 } as const;
 
 export interface PollOption {
@@ -348,6 +350,8 @@ export const CreatePostBodyCategory = {
   Portal_Down: "Portal Down",
   Exam_Timetable: "Exam Timetable",
   Amebo_Hot: "Amebo Hot",
+  Campus_News: "Campus News",
+  Strike_Update: "Strike Update",
 } as const;
 
 export interface PollInput {
@@ -1322,6 +1326,8 @@ export const ListPostsCategory = {
   Portal_Down: "Portal Down",
   Exam_Timetable: "Exam Timetable",
   Amebo_Hot: "Amebo Hot",
+  Campus_News: "Campus News",
+  Strike_Update: "Strike Update",
 } as const;
 
 export type ListServicesParams = {

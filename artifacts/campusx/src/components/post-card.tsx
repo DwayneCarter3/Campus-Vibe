@@ -59,6 +59,19 @@ interface PostCardProps {
 
 const reportReasons: ReportBodyReason[] = ["Spam", "Harassment", "Fake Listing", "Inappropriate Content"];
 
+function renderLinkedText(content: string) {
+  return content.split(/(https?:\/\/[^\s<>()]+)/g).map((part, index) => {
+    if (!/^https?:\/\//i.test(part)) return part;
+    try {
+      const url = new URL(part);
+      if (url.protocol !== "http:" && url.protocol !== "https:") return part;
+      return <a key={`${index}-${part}`} href={url.href} target="_blank" rel="noopener noreferrer" className="text-primary underline underline-offset-2 break-all">{part}</a>;
+    } catch {
+      return part;
+    }
+  });
+}
+
 export function PostCard({ post, isAdmin, isModerator, moderationMode = false, onHide, onDeleted }: PostCardProps) {
   const category = getPostCategoryMeta(post.category);
   const { user } = useUser();
@@ -109,6 +122,7 @@ export function PostCard({ post, isAdmin, isModerator, moderationMode = false, o
   const isPrivileged = myProfile?.role === "ceo" || myProfile?.role === "admin";
   const canModerate = moderationMode && (isAdmin || isModerator || isPrivileged || myProfile?.role === "moderator");
   const isAnon = post.isAnonymous;
+  const isDispatch = post.authorRole === "system" && post.authorVerificationStatus === "Official";
 
   const fireLit = optimisticFire !== null ? optimisticFire.active : post.isLikedByMe;
   const fireCount = optimisticFire !== null ? optimisticFire.count : post.likesCount;
@@ -116,9 +130,9 @@ export function PostCard({ post, isAdmin, isModerator, moderationMode = false, o
   const noCapCount = optimisticNoCap !== null ? optimisticNoCap.count : post.noCapsCount;
   const commentCount = post.commentsCount;
 
-  const authorName = post.authorName;
+  const authorName = isDispatch ? "CampusX Dispatch" : post.authorName;
   const authorAvatarUrl = post.authorAvatarUrl;
-  const authorProfileLink = isAnon ? undefined : `/profile/${post.authorId}`;
+  const authorProfileLink = isAnon || isDispatch ? undefined : `/profile/${post.authorId}`;
 
   const handleFire = () => {
     const newActive = !fireLit;
@@ -249,7 +263,7 @@ export function PostCard({ post, isAdmin, isModerator, moderationMode = false, o
   };
 
   const AvatarWrapper = ({ children }: { children: React.ReactNode }) => {
-    if (isAnon) {
+    if (isAnon || isDispatch) {
       return <div className="cursor-default">{children}</div>;
     }
     return (
@@ -309,7 +323,7 @@ export function PostCard({ post, isAdmin, isModerator, moderationMode = false, o
                       )}
                       {!isAnon && <UserVerificationMarks status={post.authorVerificationStatus} role={post.authorRole} />}
                     </span>
-                    {!isAnon && (
+                    {!isAnon && !isDispatch && (
                       <Badge variant="outline" className="h-5 px-1.5 text-[10px] border-white/15 text-muted-foreground">
                         {post.authorLevel}
                       </Badge>
@@ -321,7 +335,7 @@ export function PostCard({ post, isAdmin, isModerator, moderationMode = false, o
                       </Badge>
                     )}
                   </div>
-                  {!isAnon && (
+                  {!isAnon && !isDispatch && (
                     <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-0.5 flex-wrap">
                       <span className="font-medium text-foreground/70">{post.authorFaculty}</span>
                       <span>•</span>
@@ -333,7 +347,7 @@ export function PostCard({ post, isAdmin, isModerator, moderationMode = false, o
                       <span>{formatDistanceToNow(new Date(post.createdAt), { addSuffix: true })}</span>
                     </div>
                   )}
-                  {isAnon && (
+                  {(isAnon || isDispatch) && (
                     <div className="text-xs text-muted-foreground mt-0.5">
                       {formatDistanceToNow(new Date(post.createdAt), { addSuffix: true })}
                     </div>
@@ -482,7 +496,7 @@ export function PostCard({ post, isAdmin, isModerator, moderationMode = false, o
               {/* Content */}
               {post.content && (
                 <div className={cn("text-sm md:text-base leading-relaxed break-words whitespace-pre-wrap", post.originalPost ? "mt-2 font-medium" : "mt-3")}>
-                  {post.content}
+                  {renderLinkedText(post.content)}
                 </div>
               )}
               {post.poll && <PollCard poll={post.poll} postId={post.id} authorId={post.authorId} />}

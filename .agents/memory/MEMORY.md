@@ -6,6 +6,8 @@
 - [CEO authorization](ceo-authorization.md) — privileged CEO requests must check a fresh verified Clerk primary email, not a stale stored address or role.
 - [System DM actors](system-dm-actors.md) — automation in DMs should use a reserved actor, never a fabricated student/Clerk account.
 - [Gemini model availability](gemini-model-availability.md) — model listing alone does not prove generateContent works; probe a candidate before relying on it.
+- [Dispatch actor and audience](dispatch-audience.md) — one reserved bot identity and explicit institution-wide targets keep news separate from student campus posts.
+- [LASU official news pages](lasu-news-pages.md) — LASU listing and article pages are JavaScript shells; official AJAX responses carry the news content.
 - [Mobile avatar upload flow](mobile-avatar-upload.md) — expo-image-picker already installed; signed URL flow matches web (requestUploadUrl → PUT → /api/storage+objectPath); Change Photo button in avatar modal.
 - [Early-bird launch eligibility](early-bird-launch.md) — use registration rank and verified email; school-scoped matric uniqueness and independent benefit expiry.
 - [Role verification invariant](role-verification.md) — CEO/admin accounts stay Premium_Approved and display both trust badges across reads, role changes, and expiry paths.

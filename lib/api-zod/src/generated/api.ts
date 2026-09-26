@@ -438,6 +438,8 @@ export const GetUserPostsResponse = zod.object({
         "Portal Down",
         "Exam Timetable",
         "Amebo Hot",
+        "Campus News",
+        "Strike Update",
       ]),
       imageUrl: zod.string().nullable(),
       blurDataUrl: zod
@@ -564,7 +566,14 @@ export const ListPostsQueryParams = zod.object({
   savedOnly: zod.coerce.boolean().optional(),
   faculty: zod.coerce.string().nullish(),
   category: zod
-    .enum(["Shuttle Updates", "Portal Down", "Exam Timetable", "Amebo Hot"])
+    .enum([
+      "Shuttle Updates",
+      "Portal Down",
+      "Exam Timetable",
+      "Amebo Hot",
+      "Campus News",
+      "Strike Update",
+    ])
     .optional(),
 });
 
@@ -615,6 +624,8 @@ export const ListPostsResponse = zod.object({
         "Portal Down",
         "Exam Timetable",
         "Amebo Hot",
+        "Campus News",
+        "Strike Update",
       ]),
       imageUrl: zod.string().nullable(),
       blurDataUrl: zod
@@ -674,7 +685,14 @@ export const createPostBodyPollOptionsMax = 4;
 export const CreatePostBody = zod.object({
   content: zod.string(),
   category: zod
-    .enum(["Shuttle Updates", "Portal Down", "Exam Timetable", "Amebo Hot"])
+    .enum([
+      "Shuttle Updates",
+      "Portal Down",
+      "Exam Timetable",
+      "Amebo Hot",
+      "Campus News",
+      "Strike Update",
+    ])
     .optional(),
   imageUrl: zod.string().nullish(),
   blurDataUrl: zod
@@ -747,6 +765,8 @@ export const GetPostResponse = zod.object({
     "Portal Down",
     "Exam Timetable",
     "Amebo Hot",
+    "Campus News",
+    "Strike Update",
   ]),
   imageUrl: zod.string().nullable(),
   blurDataUrl: zod
@@ -854,6 +874,8 @@ export const UpdatePostResponse = zod.object({
     "Portal Down",
     "Exam Timetable",
     "Amebo Hot",
+    "Campus News",
+    "Strike Update",
   ]),
   imageUrl: zod.string().nullable(),
   blurDataUrl: zod

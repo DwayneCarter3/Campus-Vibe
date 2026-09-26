@@ -40,6 +40,7 @@ import { ensureWazobiaConversation } from "../lib/wazobia";
 import { getInstitutionByName } from "@workspace/campus-institutions";
 import {
   campusScopeCondition,
+  canonicalInstitutionId,
   profilesShareCampus,
   profilesShareSchool,
   schoolScopeCondition,
@@ -50,6 +51,7 @@ const opAlias = alias(postsTable, "op");
 const ouAlias = alias(usersTable, "ou");
 const NOT_LISTED_SCHOOL = "My School is Not Listed";
 const OTHER_DEPARTMENT = "Other department";
+const CAMPUSX_DISPATCH_USER_ID = "system:campusx-dispatch";
 
 const router: IRouter = Router();
 
@@ -206,7 +208,15 @@ async function resolveProfileReadAccess(
     .limit(1);
   if (!profile) return null;
 
-  const unrestricted = viewerId === profileId || await hasAdminPrivileges(req);
+  const unrestricted = viewer.role !== "system"
+    && profile.role !== "system"
+    && viewerId !== CAMPUSX_DISPATCH_USER_ID
+    && profileId !== CAMPUSX_DISPATCH_USER_ID
+    && (viewerId === profileId || await hasAdminPrivileges(req));
+  if (profileId === CAMPUSX_DISPATCH_USER_ID) {
+    if (!viewer.school.trim() || !viewer.campusLocation.trim()) return null;
+    return { viewer, profile, unrestricted: false };
+  }
   if (
     !unrestricted &&
     (!profilesShareSchool(viewer, profile) || !profilesShareCampus(viewer, profile))
@@ -293,6 +303,7 @@ router.get("/users/search", requireAuth, async (req, res): Promise<void> => {
   }).from(usersTable).where(and(
     eq(usersTable.school, currentUser.school),
     ne(usersTable.clerkUserId, userId),
+    ne(usersTable.role, "system"),
     sql`(strpos(lower(${usersTable.fullName}), ${query}) > 0
       OR strpos(lower(coalesce(${usersTable.username}, '')), ${query}) > 0
       OR strpos(lower(coalesce(${usersTable.department}, '')), ${query}) > 0)`,
@@ -833,10 +844,14 @@ router.get("/users/:userId/posts", requireAuth, async (req, res): Promise<void> 
     res.status(403).json({ error: "You can only view profiles in your school and campus." });
     return;
   }
-  const scopeFilters = readAccess.unrestricted ? [] : [
-    schoolScopeCondition(usersTable.institutionId, usersTable.school, readAccess.viewer),
-    campusScopeCondition(usersTable.campusLocation, readAccess.viewer.campusLocation),
-  ];
+  const isDispatchBotProfile = userId === CAMPUSX_DISPATCH_USER_ID;
+  const viewerInstitutionId = canonicalInstitutionId(readAccess.viewer);
+  const scopeFilters = isDispatchBotProfile
+    ? [viewerInstitutionId ? eq(postsTable.targetInstitutionId, viewerInstitutionId) : sql`false`]
+    : readAccess.unrestricted ? [] : [
+        schoolScopeCondition(usersTable.institutionId, usersTable.school, readAccess.viewer),
+        campusScopeCondition(usersTable.campusLocation, readAccess.viewer.campusLocation),
+      ];
   const limit = Number(req.query.limit) || 50;
   const offset = Number(req.query.offset) || 0;
 
@@ -876,6 +891,7 @@ router.get("/users/:userId/posts", requireAuth, async (req, res): Promise<void> 
       opAuthorVerificationStatus: ouAlias.verificationStatus,
       opAuthorRole: ouAlias.role,
       opIsAnonymous: opAlias.isAnonymous,
+      opTargetInstitutionId: opAlias.targetInstitutionId,
       opAuthorInstitutionId: ouAlias.institutionId,
       opAuthorSchool: ouAlias.school,
       opAuthorCampusLocation: ouAlias.campusLocation,
@@ -932,7 +948,7 @@ router.get("/users/:userId/posts", requireAuth, async (req, res): Promise<void> 
         opId, opAuthorId, opContent, opImageUrl, opCreatedAt,
         opAuthorName, opAuthorAvatarUrl, opAuthorVerificationStatus,
         opAuthorRole, opIsAnonymous, opAuthorInstitutionId, opAuthorSchool,
-        opAuthorCampusLocation,
+        opAuthorCampusLocation, opTargetInstitutionId,
         ...publicFields
       } = post;
       const originalAuthorScope = opAuthorSchool && opAuthorCampusLocation
@@ -942,12 +958,20 @@ router.get("/users/:userId/posts", requireAuth, async (req, res): Promise<void> 
             campusLocation: opAuthorCampusLocation,
           }
         : null;
+      const originalTargetInstitutionMatches = Boolean(
+        opTargetInstitutionId !== null &&
+          opTargetInstitutionId !== undefined &&
+          viewerInstitutionId !== null &&
+          opTargetInstitutionId === viewerInstitutionId,
+      );
       const canViewOriginal = Boolean(
         opId != null &&
           opAuthorId != null &&
           (readAccess.unrestricted ||
             opAuthorId === clerkUserId ||
-            (originalAuthorScope &&
+            originalTargetInstitutionMatches ||
+            (opTargetInstitutionId == null &&
+              originalAuthorScope &&
               profilesShareSchool(readAccess.viewer, originalAuthorScope) &&
               profilesShareCampus(readAccess.viewer, originalAuthorScope))),
       );
@@ -1118,6 +1142,19 @@ router.get("/users/:userId", async (req, res): Promise<void> => {
   if (!profile) {
     res.status(404).json({ error: "User not found" });
     return;
+  }
+
+  if (profile.clerkUserId === CAMPUSX_DISPATCH_USER_ID) {
+    const viewerId = getAuth(req).userId;
+    if (!viewerId) {
+      res.status(401).json({ error: "Sign in to view the CampusX Dispatch profile." });
+      return;
+    }
+    const readAccess = await resolveProfileReadAccess(req, viewerId, profile.clerkUserId);
+    if (!readAccess) {
+      res.status(403).json({ error: "Complete your school and campus profile to view the CampusX Dispatch profile." });
+      return;
+    }
   }
 
   profile = await expirePromoIfNeeded(profile);

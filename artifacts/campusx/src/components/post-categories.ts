@@ -7,7 +7,12 @@ export const POST_CATEGORIES = [
 ] as const;
 
 export type PostCategory = NonNullable<(typeof POST_CATEGORIES)[number]["category"]>;
+export const DISPATCH_CATEGORIES = [
+  { id: "campus-news", label: "Campus News", category: "Campus News", emoji: "📰", color: "from-cyan-500/20 to-cyan-500/5 border-cyan-500/30 hover:border-cyan-500/60", pill: "border-cyan-500/30 bg-cyan-500/10 text-cyan-300" },
+  { id: "strike-update", label: "Strike Update", category: "Strike Update", emoji: "📢", color: "from-amber-500/20 to-amber-500/5 border-amber-500/30 hover:border-amber-500/60", pill: "border-amber-500/30 bg-amber-500/10 text-amber-300" },
+] as const;
 
 export function getPostCategoryMeta(category: string) {
-  return POST_CATEGORIES.find((item) => item.category === category);
+  return POST_CATEGORIES.find((item) => item.category === category)
+    ?? DISPATCH_CATEGORIES.find((item) => item.category === category);
 }

@@ -15,7 +15,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { UserVerificationMarks } from "@/components/user-verification-marks";
 import { PullToRefresh } from "@/components/pull-to-refresh";
-import { POST_CATEGORIES, type PostCategory } from "@/components/post-categories";
+import { POST_CATEGORIES, DISPATCH_CATEGORIES, type PostCategory } from "@/components/post-categories";
 import { uploadCampusImage } from "@/lib/image-upload";
 import type { Post } from "@workspace/api-client-react";
 
@@ -101,7 +101,7 @@ export default function FeedPage() {
   const [savedOnly, setSavedOnly] = useState(false);
   const [hiddenPostIds, setHiddenPostIds] = useState<Set<number>>(getHiddenPostIds);
   const [postCategory, setPostCategory] = useState<PostCategory | "All">("Amebo Hot");
-  const activeCategory = POST_CATEGORIES.find((bubble) => bubble.id === activeBubble)?.category;
+  const activeCategory = [...POST_CATEGORIES, ...DISPATCH_CATEGORIES].find((bubble) => bubble.id === activeBubble)?.category;
   const scrollRef = useRef<HTMLDivElement>(null);
   const feedListRef = useRef<HTMLDivElement>(null);
   const [feedListOffset, setFeedListOffset] = useState(0);
@@ -125,7 +125,7 @@ export default function FeedPage() {
     },
   });
 
-  const postParams = { category: savedOnly ? undefined : activeCategory, savedOnly, limit: 10 };
+  const postParams = { category: savedOnly ? undefined : activeCategory as PostCategory | undefined, savedOnly, limit: 10 };
   const postsQueryKey = [...getListPostsQueryKey(postParams), user?.id ?? profile?.clerkUserId ?? null];
   const {
     data,
@@ -334,7 +334,7 @@ export default function FeedPage() {
         className="flex gap-3 overflow-x-auto pb-3 mb-6 scrollbar-none"
         style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
       >
-        {!savedOnly && POST_CATEGORIES.map((bubble, i) => (
+        {!savedOnly && [...POST_CATEGORIES, ...DISPATCH_CATEGORIES].map((bubble, i) => (
           <motion.button
             key={bubble.id}
             data-testid={`btn-trending-${bubble.id}`}

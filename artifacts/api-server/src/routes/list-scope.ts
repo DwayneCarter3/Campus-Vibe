@@ -1,4 +1,5 @@
 import { sql, type SQL, type SQLWrapper } from "drizzle-orm";
+import { getInstitutionId } from "@workspace/campus-institutions";
 
 export type CampusScopeProfile = {
   institutionId: string | null;
@@ -36,6 +37,26 @@ export function profilesShareSchool(left: CampusScopeProfile, right: CampusScope
 
 export function profilesShareCampus(left: CampusScopeProfile, right: CampusScopeProfile): boolean {
   return normalizeCampusLocation(left.campusLocation) === normalizeCampusLocation(right.campusLocation);
+}
+
+export function canonicalInstitutionId(profile: CampusScopeProfile | null): string | null {
+  const institutionId = profile?.institutionId?.trim();
+  return institutionId || (profile?.school ? getInstitutionId(profile.school) ?? null : null);
+}
+
+export function postReadScopeCondition(
+  targetInstitutionIdColumn: SQLWrapper,
+  profile: CampusScopeProfile,
+  ordinaryPostScope: SQL,
+): SQL {
+  const institutionId = canonicalInstitutionId(profile);
+  if (!institutionId) {
+    return sql`${targetInstitutionIdColumn} IS NULL AND (${ordinaryPostScope})`;
+  }
+  return sql`(
+    ${targetInstitutionIdColumn} = ${institutionId}
+    OR (${targetInstitutionIdColumn} IS NULL AND (${ordinaryPostScope}))
+  )`;
 }
 
 export function schoolScopeCondition(

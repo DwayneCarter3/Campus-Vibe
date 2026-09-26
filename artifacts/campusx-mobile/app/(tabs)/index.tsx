@@ -60,7 +60,7 @@ const FACULTIES = [
   "Engineering", "Management Sciences", "Communication & Media Studies",
 ];
 
-const CATEGORIES = [
+const COMPOSER_CATEGORIES = [
   { label: "All Gist", value: undefined, emoji: "✨" },
   { label: "Shuttle Updates", value: "Shuttle Updates", emoji: "🚌" },
   { label: "Portal Down", value: "Portal Down", emoji: "💻" },
@@ -69,6 +69,11 @@ const CATEGORIES = [
 ] as const;
 
 type FeedCategory = Post["category"];
+const CATEGORIES = [
+  ...COMPOSER_CATEGORIES,
+  { label: "Campus News", value: "Campus News", emoji: "📰" },
+  { label: "Strike Update", value: "Strike Update", emoji: "📢" },
+] as const;
 
 const hiddenPostIds = new Set<number>();
 const REPORT_REASONS = ["Spam", "Harassment", "Fake Listing", "Inappropriate Content"] as const;
@@ -177,8 +182,26 @@ function mediaUri(path: string): string {
   return domain ? `https://${domain}${path}` : path;
 }
 
+function renderLinkedText(content: string) {
+  return content.split(/(https?:\/\/[^\s<>()]+)/g).map((part, index) => {
+    if (!/^https?:\/\//i.test(part)) return part;
+    try {
+      const url = new URL(part);
+      if (url.protocol !== "http:" && url.protocol !== "https:") return part;
+      return (
+        <Text key={`${index}-${part}`} style={{ color: "#8B9CFF", textDecorationLine: "underline" }} onPress={() => { void ExpoLinking.openURL(url.href); }}>
+          {part}
+        </Text>
+      );
+    } catch {
+      return part;
+    }
+  });
+}
+
 export function PostCard({ post, onHide }: { post: Post; onHide?: () => void }) {
   const colors = useColors();
+  const isDispatch = post.authorRole === "system" && post.authorVerificationStatus === "Official";
   const queryClient = useQueryClient();
   const router = useRouter();
   const { data: profile } = useGetMyProfile();
@@ -339,7 +362,7 @@ export function PostCard({ post, onHide }: { post: Post; onHide?: () => void }) 
         </View>
         <View style={styles.authorInfo}>
           <View style={{ flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 5 }}>
-            <Text style={[styles.authorName, { color: colors.foreground }]} numberOfLines={1}>{post.authorName}</Text>
+            <Text style={[styles.authorName, { color: colors.foreground }]} numberOfLines={1}>{isDispatch ? "CampusX Dispatch" : post.authorName}</Text>
             {!post.isAnonymous && <UserVerificationMarks status={post.authorVerificationStatus} role={post.authorRole} />}
             {post.isAnonymous && (
               <View style={{ backgroundColor: "#8B5CF622", borderColor: "#8B5CF666", borderWidth: 1, borderRadius: 12, paddingHorizontal: 7, paddingVertical: 2 }}>
@@ -348,10 +371,12 @@ export function PostCard({ post, onHide }: { post: Post; onHide?: () => void }) 
             )}
           </View>
           <View style={styles.metaRow}>
-            <View style={[styles.badge, { backgroundColor: colors.primary + "22" }]}>
-              <Text style={[styles.badgeText, { color: colors.primary }]}>{post.authorFaculty}</Text>
-            </View>
-            {!post.isAnonymous && (
+            {!isDispatch && (
+              <View style={[styles.badge, { backgroundColor: colors.primary + "22" }]}>
+                <Text style={[styles.badgeText, { color: colors.primary }]}>{post.authorFaculty}</Text>
+              </View>
+            )}
+            {!post.isAnonymous && !isDispatch && (
               <View style={[styles.badge, { backgroundColor: colors.surface }]}>
                 <Text style={[styles.badgeText, { color: colors.mutedForeground }]}>{post.authorLevel}</Text>
               </View>
@@ -374,7 +399,7 @@ export function PostCard({ post, onHide }: { post: Post; onHide?: () => void }) 
           {CATEGORIES.find((item) => item.value === post.category)?.emoji ?? "🌶️"} {post.category}
         </Text>
       </View>
-      {post.content ? <Text style={[styles.content, { color: colors.foreground }]}>{post.content}</Text> : null}
+      {post.content ? <Text style={[styles.content, { color: colors.foreground }]}>{renderLinkedText(post.content)}</Text> : null}
       {post.imageUrl ? (
         <ExpoImage
           source={{ uri: mediaUri(post.imageUrl) }}
@@ -868,7 +893,7 @@ function ComposeModal({ visible, onClose, onPosted }: { visible: boolean; onClos
             )}
             <Text style={{ color: colors.mutedForeground, fontSize: 12, fontWeight: "600", marginTop: 12, marginBottom: 8 }}>Post category</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingBottom: 8 }}>
-              {CATEGORIES.map((item) => {
+              {COMPOSER_CATEGORIES.map((item) => {
                 const value = item.value ?? "All";
                 return (
                   <TouchableOpacity
@@ -911,11 +936,11 @@ export default function AmeboFeed() {
   const router = useRouter();
   const { userId } = useAuth();
   const [composeOpen, setComposeOpen] = useState(false);
-  const [activeCategory, setActiveCategory] = useState<FeedCategory | undefined>(undefined);
+  const [activeCategory, setActiveCategory] = useState<FeedCategory | "Campus News" | "Strike Update" | undefined>(undefined);
   const [savedOnly, setSavedOnly] = useState(false);
   const [, setHiddenRevision] = useState(0);
 
-  const postParams = savedOnly ? { savedOnly: true } : { ...(activeCategory ? { category: activeCategory } : {}) };
+  const postParams = savedOnly ? { savedOnly: true } : { ...(activeCategory ? { category: activeCategory as FeedCategory } : {}) };
   const {
     data,
     isLoading,

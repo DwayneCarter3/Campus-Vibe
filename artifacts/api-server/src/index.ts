@@ -2,6 +2,7 @@ import app from "./app";
 import { logger } from "./lib/logger";
 import { and, lt, isNotNull } from "drizzle-orm";
 import { db, usersTable } from "@workspace/db";
+import { startDispatchNewsScheduler } from "./lib/dispatch-news";
 
 const rawPort = process.env["PORT"];
 
@@ -24,6 +25,7 @@ app.listen(port, (err) => {
   }
 
   logger.info({ port }, "Server listening");
+  startDispatchNewsScheduler();
 });
 
 // ── Background: expire early-bird promos every 6 hours ──────────────────────

@@ -318,7 +318,7 @@ paths:
           in: query
           schema:
             type: string
-            enum: [Shuttle Updates, Portal Down, Exam Timetable, Amebo Hot]
+            enum: [Shuttle Updates, Portal Down, Exam Timetable, Amebo Hot, Campus News, Strike Update]
       responses:
         "200":
           description: List of posts
@@ -2170,7 +2170,7 @@ components:
           type: string
         category:
           type: string
-          enum: [Shuttle Updates, Portal Down, Exam Timetable, Amebo Hot]
+          enum: [Shuttle Updates, Portal Down, Exam Timetable, Amebo Hot, Campus News, Strike Update]
         imageUrl:
           type: ["string", "null"]
         blurDataUrl:
@@ -2265,7 +2265,7 @@ components:
           type: string
         category:
           type: string
-          enum: [Shuttle Updates, Portal Down, Exam Timetable, Amebo Hot]
+          enum: [Shuttle Updates, Portal Down, Exam Timetable, Amebo Hot, Campus News, Strike Update]
         imageUrl:
           type: ["string", "null"]
         blurDataUrl:

@@ -21,6 +21,8 @@ import {
   normalizeSchoolLabel,
   profilesShareCampus,
   profilesShareSchool,
+  canonicalInstitutionId,
+  postReadScopeCondition,
   schoolScopeCondition,
   type CampusScopeProfile,
 } from "./list-scope";
@@ -60,6 +62,10 @@ import {
 const router: IRouter = Router();
 const objectStorageService = new ObjectStorageService();
 
+function isDispatchOnlyPostCategory(category: unknown): boolean {
+  return category === "Campus News" || category === "Strike Update";
+}
+
 const originalPostAlias = alias(postsTable, "op");
 const originalUserAlias = alias(usersTable, "ou");
 
@@ -82,7 +88,7 @@ function hasCampusScope(profile: CampusScopeProfile | null): profile is CampusSc
 async function getPostReadScope(
   req: Request,
   viewerId: string,
-  post: { authorId: string; originalPostId: number | null },
+  post: { authorId: string; originalPostId: number | null; targetInstitutionId: string | null },
 ) {
   const requesterProfile = await getCampusScopeProfile(viewerId);
   const isOwner = post.authorId === viewerId;
@@ -93,6 +99,8 @@ async function getPostReadScope(
   if (!canReadPost) {
     if (!hasCampusScope(requesterProfile)) {
       profileRequired = true;
+    } else if (post.targetInstitutionId !== null) {
+      canReadPost = canonicalInstitutionId(requesterProfile) === post.targetInstitutionId;
     } else {
       const authorProfile = await getCampusScopeProfile(post.authorId);
       canReadPost = hasCampusScope(authorProfile)
@@ -104,13 +112,17 @@ async function getPostReadScope(
   let canViewOriginal = post.originalPostId === null || isAdmin;
   if (post.originalPostId !== null && !isAdmin && hasCampusScope(requesterProfile)) {
     const [originalPost] = await db
-      .select({ authorId: postsTable.authorId })
+      .select({ authorId: postsTable.authorId, targetInstitutionId: postsTable.targetInstitutionId })
       .from(postsTable)
       .where(eq(postsTable.id, post.originalPostId));
-    const originalAuthor = originalPost ? await getCampusScopeProfile(originalPost.authorId) : null;
-    canViewOriginal = hasCampusScope(originalAuthor)
-      && profilesShareSchool(requesterProfile, originalAuthor)
-      && profilesShareCampus(requesterProfile, originalAuthor);
+    if (originalPost?.targetInstitutionId != null) {
+      canViewOriginal = canonicalInstitutionId(requesterProfile) === originalPost.targetInstitutionId;
+    } else {
+      const originalAuthor = originalPost ? await getCampusScopeProfile(originalPost.authorId) : null;
+      canViewOriginal = hasCampusScope(originalAuthor)
+        && profilesShareSchool(requesterProfile, originalAuthor)
+        && profilesShareCampus(requesterProfile, originalAuthor);
+    }
   }
 
   return { requesterProfile, canReadPost, canViewOriginal, profileRequired, isAdmin };
@@ -387,8 +399,14 @@ router.get("/posts", async (req, res): Promise<void> => {
   }
   const scope: CampusScopeProfile = requesterProfile;
   const filters = [
-    schoolScopeCondition(usersTable.institutionId, usersTable.school, scope),
-    campusScopeCondition(usersTable.campusLocation, scope.campusLocation),
+    postReadScopeCondition(
+      postsTable.targetInstitutionId,
+      scope,
+      and(
+        schoolScopeCondition(usersTable.institutionId, usersTable.school, scope),
+        campusScopeCondition(usersTable.campusLocation, scope.campusLocation),
+      )!,
+    ),
     category ? eq(postsTable.category, category) : undefined,
     faculty ? sql`lower(trim(${usersTable.faculty})) = lower(trim(${faculty}))` : undefined,
     savedOnly && clerkUserId
@@ -400,7 +418,7 @@ router.get("/posts", async (req, res): Promise<void> => {
     faculty: faculty?.trim().toLowerCase() ?? null,
     savedOnly,
     viewerId: savedOnly ? clerkUserId : null,
-    institutionId: scope.institutionId,
+    institutionId: canonicalInstitutionId(scope),
     school: normalizeSchoolLabel(scope.school),
     campus: normalizeCampusLocation(scope.campusLocation),
   });
@@ -465,12 +483,12 @@ router.get("/posts", async (req, res): Promise<void> => {
     .leftJoin(usersTable, eq(postsTable.authorId, usersTable.clerkUserId))
     .leftJoin(originalPostAlias, and(
       eq(postsTable.originalPostId, originalPostAlias.id),
-      sql`exists (
+      postReadScopeCondition(originalPostAlias.targetInstitutionId, scope, sql`exists (
         select 1 from users original_author
         where original_author.clerk_user_id = ${originalPostAlias.authorId}
           and ${schoolScopeCondition(sql`original_author.institution_id`, sql`original_author.school`, scope)}
           and ${campusScopeCondition(sql`original_author.campus_location`, scope.campusLocation)}
-      )`,
+      )`),
     ))
     .leftJoin(originalUserAlias, eq(originalPostAlias.authorId, originalUserAlias.clerkUserId))
     .where(and(...pageFilters))
@@ -578,9 +596,17 @@ router.get("/posts", async (req, res): Promise<void> => {
 
 router.post("/posts", requireAuth, async (req, res): Promise<void> => {
   const userId = (req as any).userId as string;
+  if (req.body && typeof req.body === "object" && "targetInstitutionId" in req.body) {
+    res.status(400).json({ error: "targetInstitutionId is reserved for trusted system posts." });
+    return;
+  }
   const parsed = CreatePostBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+  if (isDispatchOnlyPostCategory(parsed.data.category)) {
+    res.status(403).json({ error: "Campus News and Strike Update are reserved for trusted CampusX Dispatch posts." });
     return;
   }
   if (!isSmallWebpDataUrl(parsed.data.blurDataUrl)) {
@@ -660,7 +686,11 @@ router.get("/posts/:postId", async (req, res): Promise<void> => {
     return;
   }
   const [postScope] = await db
-    .select({ authorId: postsTable.authorId, originalPostId: postsTable.originalPostId })
+    .select({
+      authorId: postsTable.authorId,
+      originalPostId: postsTable.originalPostId,
+      targetInstitutionId: postsTable.targetInstitutionId,
+    })
     .from(postsTable)
     .where(eq(postsTable.id, params.data.postId));
   if (!postScope) {
@@ -697,6 +727,15 @@ router.patch("/posts/:postId", requireAuth, async (req, res): Promise<void> => {
   const params = UpdatePostParams.safeParse({ postId: raw });
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
+    return;
+  }
+  if (
+    req.body &&
+    typeof req.body === "object" &&
+    "category" in req.body &&
+    isDispatchOnlyPostCategory((req.body as { category?: unknown }).category)
+  ) {
+    res.status(403).json({ error: "Campus News and Strike Update are reserved for trusted CampusX Dispatch posts." });
     return;
   }
   const body = UpdatePostBody.safeParse(req.body);
@@ -1083,6 +1122,7 @@ router.get("/posts/:postId/comments", async (req, res): Promise<void> => {
       id: postsTable.id,
       authorId: postsTable.authorId,
       originalPostId: postsTable.originalPostId,
+      targetInstitutionId: postsTable.targetInstitutionId,
     })
     .from(postsTable)
     .where(eq(postsTable.id, params.data.postId));
@@ -1157,11 +1197,26 @@ router.post("/posts/:postId/comments", requireAuth, async (req, res): Promise<vo
   }
 
   const [post] = await db
-    .select({ id: postsTable.id, authorId: postsTable.authorId })
+    .select({
+      id: postsTable.id,
+      authorId: postsTable.authorId,
+      originalPostId: postsTable.originalPostId,
+      targetInstitutionId: postsTable.targetInstitutionId,
+    })
     .from(postsTable)
     .where(eq(postsTable.id, params.data.postId));
   if (!post) {
     res.status(404).json({ error: "Post not found" });
+    return;
+  }
+
+  const readScope = await getPostReadScope(req, userId, post);
+  if (!readScope.canReadPost || !readScope.canViewOriginal) {
+    res.status(readScope.profileRequired ? 403 : 404).json({
+      error: readScope.profileRequired
+        ? "Complete your school and campus profile to comment on posts."
+        : "Post not found",
+    });
     return;
   }
 
