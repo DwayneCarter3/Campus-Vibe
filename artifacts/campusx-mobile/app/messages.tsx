@@ -42,6 +42,14 @@ const WAZOBIA_LANGUAGES = [
 ] as const;
 type WazobiaLanguage = (typeof WAZOBIA_LANGUAGES)[number]["value"];
 
+function messageSendError(error: unknown): string {
+  const status = (error as { status?: number })?.status;
+  if (status === 401) return "Your session has expired. Sign in again to send messages.";
+  if (status === 403 || status === 404) return "This conversation is no longer available. Reopen it and try again.";
+  if (status === 429) return "Too many messages. Please wait a moment before trying again.";
+  return "Message not sent. Your draft is still here—please try again.";
+}
+
 function timeAgo(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
   const mins = Math.floor(diff / 60000);
@@ -168,7 +176,7 @@ export default function MessagesScreen() {
   }, [queryClient, userId]);
 
   const handleSend = () => {
-    if (!input.trim() || !activeConvId) return;
+    if (!accountReady || !input.trim() || !activeConvId || isSending) return;
     const content = input.trim();
     setSendError(null);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -185,31 +193,31 @@ export default function MessagesScreen() {
             queryClient.invalidateQueries({
               queryKey: [...getListConversationsQueryKey(), userId],
             });
+            if (!result.reply) setSendError(result.warning ?? "Your message was sent, but WAZOBIA could not reply.");
           },
           onError: (error) => {
             if (currentUserIdRef.current !== userId) return;
-            setSendError(
-              error instanceof Error
-                ? error.message
-                : "WAZOBIA couldn't reply. Your message is still here—please try again."
-            );
+            setSendError(messageSendError(error));
           },
         }
       );
       return;
     }
-    setInput("");
     sendMessage.mutate(
       { conversationId: activeConvId, data: { content } },
       {
         onSuccess: () => {
           if (currentUserIdRef.current !== userId) return;
+          setInput((current) => current.trim() === content ? "" : current);
           queryClient.invalidateQueries({
             queryKey: [...getListMessagesQueryKey(activeConvId), userId],
           });
           queryClient.invalidateQueries({
             queryKey: [...getListConversationsQueryKey(), userId],
           });
+        },
+        onError: (error) => {
+          if (currentUserIdRef.current === userId) setSendError(messageSendError(error));
         },
       }
     );

@@ -1592,7 +1592,7 @@ paths:
     post:
       tags: [messages]
       operationId: chatWithWazobia
-      summary: Send a message to WAZOBIA and receive an AI reply
+      summary: Save a message to WAZOBIA and attempt an AI reply
       security:
         - bearerAuth: []
       requestBody:
@@ -1603,7 +1603,7 @@ paths:
               $ref: '#/components/schemas/WazobiaChatInput'
       responses:
         '200':
-          description: Persisted AI reply
+          description: Message saved; reply may be unavailable when the AI provider fails
           content:
             application/json:
               schema:
@@ -3289,12 +3289,18 @@ components:
 
     WazobiaChatResponse:
       type: object
-      required: [conversationId, reply]
+      required: [conversationId, userMessage, reply]
       properties:
         conversationId:
           type: integer
-        reply:
+        userMessage:
           $ref: '#/components/schemas/DirectMessage'
+        reply:
+          oneOf:
+            - $ref: '#/components/schemas/DirectMessage'
+            - type: 'null'
+        warning:
+          type: string
 
     SendMessageBody:
       type: object

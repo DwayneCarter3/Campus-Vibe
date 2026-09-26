@@ -195,53 +195,84 @@ router.post("/wazobia/chat", requireAuth, async (req, res): Promise<void> => {
     .reverse()
     .slice(-12);
 
-  let text: string;
-  try {
-    text = await generateReply(language, history, parsed.data.content.trim());
-  } catch (error) {
-    const statusCode = (error as { statusCode?: number })?.statusCode ?? 502;
-    req.log.error({ conversationId }, "WAZOBIA AI provider request failed");
-    res.status(statusCode).json({
-      error: statusCode === 503
-        ? "WAZOBIA AI is unavailable: configure GEMINI_API_KEY or OPENAI_API_KEY on the server."
-        : "WAZOBIA could not respond right now. Please try again.",
-    });
-    return;
-  }
-
-  const now = new Date();
-  const [savedUserMessage, savedReply] = await db.transaction(async (tx) => {
+  // Message delivery must not depend on the availability of the AI provider.
+  const savedUserMessage = await db.transaction(async (tx) => {
     const [userMessage] = await tx.insert(messagesTable).values({
       conversationId,
       senderId: userId,
       content: parsed.data.content.trim(),
     }).returning();
-    const [botReply] = await tx.insert(messagesTable).values({
+    await tx.update(conversationsTable).set({ lastMessageAt: new Date() })
+      .where(and(eq(conversationsTable.id, conversationId), eq(conversationsTable.participant1Id, userId)));
+    return userMessage;
+  });
+
+  try {
+    broadcastDm(userId, {
+      conversationId,
+      senderId: userId,
+      senderName: "You",
+      content: savedUserMessage.content,
+    });
+  } catch (error) {
+    req.log.warn({ err: error, conversationId }, "Outgoing WAZOBIA message saved but SSE broadcast failed");
+  }
+
+  const userMessage = {
+    id: savedUserMessage.id,
+    conversationId: savedUserMessage.conversationId,
+    senderId: savedUserMessage.senderId,
+    content: savedUserMessage.content,
+    isRead: savedUserMessage.isRead,
+    createdAt: savedUserMessage.createdAt.toISOString(),
+  };
+
+  let text: string;
+  try {
+    text = await generateReply(language, history, savedUserMessage.content);
+  } catch (error) {
+    req.log.warn({ err: error, conversationId }, "WAZOBIA reply unavailable; outgoing message saved");
+    res.json(ChatWithWazobiaResponse.parse({
+      conversationId,
+      userMessage,
+      reply: null,
+      warning: "Your message was sent, but WAZOBIA cannot reply right now.",
+    }));
+    return;
+  }
+
+  let savedReply: typeof savedUserMessage;
+  try {
+    [savedReply] = await db.insert(messagesTable).values({
       conversationId,
       senderId: WAZOBIA_BOT_ID,
       content: text,
       isRead: false,
     }).returning();
-    await tx.update(conversationsTable).set({ lastMessageAt: now })
-      .where(and(eq(conversationsTable.id, conversationId), eq(conversationsTable.participant1Id, userId)));
-    return [userMessage, botReply] as const;
-  });
-
-  broadcastDm(userId, {
-    conversationId,
-    senderId: userId,
-    senderName: "You",
-    content: savedUserMessage.content,
-  });
-  broadcastDm(userId, {
-    conversationId,
-    senderId: WAZOBIA_BOT_ID,
-    senderName: WAZOBIA_BOT_NAME,
-    content: savedReply.content,
-  });
+  } catch (error) {
+    req.log.error({ err: error, conversationId }, "WAZOBIA reply could not be saved; outgoing message saved");
+    res.json(ChatWithWazobiaResponse.parse({
+      conversationId,
+      userMessage,
+      reply: null,
+      warning: "Your message was sent, but WAZOBIA cannot reply right now.",
+    }));
+    return;
+  }
+  try {
+    broadcastDm(userId, {
+      conversationId,
+      senderId: WAZOBIA_BOT_ID,
+      senderName: WAZOBIA_BOT_NAME,
+      content: savedReply.content,
+    });
+  } catch (error) {
+    req.log.warn({ err: error, conversationId }, "WAZOBIA reply saved but SSE broadcast failed");
+  }
 
   res.json(ChatWithWazobiaResponse.parse({
     conversationId,
+    userMessage,
     reply: {
       id: savedReply.id,
       conversationId: savedReply.conversationId,

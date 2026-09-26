@@ -50,6 +50,14 @@ function BotName() {
   );
 }
 
+function messageSendError(error: unknown): string {
+  const status = (error as { status?: number })?.status;
+  if (status === 401) return "Your session has expired. Sign in again to send messages.";
+  if (status === 403 || status === 404) return "This conversation is no longer available. Reopen it and try again.";
+  if (status === 429) return "Too many messages. Please wait a moment before trying again.";
+  return "Message not sent. Your draft is still here—please try again.";
+}
+
 export default function MessagesPage() {
   const search = useSearch();
   const params = new URLSearchParams(search);
@@ -188,8 +196,8 @@ export default function MessagesPage() {
       queryClient.invalidateQueries({ queryKey: getListMessagesQueryKey(conversationId) });
       queryClient.invalidateQueries({ queryKey: getListConversationsQueryKey() });
     };
-    const onError = () => {
-      if (currentUserIdRef.current === userId) setSendError("Message not sent. Check your connection and try again.");
+    const onError = (error: unknown) => {
+      if (currentUserIdRef.current === userId) setSendError(messageSendError(error));
     };
     if (isBotThread) {
       chatWithWazobia.mutate({ data: { content } }, {
@@ -197,6 +205,7 @@ export default function MessagesPage() {
           if (currentUserIdRef.current !== userId) return;
           queryClient.invalidateQueries({ queryKey: getListMessagesQueryKey(result.conversationId) });
           onSuccess();
+          if (!result.reply) setSendError(result.warning ?? "Your message was sent, but WAZOBIA could not reply.");
         },
         onError,
       });

@@ -1003,7 +1003,9 @@ export interface WazobiaChatInput {
 
 export interface WazobiaChatResponse {
   conversationId: number;
-  reply: DirectMessage;
+  userMessage: DirectMessage;
+  reply: DirectMessage | null;
+  warning?: string;
 }
 
 export interface SendMessageBody {

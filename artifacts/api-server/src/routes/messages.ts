@@ -121,6 +121,15 @@ router.post("/messages/conversations", requireAuth, async (req, res): Promise<vo
     return;
   }
 
+  const [otherUser] = await db
+    .select({ fullName: usersTable.fullName, avatarUrl: usersTable.avatarUrl })
+    .from(usersTable)
+    .where(eq(usersTable.clerkUserId, targetUserId));
+  if (!otherUser) {
+    res.status(404).json({ error: "User not found" });
+    return;
+  }
+
   const [existing] = await db
     .select()
     .from(conversationsTable)
@@ -145,16 +154,6 @@ router.post("/messages/conversations", requireAuth, async (req, res): Promise<vo
       .values({ participant1Id: userId, participant2Id: targetUserId })
       .returning();
     conv = inserted;
-  }
-
-  const [otherUser] = await db
-    .select({ fullName: usersTable.fullName, avatarUrl: usersTable.avatarUrl })
-    .from(usersTable)
-    .where(eq(usersTable.clerkUserId, targetUserId));
-
-  if (!otherUser) {
-    res.status(404).json({ error: "User not found" });
-    return;
   }
 
   res.json({
@@ -297,15 +296,17 @@ router.post("/messages/conversations/:conversationId/messages", requireAuth, asy
     return;
   }
 
-  const [inserted] = await db
-    .insert(messagesTable)
-    .values({ conversationId, senderId: userId, content: content.trim() })
-    .returning();
-
-  await db
-    .update(conversationsTable)
-    .set({ lastMessageAt: new Date() })
-    .where(eq(conversationsTable.id, conversationId));
+  const inserted = await db.transaction(async (tx) => {
+    const [message] = await tx
+      .insert(messagesTable)
+      .values({ conversationId, senderId: userId, content: content.trim() })
+      .returning();
+    await tx
+      .update(conversationsTable)
+      .set({ lastMessageAt: new Date() })
+      .where(eq(conversationsTable.id, conversationId));
+    return message;
+  });
 
   // Push real-time DM event to the recipient via SSE
   const recipientId = conv.participant1Id === userId ? conv.participant2Id : conv.participant1Id;

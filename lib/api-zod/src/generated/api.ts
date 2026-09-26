@@ -1981,7 +1981,7 @@ export const SetWazobiaLanguageResponse = zod.object({
 });
 
 /**
- * @summary Send a message to WAZOBIA and receive an AI reply
+ * @summary Save a message to WAZOBIA and attempt an AI reply
  */
 export const chatWithWazobiaBodyContentMax = 2000;
 
@@ -1991,7 +1991,7 @@ export const ChatWithWazobiaBody = zod.object({
 
 export const ChatWithWazobiaResponse = zod.object({
   conversationId: zod.number(),
-  reply: zod.object({
+  userMessage: zod.object({
     id: zod.number(),
     conversationId: zod.number(),
     senderId: zod.string(),
@@ -1999,6 +1999,18 @@ export const ChatWithWazobiaResponse = zod.object({
     isRead: zod.boolean(),
     createdAt: zod.coerce.date(),
   }),
+  reply: zod.union([
+    zod.object({
+      id: zod.number(),
+      conversationId: zod.number(),
+      senderId: zod.string(),
+      content: zod.string(),
+      isRead: zod.boolean(),
+      createdAt: zod.coerce.date(),
+    }),
+    zod.null(),
+  ]),
+  warning: zod.string().optional(),
 });
 
 /**

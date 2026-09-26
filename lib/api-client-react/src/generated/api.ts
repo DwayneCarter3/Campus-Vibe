@@ -6043,7 +6043,7 @@ export const useSetWazobiaLanguage = <
 };
 
 /**
- * @summary Send a message to WAZOBIA and receive an AI reply
+ * @summary Save a message to WAZOBIA and attempt an AI reply
  */
 export const getChatWithWazobiaUrl = () => {
   return `/api/wazobia/chat`;
@@ -6106,7 +6106,7 @@ export type ChatWithWazobiaMutationBody = BodyType<WazobiaChatInput>;
 export type ChatWithWazobiaMutationError = ErrorType<void>;
 
 /**
- * @summary Send a message to WAZOBIA and receive an AI reply
+ * @summary Save a message to WAZOBIA and attempt an AI reply
  */
 export const useChatWithWazobia = <
   TError = ErrorType<void>,
