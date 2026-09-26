@@ -63,7 +63,7 @@ export default function FeedPage() {
   const [media, setMedia] = useState<MediaUpload | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
-  const [isAnonymous, setIsAnonymous] = useState(false);
+  const [isAnonymous, setIsAnonymous] = useState(true);
 
   useEffect(() => {
     if (!isProfileLoading && (profileError || (profile && !profile.fullName))) {
@@ -112,7 +112,7 @@ export default function FeedPage() {
         setContent("");
         setActiveBubble(POST_CATEGORIES.find((item) => item.category === publishedCategory)?.id ?? "all");
         setPostCategory("Amebo Hot");
-        setIsAnonymous(false);
+        setIsAnonymous(true);
         clearMedia();
         queryClient.invalidateQueries({ queryKey: getListPostsQueryKey() });
       }
@@ -202,15 +202,17 @@ export default function FeedPage() {
         className="glass rounded-2xl p-4 mb-6 border border-white/5 hover:border-primary/20 transition-colors"
       >
         <div className="flex gap-3">
-          <Avatar className="h-9 w-9 shrink-0 border border-white/10">
-            <AvatarImage src={profile?.avatarUrl || undefined} />
+          <Avatar className={cn("h-9 w-9 shrink-0 border border-white/10", isAnonymous && "bg-violet-500/20 border-violet-400/30")}>
+            <AvatarImage src={isAnonymous ? undefined : profile?.avatarUrl || undefined} />
             <AvatarFallback className="text-sm gradient-text font-bold">
-              {profile?.fullName?.charAt(0) || "U"}
+              {isAnonymous ? <Ghost className="h-4 w-4 text-violet-300" /> : profile?.fullName?.charAt(0) || "U"}
             </AvatarFallback>
           </Avatar>
           <div className="flex-1 space-y-3">
             {/* Name + level tag above textarea */}
-            {profile && (
+            {profile && (isAnonymous ? (
+              <div className="text-xs font-semibold text-violet-300">Posting as Anonymous LASUite</div>
+            ) : (
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 <span className="font-semibold text-foreground/80 inline-flex items-center gap-1">
                   {profile.fullName}
@@ -222,7 +224,7 @@ export default function FeedPage() {
                 <span>•</span>
                 <span>{profile.campusLocation} Campus</span>
               </div>
-            )}
+            ))}
             <Textarea
               data-testid="input-post-content"
               placeholder="What's happening on campus?"
@@ -241,7 +243,10 @@ export default function FeedPage() {
                       key={item.id}
                       type="button"
                       aria-pressed={postCategory === value}
-                      onClick={() => setPostCategory(value)}
+                      onClick={() => {
+                        setPostCategory(value);
+                        setIsAnonymous(value === "Amebo Hot" || value === "All");
+                      }}
                       className={cn(
                         "rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors",
                         postCategory === value
@@ -356,16 +361,18 @@ export default function FeedPage() {
                 <button
                   type="button"
                   title="Post anonymously"
+                  aria-label="Post anonymously"
+                  aria-pressed={isAnonymous}
                   onClick={() => setIsAnonymous((v) => !v)}
                   className={cn(
                     "flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all border",
                     isAnonymous
-                      ? "bg-white/10 text-foreground border-white/20"
+                      ? "bg-violet-500/15 text-violet-300 border-violet-400/50 shadow-[0_0_12px_rgba(167,139,250,0.18)]"
                       : "text-muted-foreground hover:text-foreground hover:bg-white/5 border-transparent"
                   )}
                 >
                   <Ghost className="h-4 w-4" />
-                  <span className="hidden sm:inline">{isAnonymous ? "Anonymous" : "Anon?"}</span>
+                  <span>{isAnonymous ? "Anon on" : "Anon?"}</span>
                 </button>
               </div>
               <Button

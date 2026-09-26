@@ -1,8 +1,9 @@
 import { Router, type IRouter } from "express";
 import { eq, desc, and, ne, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
-import { clerkClient } from "@clerk/express";
+import { clerkClient, getAuth } from "@clerk/express";
 import { db, usersTable, postsTable, postLikesTable, postNoCapsTable, postCommentsTable, servicesTable } from "@workspace/db";
+import { publicEmbeddedPost } from "../lib/post-privacy";
 import { requireAuth } from "../middlewares/auth";
 import {
   GetMyProfileResponse,
@@ -441,7 +442,7 @@ router.get("/users/:userId/posts", async (req, res): Promise<void> => {
     return;
   }
 
-  const clerkUserId = (req as any).userId as string | undefined;
+  const clerkUserId = getAuth(req).userId ?? undefined;
   const { userId } = params.data;
   const limit = Number(req.query.limit) || 50;
   const offset = Number(req.query.offset) || 0;
@@ -515,10 +516,17 @@ router.get("/users/:userId/posts", async (req, res): Promise<void> => {
       const role = post.authorRole ?? "student";
       const postCount = await getPostCount(post.authorId);
       const campusTitle = computeCampusTitle(role, postCount);
-      const { authorMatricNumber, ...publicPost } = post;
+      const {
+        authorMatricNumber,
+        opId, opAuthorId, opContent, opImageUrl, opCreatedAt,
+        opAuthorName, opAuthorAvatarUrl, opAuthorVerificationStatus,
+        opAuthorRole, opIsAnonymous,
+        ...publicFields
+      } = post;
 
       return {
-        ...publicPost,
+        ...publicFields,
+        isOwnedByMe: Boolean(clerkUserId && clerkUserId === post.authorId),
         authorName: post.authorName ?? "Unknown",
         authorFaculty: post.authorFaculty ?? "Unknown",
         authorLevel: getEffectiveLevel(post.authorLevel, authorMatricNumber),
@@ -532,17 +540,18 @@ router.get("/users/:userId/posts", async (req, res): Promise<void> => {
         commentsCount: commentsCount ?? 0,
         reshareCount: post.reshareCount ?? 0,
         originalPostId: post.originalPostId ?? null,
-        originalPost: post.opId != null ? {
+        originalPost: post.opId != null ? publicEmbeddedPost({
           id: post.opId,
           authorId: post.opAuthorId ?? "",
           authorName: post.opAuthorName ?? "Unknown",
           authorAvatarUrl: post.opAuthorAvatarUrl ?? null,
           authorIsVerified: !post.opIsAnonymous && isVerifiedAccount(post.opAuthorVerificationStatus, post.opAuthorRole),
           authorVerificationStatus: post.opIsAnonymous ? "none" : publicVerificationStatus(post.opAuthorVerificationStatus, post.opAuthorRole),
+          isAnonymous: Boolean(post.opIsAnonymous),
           content: post.opContent ?? "",
           imageUrl: post.opImageUrl ?? null,
           createdAt: (post.opCreatedAt ?? new Date()).toISOString(),
-        } : null,
+        }) : null,
         isPinnedToProfile: post.isPinnedToProfile ?? false,
         isPinnedToFeed: post.isPinnedToFeed ?? false,
         isLikedByMe,
@@ -551,6 +560,7 @@ router.get("/users/:userId/posts", async (req, res): Promise<void> => {
     })
   );
 
+  res.setHeader("Cache-Control", "private, no-store");
   res.json(GetUserPostsResponse.parse({ posts: postsWithReactions, total: count }));
 });
 

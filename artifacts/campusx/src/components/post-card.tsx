@@ -77,7 +77,7 @@ export function PostCard({ post, isAdmin, isModerator, moderationMode = false }:
     }
   }, [commentsData?.comments.length, commentsOpen]);
 
-  const isOwner = user?.id === post.authorId;
+  const isOwner = post.isOwnedByMe;
   const canModerate = moderationMode && (isAdmin || isModerator);
   const isAnon = post.isAnonymous;
   const isMyAnonPost = isAnon && isOwner;
@@ -90,7 +90,7 @@ export function PostCard({ post, isAdmin, isModerator, moderationMode = false }:
 
   const authorName = post.authorName;
   const authorAvatarUrl = post.authorAvatarUrl;
-  const authorProfileLink = isAnon && !isOwner ? undefined : `/profile/${post.authorId}`;
+  const authorProfileLink = isAnon ? undefined : `/profile/${post.authorId}`;
 
   const handleFire = () => {
     const newActive = !fireLit;
@@ -121,7 +121,9 @@ export function PostCard({ post, isAdmin, isModerator, moderationMode = false }:
       deletePost.mutate({ postId: post.id }, {
         onSuccess: () => {
           queryClient.invalidateQueries({ queryKey: getListPostsQueryKey() });
-          queryClient.invalidateQueries({ queryKey: getGetUserPostsQueryKey(post.authorId) });
+          if (user?.id === post.authorId || isOwner) {
+            queryClient.invalidateQueries({ queryKey: getGetUserPostsQueryKey(user?.id ?? post.authorId) });
+          }
         }
       });
     }
@@ -130,7 +132,7 @@ export function PostCard({ post, isAdmin, isModerator, moderationMode = false }:
   const handlePinToProfile = () => {
     pinToProfile.mutate({ postId: post.id }, {
       onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: getGetUserPostsQueryKey(post.authorId) });
+        queryClient.invalidateQueries({ queryKey: getGetUserPostsQueryKey(user?.id ?? post.authorId) });
         queryClient.invalidateQueries({ queryKey: getListPostsQueryKey() });
       },
     });
@@ -173,7 +175,7 @@ export function PostCard({ post, isAdmin, isModerator, moderationMode = false }:
   };
 
   const AvatarWrapper = ({ children }: { children: React.ReactNode }) => {
-    if (isAnon && !isOwner) {
+    if (isAnon) {
       return <div className="cursor-default">{children}</div>;
     }
     return (
@@ -191,16 +193,16 @@ export function PostCard({ post, isAdmin, isModerator, moderationMode = false }:
         data-testid={`card-post-${post.id}`}
         className={cn(
           "glass rounded-2xl mb-4 group border hover:border-primary/20 transition-colors overflow-hidden",
-          isAnon && !isOwner ? "border-white/5" : "border-white/5",
+          "border-white/5",
           isMyAnonPost && "border-dashed border-white/20"
         )}
       >
         <div className="p-5">
           <div className="flex gap-3">
             <AvatarWrapper>
-              {isAnon && !isOwner ? (
-                <div className="h-10 w-10 rounded-full bg-white/10 border border-white/15 flex items-center justify-center shrink-0">
-                  <Ghost className="h-5 w-5 text-muted-foreground" />
+              {isAnon ? (
+                <div className="h-10 w-10 rounded-full bg-gradient-to-br from-violet-500/30 via-slate-900 to-pink-500/20 border border-violet-400/30 flex items-center justify-center shrink-0">
+                  <Ghost className="h-5 w-5 text-violet-200" aria-hidden="true" />
                 </div>
               ) : (
                 <Avatar className="cursor-pointer border border-white/10 hover:border-primary/50 transition-colors shrink-0 h-10 w-10">
@@ -230,7 +232,7 @@ export function PostCard({ post, isAdmin, isModerator, moderationMode = false }:
                     {isAnon && (
                       <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 border-white/20 text-muted-foreground shrink-0 flex items-center gap-0.5">
                         <Ghost className="h-2.5 w-2.5" />
-                        Anonymous
+                         Anon Post
                       </Badge>
                     )}
                     {isMyAnonPost && (
@@ -270,7 +272,7 @@ export function PostCard({ post, isAdmin, isModerator, moderationMode = false }:
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className="glass border-white/10 min-w-[160px]">
-                      {isOwner && (
+                      {isOwner && !isAnon && (
                         <DropdownMenuItem
                           onClick={handlePinToProfile}
                           disabled={pinToProfile.isPending}
@@ -337,13 +339,13 @@ export function PostCard({ post, isAdmin, isModerator, moderationMode = false }:
                     <div className="flex items-center gap-2 mb-1.5">
                       <Avatar className="h-5 w-5 border border-white/10 shrink-0">
                         <AvatarImage src={post.originalPost.authorAvatarUrl || undefined} />
-                        <AvatarFallback className="text-[9px] font-bold gradient-text">
-                          {post.originalPost.authorName.charAt(0)}
+                        <AvatarFallback className={cn("text-[9px] font-bold gradient-text", post.originalPost.isAnonymous && "bg-violet-500/20")}>
+                          {post.originalPost.isAnonymous ? <Ghost className="h-3 w-3 text-violet-300" /> : post.originalPost.authorName.charAt(0)}
                         </AvatarFallback>
                       </Avatar>
-                      <Link href={`/profile/${post.originalPost.authorId}`} className="text-xs font-semibold hover:text-primary transition-colors truncate">
-                        {post.originalPost.authorName}
-                      </Link>
+                      {post.originalPost.isAnonymous
+                        ? <span className="text-xs font-semibold truncate">{post.originalPost.authorName}</span>
+                        : <Link href={`/profile/${post.originalPost.authorId}`} className="text-xs font-semibold hover:text-primary transition-colors truncate">{post.originalPost.authorName}</Link>}
                       <UserVerificationMarks status={post.originalPost.authorVerificationStatus} />
                       <span className="text-[10px] text-muted-foreground ml-auto shrink-0">
                         {formatDistanceToNow(new Date(post.originalPost.createdAt), { addSuffix: true })}
@@ -418,14 +420,16 @@ export function PostCard({ post, isAdmin, isModerator, moderationMode = false }:
                   <span>{noCapCount > 0 ? noCapCount : "No Cap"}</span>
                 </button>
 
-                <button
-                  data-testid={`btn-reshare-${post.id}`}
-                  onClick={() => { setReshareQuoteText(""); setReshareOpen(true); }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all bg-white/5 text-muted-foreground hover:bg-emerald-500/10 hover:text-emerald-400 border border-transparent"
-                >
-                  <Repeat2 className="h-3.5 w-3.5" />
-                  <span>{post.reshareCount > 0 ? post.reshareCount : "Reshare"}</span>
-                </button>
+                {!(isAnon && isOwner) && (
+                  <button
+                    data-testid={`btn-reshare-${post.id}`}
+                    onClick={() => { setReshareQuoteText(""); setReshareOpen(true); }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all bg-white/5 text-muted-foreground hover:bg-emerald-500/10 hover:text-emerald-400 border border-transparent"
+                  >
+                    <Repeat2 className="h-3.5 w-3.5" />
+                    <span>{post.reshareCount > 0 ? post.reshareCount : "Reshare"}</span>
+                  </button>
+                )}
 
                 <button
                   data-testid={`btn-comments-${post.id}`}
@@ -460,9 +464,11 @@ export function PostCard({ post, isAdmin, isModerator, moderationMode = false }:
               <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
                 <div className="flex items-center gap-2 mb-1.5">
                   <Avatar className="h-5 w-5 border border-white/10 shrink-0">
-                    <AvatarImage src={post.originalPost?.authorAvatarUrl || post.authorAvatarUrl || undefined} />
+                    <AvatarImage src={post.originalPost ? post.originalPost.authorAvatarUrl || undefined : post.authorAvatarUrl || undefined} />
                     <AvatarFallback className="text-[9px] font-bold gradient-text">
-                      {(post.originalPost?.authorName ?? post.authorName).charAt(0)}
+                      {post.originalPost?.isAnonymous || (!post.originalPost && post.isAnonymous)
+                        ? <Ghost className="h-3 w-3 text-violet-300" />
+                        : (post.originalPost?.authorName ?? post.authorName).charAt(0)}
                     </AvatarFallback>
                   </Avatar>
                   <span className="text-xs font-semibold truncate">{post.originalPost?.authorName ?? post.authorName}</span>

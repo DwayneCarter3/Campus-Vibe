@@ -207,6 +207,7 @@ export const GetUserPostsResponse = zod.object({
       authorIsVerified: zod.boolean(),
       authorVerificationStatus: zod.string(),
       isAnonymous: zod.boolean(),
+      isOwnedByMe: zod.boolean(),
       content: zod.string(),
       category: zod.enum([
         "Shuttle Updates",
@@ -231,6 +232,7 @@ export const GetUserPostsResponse = zod.object({
           authorAvatarUrl: zod.string().nullable(),
           authorIsVerified: zod.boolean(),
           authorVerificationStatus: zod.string(),
+          isAnonymous: zod.boolean(),
           content: zod.string(),
           imageUrl: zod.string().nullable(),
           createdAt: zod.coerce.date(),
@@ -316,6 +318,7 @@ export const ListPostsResponse = zod.object({
       authorIsVerified: zod.boolean(),
       authorVerificationStatus: zod.string(),
       isAnonymous: zod.boolean(),
+      isOwnedByMe: zod.boolean(),
       content: zod.string(),
       category: zod.enum([
         "Shuttle Updates",
@@ -340,6 +343,7 @@ export const ListPostsResponse = zod.object({
           authorAvatarUrl: zod.string().nullable(),
           authorIsVerified: zod.boolean(),
           authorVerificationStatus: zod.string(),
+          isAnonymous: zod.boolean(),
           content: zod.string(),
           imageUrl: zod.string().nullable(),
           createdAt: zod.coerce.date(),
@@ -387,6 +391,7 @@ export const GetPostResponse = zod.object({
   authorIsVerified: zod.boolean(),
   authorVerificationStatus: zod.string(),
   isAnonymous: zod.boolean(),
+  isOwnedByMe: zod.boolean(),
   content: zod.string(),
   category: zod.enum([
     "Shuttle Updates",
@@ -411,6 +416,7 @@ export const GetPostResponse = zod.object({
       authorAvatarUrl: zod.string().nullable(),
       authorIsVerified: zod.boolean(),
       authorVerificationStatus: zod.string(),
+      isAnonymous: zod.boolean(),
       content: zod.string(),
       imageUrl: zod.string().nullable(),
       createdAt: zod.coerce.date(),

@@ -1,4 +1,5 @@
 import { Router, type IRouter } from "express";
+import { getAuth } from "@clerk/express";
 import { eq, desc, and, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { db, postsTable, postLikesTable, postNoCapsTable, postCommentsTable, usersTable } from "@workspace/db";
@@ -7,6 +8,7 @@ import { computeCampusTitle } from "./admin";
 import { isVerifiedAccount, publicVerificationStatus } from "../lib/verification";
 import { getEffectiveLevel } from "../lib/academic-level";
 import { createNotification } from "../lib/notifications";
+import { publicPost } from "../lib/post-privacy";
 import {
   ListPostsQueryParams,
   ListPostsResponse,
@@ -68,26 +70,6 @@ async function notifyPostAuthor(postId: number, actorId: string, type: string, m
     targetType: "post",
     targetId: postId,
   });
-}
-
-function maskAnonymousPost(post: any, requesterId?: string) {
-  const isMyPost = post.authorId === requesterId;
-  if (post.isAnonymous && !isMyPost) {
-    return {
-      ...post,
-      authorId: "anonymous",
-      authorName: "Anonymous Student",
-      authorFaculty: "LASU",
-      authorLevel: "—",
-      authorCampusLocation: "Ojo",
-      authorAvatarUrl: null,
-      authorCampusTitle: "",
-      authorRole: "student",
-      authorIsVerified: false,
-      authorVerificationStatus: "none",
-    };
-  }
-  return post;
 }
 
 async function buildPostWithMeta(postId: number, clerkUserId?: string) {
@@ -154,9 +136,15 @@ async function buildPostWithMeta(postId: number, clerkUserId?: string) {
   const postCount = await getPostCount(post.authorId);
   const campusTitle = computeCampusTitle(role, postCount);
 
-  const { authorMatricNumber, ...publicPost } = post;
+  const {
+    authorMatricNumber,
+    opId, opAuthorId, opContent, opImageUrl, opCreatedAt,
+    opAuthorName, opAuthorAvatarUrl, opAuthorVerificationStatus,
+    opAuthorRole, opIsAnonymous,
+    ...publicFields
+  } = post;
   const built = {
-    ...publicPost,
+    ...publicFields,
     authorName: post.authorName ?? "Unknown",
     authorFaculty: post.authorFaculty ?? "Unknown",
     authorLevel: getEffectiveLevel(post.authorLevel, authorMatricNumber),
@@ -177,6 +165,7 @@ async function buildPostWithMeta(postId: number, clerkUserId?: string) {
       authorAvatarUrl: post.opAuthorAvatarUrl ?? null,
       authorIsVerified: !post.opIsAnonymous && isVerifiedAccount(post.opAuthorVerificationStatus, post.opAuthorRole),
       authorVerificationStatus: post.opIsAnonymous ? "none" : publicVerificationStatus(post.opAuthorVerificationStatus, post.opAuthorRole),
+      isAnonymous: Boolean(post.opIsAnonymous),
       content: post.opContent ?? "",
       imageUrl: post.opImageUrl ?? null,
       createdAt: (post.opCreatedAt ?? new Date()).toISOString(),
@@ -187,7 +176,7 @@ async function buildPostWithMeta(postId: number, clerkUserId?: string) {
     isNoCapByMe,
   };
 
-  return maskAnonymousPost(built, clerkUserId);
+  return publicPost(built, clerkUserId);
 }
 
 router.get("/posts", async (req, res): Promise<void> => {
@@ -198,7 +187,7 @@ router.get("/posts", async (req, res): Promise<void> => {
   }
 
   const { limit, offset, category } = params.data;
-  const clerkUserId = (req as any).userId as string | undefined;
+  const clerkUserId = getAuth(req).userId ?? undefined;
 
   const posts = await db
     .select({
@@ -270,9 +259,15 @@ router.get("/posts", async (req, res): Promise<void> => {
       const postCount = await getPostCount(post.authorId);
       const campusTitle = computeCampusTitle(role, postCount);
 
-      const { authorMatricNumber, ...publicPost } = post;
+      const {
+        authorMatricNumber,
+        opId, opAuthorId, opContent, opImageUrl, opCreatedAt,
+        opAuthorName, opAuthorAvatarUrl, opAuthorVerificationStatus,
+        opAuthorRole, opIsAnonymous,
+        ...publicFields
+      } = post;
       const built = {
-        ...publicPost,
+        ...publicFields,
         authorName: post.authorName ?? "Unknown",
         authorFaculty: post.authorFaculty ?? "Unknown",
         authorLevel: getEffectiveLevel(post.authorLevel, authorMatricNumber),
@@ -293,6 +288,7 @@ router.get("/posts", async (req, res): Promise<void> => {
           authorAvatarUrl: post.opAuthorAvatarUrl ?? null,
           authorIsVerified: !post.opIsAnonymous && isVerifiedAccount(post.opAuthorVerificationStatus, post.opAuthorRole),
           authorVerificationStatus: post.opIsAnonymous ? "none" : publicVerificationStatus(post.opAuthorVerificationStatus, post.opAuthorRole),
+          isAnonymous: Boolean(post.opIsAnonymous),
           content: post.opContent ?? "",
           imageUrl: post.opImageUrl ?? null,
           createdAt: (post.opCreatedAt ?? new Date()).toISOString(),
@@ -303,10 +299,11 @@ router.get("/posts", async (req, res): Promise<void> => {
         isNoCapByMe,
       };
 
-      return maskAnonymousPost(built, clerkUserId);
+      return publicPost(built, clerkUserId);
     })
   );
 
+  res.setHeader("Cache-Control", "private, no-store");
   res.json(ListPostsResponse.parse({ posts: postsWithReactions, total: count }));
 });
 
@@ -326,7 +323,7 @@ router.post("/posts", requireAuth, async (req, res): Promise<void> => {
       category: parsed.data.category ?? "Amebo Hot",
       imageUrl: parsed.data.imageUrl ?? null,
       videoUrl: parsed.data.videoUrl ?? null,
-      isAnonymous: (parsed.data as any).isAnonymous ?? false,
+      isAnonymous: parsed.data.isAnonymous ?? false,
     })
     .returning();
 
@@ -342,13 +339,14 @@ router.get("/posts/:postId", async (req, res): Promise<void> => {
     return;
   }
 
-  const clerkUserId = (req as any).userId as string | undefined;
+  const clerkUserId = getAuth(req).userId ?? undefined;
   const result = await buildPostWithMeta(params.data.postId, clerkUserId);
   if (!result) {
     res.status(404).json({ error: "Post not found" });
     return;
   }
 
+  res.setHeader("Cache-Control", "private, no-store");
   res.json(GetPostResponse.parse(result));
 });
 
@@ -400,6 +398,14 @@ router.post("/posts/:postId/reshare", requireAuth, async (req, res): Promise<voi
   if (!original) { res.status(404).json({ error: "Post not found" }); return; }
 
   const rootPostId = original.originalPostId ?? original.id;
+  const [root] = original.originalPostId
+    ? await db.select().from(postsTable).where(eq(postsTable.id, rootPostId))
+    : [original];
+  if (!root) { res.status(404).json({ error: "Original post not found" }); return; }
+  if (root.isAnonymous && root.authorId === userId) {
+    res.status(403).json({ error: "You cannot reshare your own anonymous post." });
+    return;
+  }
 
   await db.insert(postsTable).values({
     authorId: userId,

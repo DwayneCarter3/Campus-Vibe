@@ -77,15 +77,20 @@ function PostCard({ post }: { post: Post }) {
   return (
     <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
       <View style={styles.cardHeader}>
-        <View style={[styles.avatar, { backgroundColor: colors.surface }]}>
-          <Text style={[styles.avatarText, { color: colors.primary }]}>
-            {post.authorName.charAt(0)}
-          </Text>
+        <View style={[styles.avatar, { backgroundColor: post.isAnonymous ? "#251739" : colors.surface }, post.isAnonymous && { borderWidth: 1, borderColor: "#8B5CF666" }]}>
+          {post.isAnonymous
+            ? <Feather name="user-x" size={20} color="#C4B5FD" />
+            : <Text style={[styles.avatarText, { color: colors.primary }]}>{post.authorName.charAt(0)}</Text>}
         </View>
         <View style={styles.authorInfo}>
-          <View style={{ flexDirection: "row", alignItems: "center" }}>
+          <View style={{ flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 5 }}>
             <Text style={[styles.authorName, { color: colors.foreground }]} numberOfLines={1}>{post.authorName}</Text>
             {!post.isAnonymous && <UserVerificationMarks status={post.authorVerificationStatus} />}
+            {post.isAnonymous && (
+              <View style={{ backgroundColor: "#8B5CF622", borderColor: "#8B5CF666", borderWidth: 1, borderRadius: 12, paddingHorizontal: 7, paddingVertical: 2 }}>
+                <Text style={{ fontSize: 10, color: "#C4B5FD", fontWeight: "600" }}>Anon Post</Text>
+              </View>
+            )}
           </View>
           <View style={styles.metaRow}>
             <View style={[styles.badge, { backgroundColor: colors.primary + "22" }]}>
@@ -144,6 +149,7 @@ function ComposeModal({ visible, onClose, onPosted }: { visible: boolean; onClos
   const insets = useSafeAreaInsets();
   const [content, setContent] = useState("");
   const [category, setCategory] = useState<FeedCategory | "All">("Amebo Hot");
+  const [isAnonymous, setIsAnonymous] = useState(true);
   const [showFacultyPicker, setShowFacultyPicker] = useState(false);
   const [selectedFaculty] = useState("LASU Ojo");
 
@@ -155,6 +161,7 @@ function ComposeModal({ visible, onClose, onPosted }: { visible: boolean; onClos
         onPosted(variables.data.category ?? "Amebo Hot");
         setContent("");
         setCategory("Amebo Hot");
+        setIsAnonymous(true);
         onClose();
       },
       onError: () => {
@@ -165,7 +172,7 @@ function ComposeModal({ visible, onClose, onPosted }: { visible: boolean; onClos
 
   const handlePost = () => {
     if (!content.trim()) return;
-    createPost.mutate({ data: { content: content.trim(), category: category === "All" ? "Amebo Hot" : category } });
+    createPost.mutate({ data: { content: content.trim(), category: category === "All" ? "Amebo Hot" : category, isAnonymous } });
   };
 
   return (
@@ -192,10 +199,13 @@ function ComposeModal({ visible, onClose, onPosted }: { visible: boolean; onClos
 
           <ScrollView style={styles.modalBody} keyboardShouldPersistTaps="handled">
             <View style={styles.composeRow}>
-              <View style={[styles.avatar, { backgroundColor: colors.surface }]}>
-                <Text style={[styles.avatarText, { color: colors.primary }]}>G</Text>
+              <View style={[styles.avatar, { backgroundColor: isAnonymous ? "#251739" : colors.surface }]}>
+                {isAnonymous
+                  ? <Feather name="user-x" size={20} color="#C4B5FD" />
+                  : <Text style={[styles.avatarText, { color: colors.primary }]}>G</Text>}
               </View>
               <View style={{ flex: 1 }}>
+                {isAnonymous && <Text style={{ color: "#C4B5FD", fontSize: 12, fontWeight: "600", marginBottom: 5 }}>Posting as Anonymous LASUite</Text>}
                 <View style={[styles.facultyPicker, { backgroundColor: colors.surface }]}>
                   <Text style={[styles.facultyPickerText, { color: colors.primary }]}>{selectedFaculty}</Text>
                 </View>
@@ -221,7 +231,10 @@ function ComposeModal({ visible, onClose, onPosted }: { visible: boolean; onClos
                     key={item.label}
                     accessibilityRole="button"
                     accessibilityState={{ selected: category === value }}
-                    onPress={() => setCategory(value)}
+                    onPress={() => {
+                      setCategory(value);
+                      setIsAnonymous(value === "Amebo Hot" || value === "All");
+                    }}
                     style={{ borderWidth: 1, borderColor: category === value ? colors.primary : colors.border, backgroundColor: category === value ? colors.primary + "20" : colors.surface, borderRadius: 20, paddingHorizontal: 12, paddingVertical: 8 }}
                   >
                     <Text style={{ color: category === value ? colors.primary : colors.mutedForeground, fontSize: 12 }}>{item.emoji} {item.label}</Text>
@@ -230,6 +243,16 @@ function ComposeModal({ visible, onClose, onPosted }: { visible: boolean; onClos
               })}
             </ScrollView>
             {category === "All" && <Text style={{ color: colors.mutedForeground, fontSize: 11 }}>All Gist is a feed view. This post will be tagged Amebo Hot.</Text>}
+            <TouchableOpacity
+              accessibilityRole="switch"
+              accessibilityLabel="Post anonymously"
+              accessibilityState={{ checked: isAnonymous }}
+              onPress={() => setIsAnonymous((value) => !value)}
+              style={{ flexDirection: "row", alignItems: "center", alignSelf: "flex-start", gap: 8, marginTop: 12, borderWidth: 1, borderColor: isAnonymous ? "#8B5CF6" : colors.border, backgroundColor: isAnonymous ? "#8B5CF622" : colors.surface, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 9 }}
+            >
+              <Feather name="user-x" size={16} color={isAnonymous ? "#C4B5FD" : colors.mutedForeground} />
+              <Text style={{ color: isAnonymous ? "#C4B5FD" : colors.mutedForeground, fontSize: 12, fontWeight: "600" }}>{isAnonymous ? "Anon on" : "Anon?"}</Text>
+            </TouchableOpacity>
             <Text style={[styles.charCount, { color: colors.mutedForeground }]}>{content.length}/500</Text>
           </ScrollView>
         </View>

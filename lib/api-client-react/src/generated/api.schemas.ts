@@ -180,6 +180,7 @@ export interface EmbeddedPost {
   authorAvatarUrl: string | null;
   authorIsVerified: boolean;
   authorVerificationStatus: string;
+  isAnonymous: boolean;
   content: string;
   /** @nullable */
   imageUrl: string | null;
@@ -200,6 +201,7 @@ export interface Post {
   authorIsVerified: boolean;
   authorVerificationStatus: string;
   isAnonymous: boolean;
+  isOwnedByMe: boolean;
   content: string;
   category: PostCategory;
   /** @nullable */

@@ -1374,6 +1374,8 @@ components:
           type: string
         isAnonymous:
           type: boolean
+        isOwnedByMe:
+          type: boolean
         content:
           type: string
         category:
@@ -1421,6 +1423,7 @@ components:
         - authorIsVerified
         - authorVerificationStatus
         - isAnonymous
+        - isOwnedByMe
         - content
         - category
         - imageUrl
@@ -1706,7 +1709,7 @@ components:
 
     EmbeddedPost:
       type: object
-      required: [id, authorId, authorName, authorAvatarUrl, authorIsVerified, authorVerificationStatus, content, imageUrl, createdAt]
+      required: [id, authorId, authorName, authorAvatarUrl, authorIsVerified, authorVerificationStatus, isAnonymous, content, imageUrl, createdAt]
       properties:
         id:
           type: integer
@@ -1720,6 +1723,8 @@ components:
           type: boolean
         authorVerificationStatus:
           type: string
+        isAnonymous:
+          type: boolean
         content:
           type: string
         imageUrl:
