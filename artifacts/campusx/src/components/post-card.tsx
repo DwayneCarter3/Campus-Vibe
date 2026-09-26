@@ -272,8 +272,8 @@ export function PostCard({ post, isAdmin, isModerator, moderationMode = false, o
           isMyAnonPost && "border-dashed border-white/20"
         )}
       >
-        <div className="p-5">
-          <div className="flex gap-3">
+        <div className="p-4">
+          <div className="flex items-start gap-3">
             <AvatarWrapper>
               {isAnon ? (
                 <div className="h-10 w-10 rounded-full bg-gradient-to-br from-violet-500/30 via-slate-900 to-pink-500/20 border border-violet-400/30 flex items-center justify-center shrink-0">
@@ -289,8 +289,8 @@ export function PostCard({ post, isAdmin, isModerator, moderationMode = false, o
               )}
             </AvatarWrapper>
 
-            <div className="flex-1 min-w-0">
-              {/* Header */}
+             <div className="flex-1 min-w-0">
+               {/* Header */}
               <div className="flex justify-between items-start gap-2">
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
@@ -304,6 +304,16 @@ export function PostCard({ post, isAdmin, isModerator, moderationMode = false, o
                       )}
                       {!isAnon && <UserVerificationMarks status={post.authorVerificationStatus} />}
                     </span>
+                    {!isAnon && (
+                      <>
+                        <Badge variant="outline" className="h-5 px-1.5 text-[10px] border-white/15 text-muted-foreground">
+                          {post.authorLevel}
+                        </Badge>
+                        <Badge variant="outline" className="h-5 px-1.5 text-[10px] border-primary/25 text-primary">
+                          {post.authorRole === "ceo" ? "CEO" : post.authorRole.charAt(0).toUpperCase() + post.authorRole.slice(1)}
+                        </Badge>
+                      </>
+                    )}
                     {isAnon && (
                       <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 border-white/20 text-muted-foreground shrink-0 flex items-center gap-0.5">
                         <Ghost className="h-2.5 w-2.5" />
@@ -317,8 +327,6 @@ export function PostCard({ post, isAdmin, isModerator, moderationMode = false, o
                   {!isAnon && (
                     <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-0.5 flex-wrap">
                       <span className="font-medium text-foreground/70">{post.authorFaculty}</span>
-                      <span>•</span>
-                      <span>{post.authorLevel}</span>
                       <span>•</span>
                       <span className="flex items-center gap-0.5">
                         <MapPin className="h-2.5 w-2.5" />
@@ -410,6 +418,8 @@ export function PostCard({ post, isAdmin, isModerator, moderationMode = false, o
                     </DropdownMenuContent>
                   </DropdownMenu>
               </div>
+             </div>
+           </div>
 
               {category && (
                 <div className={cn("mt-2 inline-flex items-center rounded-full border px-2.5 py-0.5 text-[11px] font-medium", category.pill)}>
@@ -440,24 +450,28 @@ export function PostCard({ post, isAdmin, isModerator, moderationMode = false, o
 
               {/* Original post card-in-card (reshare) */}
               {post.originalPost && (
-                <div className="mt-3 rounded-xl border border-primary/20 bg-white/[0.03] overflow-hidden">
-                  <div className="px-3 pt-2.5 pb-2">
-                    <div className="flex items-center gap-2 mb-1.5">
-                      <Avatar className="h-5 w-5 border border-white/10 shrink-0">
+                <div className="mt-3 rounded-xl border border-primary/20 bg-white/[0.03] p-4">
+                    <div className="flex items-start gap-3">
+                      <Avatar className="h-9 w-9 border border-white/10 shrink-0">
                         <AvatarImage src={post.originalPost.authorAvatarUrl || undefined} />
-                        <AvatarFallback className={cn("text-[9px] font-bold gradient-text", post.originalPost.isAnonymous && "bg-violet-500/20")}>
-                          {post.originalPost.isAnonymous ? <Ghost className="h-3 w-3 text-violet-300" /> : post.originalPost.authorName.charAt(0)}
+                        <AvatarFallback className={cn("text-xs font-bold gradient-text", post.originalPost.isAnonymous && "bg-violet-500/20")}>
+                          {post.originalPost.isAnonymous ? <Ghost className="h-4 w-4 text-violet-300" /> : post.originalPost.authorName.charAt(0)}
                         </AvatarFallback>
                       </Avatar>
-                      {post.originalPost.isAnonymous
-                        ? <span className="text-xs font-semibold truncate">{post.originalPost.authorName}</span>
-                        : <Link href={`/profile/${post.originalPost.authorId}`} className="text-xs font-semibold hover:text-primary transition-colors truncate">{post.originalPost.authorName}</Link>}
-                       {!post.originalPost.isAnonymous && <UserVerificationMarks status={post.originalPost.authorVerificationStatus} />}
-                      <span className="text-[10px] text-muted-foreground ml-auto shrink-0">
-                        {formatDistanceToNow(new Date(post.originalPost.createdAt), { addSuffix: true })}
-                      </span>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-x-2 gap-y-0.5 flex-wrap">
+                          {post.originalPost.isAnonymous
+                            ? <span className="text-xs font-semibold">{post.originalPost.authorName}</span>
+                            : <Link href={`/profile/${post.originalPost.authorId}`} className="text-xs font-semibold hover:text-primary transition-colors">{post.originalPost.authorName}</Link>}
+                          {!post.originalPost.isAnonymous && <UserVerificationMarks status={post.originalPost.authorVerificationStatus} />}
+                          <span className="rounded-full border border-white/10 px-1.5 py-0.5 text-[10px] text-muted-foreground">Original post</span>
+                          <span className="text-[10px] text-muted-foreground">
+                            {formatDistanceToNow(new Date(post.originalPost.createdAt), { addSuffix: true })}
+                          </span>
+                        </div>
+                      </div>
                     </div>
-                    <p className="text-xs text-foreground/80 leading-relaxed break-words line-clamp-4 whitespace-pre-wrap">
+                    <p className="mt-2 text-xs text-foreground/80 leading-relaxed break-words line-clamp-4 whitespace-pre-wrap">
                       {post.originalPost.content || <span className="text-muted-foreground italic">No text</span>}
                     </p>
                     {post.originalPost.imageUrl && (
@@ -465,7 +479,6 @@ export function PostCard({ post, isAdmin, isModerator, moderationMode = false, o
                         <img src={post.originalPost.imageUrl} alt="Original post" className="w-full h-auto object-cover max-h-[200px]" />
                       </div>
                     )}
-                  </div>
                 </div>
               )}
 
@@ -552,8 +565,6 @@ export function PostCard({ post, isAdmin, isModerator, moderationMode = false, o
                   <span>{commentCount > 0 ? commentCount : "Reply"}</span>
                 </button>
               </div>
-            </div>
-          </div>
         </div>
 
         {/* Reshare Dialog */}

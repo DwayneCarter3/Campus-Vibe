@@ -2,6 +2,7 @@ import React, { useState, useCallback } from "react";
 import {
   View,
   Text,
+  Image,
   FlatList,
   TouchableOpacity,
   Modal,
@@ -62,6 +63,12 @@ type FeedCategory = Post["category"];
 
 const hiddenPostIds = new Set<number>();
 const REPORT_REASONS = ["Spam", "Harassment", "Fake Listing", "Inappropriate Content"] as const;
+
+function mediaUri(path: string): string {
+  if (!path.startsWith("/") || Platform.OS === "web") return path;
+  const domain = process.env.EXPO_PUBLIC_DOMAIN;
+  return domain ? `https://${domain}${path}` : path;
+}
 
 export function PostCard({ post, onHide }: { post: Post; onHide?: () => void }) {
   const colors = useColors();
@@ -216,7 +223,9 @@ export function PostCard({ post, onHide }: { post: Post; onHide?: () => void }) 
         <View style={[styles.avatar, { backgroundColor: post.isAnonymous ? "#251739" : colors.surface }, post.isAnonymous && { borderWidth: 1, borderColor: "#8B5CF666" }]}>
           {post.isAnonymous
             ? <Feather name="user-x" size={20} color="#C4B5FD" />
-            : <Text style={[styles.avatarText, { color: colors.primary }]}>{post.authorName.charAt(0)}</Text>}
+            : post.authorAvatarUrl
+              ? <Image source={{ uri: mediaUri(post.authorAvatarUrl) }} style={styles.avatarImage} />
+              : <Text style={[styles.avatarText, { color: colors.primary }]}>{post.authorName.charAt(0)}</Text>}
         </View>
         <View style={styles.authorInfo}>
           <View style={{ flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 5 }}>
@@ -233,7 +242,16 @@ export function PostCard({ post, onHide }: { post: Post; onHide?: () => void }) 
               <Text style={[styles.badgeText, { color: colors.primary }]}>{post.authorFaculty}</Text>
             </View>
             {!post.isAnonymous && (
-              <Text style={[styles.timeText, { color: colors.mutedForeground }]}>{post.authorLevel}</Text>
+              <>
+                <View style={[styles.badge, { backgroundColor: colors.surface }]}>
+                  <Text style={[styles.badgeText, { color: colors.mutedForeground }]}>{post.authorLevel}</Text>
+                </View>
+                <View style={[styles.badge, { backgroundColor: colors.primary + "18" }]}>
+                  <Text style={[styles.badgeText, { color: colors.primary }]}>
+                    {post.authorRole === "ceo" ? "CEO" : post.authorRole.charAt(0).toUpperCase() + post.authorRole.slice(1)}
+                  </Text>
+                </View>
+              </>
             )}
             <Text style={[styles.timeText, { color: colors.mutedForeground }]}>{timeAgo}</Text>
           </View>
@@ -254,6 +272,36 @@ export function PostCard({ post, onHide }: { post: Post; onHide?: () => void }) 
         </Text>
       </View>
       {post.content ? <Text style={[styles.content, { color: colors.foreground }]}>{post.content}</Text> : null}
+      {post.imageUrl ? (
+        <Image source={{ uri: mediaUri(post.imageUrl) }} style={[styles.postImage, { backgroundColor: colors.surface }]} resizeMode="cover" />
+      ) : null}
+      {post.originalPost && (
+        <View style={[styles.reshareCard, { borderColor: colors.border, backgroundColor: colors.surface }]}>
+          <View style={styles.reshareHeader}>
+            <View style={[styles.reshareAvatar, { backgroundColor: colors.card }]}>
+              {post.originalPost.isAnonymous
+                ? <Feather name="user-x" size={16} color={colors.mutedForeground} />
+                : post.originalPost.authorAvatarUrl
+                  ? <Image source={{ uri: mediaUri(post.originalPost.authorAvatarUrl) }} style={styles.avatarImage} />
+                  : <Text style={[styles.reshareAvatarText, { color: colors.primary }]}>{post.originalPost.authorName.charAt(0)}</Text>}
+            </View>
+            <View style={styles.reshareAuthorInfo}>
+              <View style={styles.reshareMetaRow}>
+                <Text style={[styles.reshareAuthorName, { color: colors.foreground }]}>{post.originalPost.authorName}</Text>
+                {!post.originalPost.isAnonymous && <UserVerificationMarks status={post.originalPost.authorVerificationStatus} />}
+                <Text style={[styles.reshareLabel, { color: colors.mutedForeground, borderColor: colors.border }]}>Original post</Text>
+                <Text style={[styles.timeTextSmall, { color: colors.mutedForeground }]}>
+                  {formatDistanceToNow(new Date(post.originalPost.createdAt), { addSuffix: true })}
+                </Text>
+              </View>
+            </View>
+          </View>
+          {post.originalPost.content ? <Text style={[styles.reshareContent, { color: colors.foreground }]}>{post.originalPost.content}</Text> : null}
+          {post.originalPost.imageUrl ? (
+            <Image source={{ uri: mediaUri(post.originalPost.imageUrl) }} style={[styles.reshareImage, { backgroundColor: colors.card }]} resizeMode="cover" />
+          ) : null}
+        </View>
+      )}
 
       {displayedPoll && (
         <View style={[styles.pollContainer, { borderColor: colors.border, backgroundColor: colors.surface }]}>
@@ -856,15 +904,27 @@ const styles = StyleSheet.create({
   editModal: { flex: 1 },
   editInput: { fontSize: 16, lineHeight: 24, minHeight: 140, padding: 18, textAlignVertical: "top" },
   avatar: { width: 42, height: 42, borderRadius: 21, alignItems: "center", justifyContent: "center" },
+  avatarImage: { width: "100%", height: "100%", borderRadius: 999 },
   avatarText: { fontSize: 18, fontWeight: "700" },
-  authorInfo: { flex: 1 },
+  authorInfo: { flex: 1, minWidth: 0 },
   authorName: { fontSize: 15, fontWeight: "600" },
-  metaRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 4 },
+  metaRow: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 8, marginTop: 4 },
   badge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8 },
   badgeText: { fontSize: 11, fontWeight: "600" },
   timeText: { fontSize: 11 },
   timeTextSmall: { fontSize: 11 },
   content: { fontSize: 15, lineHeight: 22, marginTop: 12 },
+  postImage: { width: "100%", height: 220, borderRadius: 12, marginTop: 12 },
+  reshareCard: { borderWidth: 1, borderRadius: 12, padding: 16, marginTop: 12 },
+  reshareHeader: { flexDirection: "row", alignItems: "flex-start", gap: 12 },
+  reshareAvatar: { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center", overflow: "hidden" },
+  reshareAvatarText: { fontSize: 14, fontWeight: "700" },
+  reshareAuthorInfo: { flex: 1, minWidth: 0 },
+  reshareMetaRow: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 6 },
+  reshareAuthorName: { fontSize: 13, fontWeight: "700" },
+  reshareLabel: { fontSize: 10, borderWidth: 1, borderRadius: 10, paddingHorizontal: 6, paddingVertical: 2 },
+  reshareContent: { fontSize: 13, lineHeight: 19, marginTop: 10 },
+  reshareImage: { width: "100%", height: 180, borderRadius: 10, marginTop: 10 },
   reactions: {
     flexDirection: "row", alignItems: "center", gap: 4,
     marginTop: 12, paddingTop: 12, borderTopWidth: 1,

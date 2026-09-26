@@ -11,7 +11,7 @@
 - [Role verification invariant](role-verification.md) — CEO/admin accounts stay Premium_Approved and display both trust badges across reads, role changes, and expiry paths.
 - [Pending verification and promo expiry](pending-verification-expiry.md) — expiring launch perks must not erase a submitted pending review; manual admin overrides must outlive a promo timer.
 - [Academic level session anchor](academic-level-session.md) — matric-based level uses the 2025/26 session (start year 2025), not the 2026 calendar year.
-- [Verification badge tiers](verification-badge-tiers.md) — public headers show student/paid tier marks, never role badges; gold needs a real vendor entitlement.
+- [Verification badge tiers](verification-badge-tiers.md) — paid verification marks remain tier-only; feed post headers now also show separate level/role labels by explicit request.
 - [Drizzle serial push mismatch](drizzle-serial-push.md) — Drizzle push can emit invalid SQL for an existing serial-backed rank; avoid force or sequence drops.
 - [Feed category semantics](feed-category-semantics.md) — “All Gist” is only a view, not a stored post category; default untagged and older posts to Amebo Hot.
 - [Anonymous post privacy](anonymous-post-privacy.md) — mask even the creator's public response and embedded originals; use a separate ownership flag for actions.
