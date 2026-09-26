@@ -32,6 +32,8 @@ export interface UserProfile {
   school: string;
   campusLocation: string;
   level: string;
+  /** Saved selection; empty when level is computed from the matric number. */
+  manualLevel: string;
   faculty: string;
   enrollmentStatus: string;
   matricNumber: string;
@@ -73,11 +75,28 @@ export interface PublicUserProfile {
   verificationStatus: string;
 }
 
+/**
+ * A manually selected level, or an empty string for automatic matric-based level.
+ */
+export type UpdateProfileBodyLevel =
+  (typeof UpdateProfileBodyLevel)[keyof typeof UpdateProfileBodyLevel];
+
+export const UpdateProfileBodyLevel = {
+  "": "",
+  "100L": "100L",
+  "200L": "200L",
+  "300L": "300L",
+  "400L": "400L",
+  "500L": "500L",
+  "Alumni/Postgrad": "Alumni/Postgrad",
+} as const;
+
 export interface UpdateProfileBody {
   fullName?: string;
   school?: string;
   campusLocation?: string;
-  level?: string;
+  /** A manually selected level, or an empty string for automatic matric-based level. */
+  level?: UpdateProfileBodyLevel;
   faculty?: string;
   enrollmentStatus?: string;
   matricNumber?: string;

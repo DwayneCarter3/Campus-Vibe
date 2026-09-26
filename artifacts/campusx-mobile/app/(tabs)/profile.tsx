@@ -31,13 +31,14 @@ import {
   useRequestUploadUrl,
   useInitializePayment,
 } from "@workspace/api-client-react";
-import type { PaymentPackage } from "@workspace/api-client-react";
+import type { PaymentPackage, UpdateProfileBodyLevel } from "@workspace/api-client-react";
 import { useColors } from "@/hooks/useColors";
 import * as ImagePicker from "expo-image-picker";
 import { PRIVACY_POLICY, TERMS_OF_SERVICE } from "@/constants/legal";
 import { VerificationBadge } from "@/components/VerificationBadge";
 
 const CEO_EMAIL = "dwaynecartergabriel@gmail.com";
+const ACADEMIC_LEVELS = ["100L", "200L", "300L", "400L", "500L", "Alumni/Postgrad"] as const;
 
 const CAMPUS_TITLE_COLORS: Record<string, string> = {
   "CEO": "#F59E0B",
@@ -59,6 +60,8 @@ export default function ProfileScreen() {
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<"gist" | "hustles">("gist");
   const [avatarModalOpen, setAvatarModalOpen] = useState(false);
+  const [levelModalOpen, setLevelModalOpen] = useState(false);
+  const [editLevel, setEditLevel] = useState<UpdateProfileBodyLevel>("");
   const [isAvatarUploading, setIsAvatarUploading] = useState(false);
   const [legalOpen, setLegalOpen] = useState<"privacy" | "terms" | null>(null);
 
@@ -150,6 +153,16 @@ export default function ProfileScreen() {
     }
   };
 
+  const saveLevel = async () => {
+    try {
+      await updateProfile.mutateAsync({ data: { level: editLevel } });
+      await queryClient.invalidateQueries();
+      setLevelModalOpen(false);
+    } catch {
+      Alert.alert("Could not save level", "Please check your matric number or try again.");
+    }
+  };
+
   if (isLoading) {
     return (
       <View style={[styles.centered, { backgroundColor: colors.background }]}>
@@ -233,9 +246,19 @@ export default function ProfileScreen() {
               <View style={[styles.badge, { backgroundColor: colors.primary + "20" }]}>
                 <Text style={[styles.badgeText, { color: colors.primary }]}>{faculty}</Text>
               </View>
-              <View style={[styles.badge, { backgroundColor: colors.accent + "20" }]}>
+              <TouchableOpacity
+                accessibilityRole="button"
+                accessibilityLabel={`Edit academic level, currently ${level}`}
+                onPress={() => {
+                  const savedLevel = profile.manualLevel;
+                  setEditLevel((["", ...ACADEMIC_LEVELS] as string[]).includes(savedLevel) ? savedLevel as UpdateProfileBodyLevel : "");
+                  setLevelModalOpen(true);
+                }}
+                style={[styles.badge, { backgroundColor: colors.accent + "20", flexDirection: "row", alignItems: "center", gap: 5 }]}
+              >
                 <Text style={[styles.badgeText, { color: colors.accent }]}>{level}</Text>
-              </View>
+                <Feather name="edit-2" size={11} color={colors.accent} />
+              </TouchableOpacity>
             </View>
           )}
 
@@ -558,6 +581,48 @@ export default function ProfileScreen() {
       </Modal>
 
       <Modal
+        visible={levelModalOpen}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setLevelModalOpen(false)}
+      >
+        <View style={[styles.legalModal, { backgroundColor: colors.background }]}>
+          <View style={[styles.legalHeader, { borderBottomColor: colors.border }]}>
+            <Text style={[styles.legalTitle, { color: colors.foreground }]}>Edit Profile · Level</Text>
+            <TouchableOpacity onPress={() => setLevelModalOpen(false)} accessibilityLabel="Close">
+              <Feather name="x" size={20} color={colors.mutedForeground} />
+            </TouchableOpacity>
+          </View>
+          <ScrollView contentContainerStyle={styles.levelOptions}>
+            <Text style={{ color: colors.mutedForeground, marginBottom: 10 }}>
+              Automatic uses the first two matric digits and the 2025/26 academic session.
+            </Text>
+            {(["", ...ACADEMIC_LEVELS] as UpdateProfileBodyLevel[]).map((option) => (
+              <TouchableOpacity
+                key={option || "automatic"}
+                onPress={() => setEditLevel(option)}
+                accessibilityRole="radio"
+                accessibilityState={{ checked: editLevel === option }}
+                style={[styles.levelOption, { borderColor: editLevel === option ? colors.primary : colors.border, backgroundColor: colors.card }]}
+              >
+                <Text style={{ color: colors.foreground, fontWeight: "600" }}>
+                  {option || "Automatic (from matric number)"}
+                </Text>
+                {editLevel === option && <Feather name="check" size={18} color={colors.primary} />}
+              </TouchableOpacity>
+            ))}
+            <TouchableOpacity
+              disabled={updateProfile.isPending}
+              onPress={saveLevel}
+              style={[styles.levelSave, { backgroundColor: colors.primary }]}
+            >
+              <Text style={styles.changePhotoBtnText}>{updateProfile.isPending ? "Saving..." : "Save Level"}</Text>
+            </TouchableOpacity>
+          </ScrollView>
+        </View>
+      </Modal>
+
+      <Modal
         visible={legalOpen !== null}
         animationType="slide"
         presentationStyle="pageSheet"
@@ -584,6 +649,9 @@ export default function ProfileScreen() {
 }
 
 const styles = StyleSheet.create({
+  levelOptions: { padding: 20, paddingBottom: 40 },
+  levelOption: { borderWidth: 1, borderRadius: 12, padding: 15, marginBottom: 9, flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  levelSave: { borderRadius: 12, alignItems: "center", padding: 16, marginTop: 12 },
   container: { flex: 1 },
   centered: { flex: 1, alignItems: "center", justifyContent: "center" },
   header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, paddingBottom: 14, borderBottomWidth: 1 },

@@ -3,6 +3,7 @@ import { eq, ilike, or, sql, and, inArray } from "drizzle-orm";
 import { db, usersTable, postsTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/auth";
 import { isPrivilegedRole, PENDING_VERIFICATION_STATUSES } from "../lib/verification";
+import { getEffectiveLevel } from "../lib/academic-level";
 
 const router: IRouter = Router();
 
@@ -107,7 +108,7 @@ router.get("/admin/users", requireAuth, async (req, res): Promise<void> => {
         fullName: u.fullName,
         email: u.email,
         faculty: u.faculty,
-        level: u.level,
+        level: getEffectiveLevel(u.level, u.matricNumber),
         role: u.role,
         verificationStatus: u.verificationStatus,
         matricNumber: u.matricNumber,
@@ -177,7 +178,7 @@ router.get("/admin/pending-verifications", requireAuth, async (req, res): Promis
     fullName: u.fullName,
     matricNumber: u.matricNumber,
     faculty: u.faculty,
-    level: u.level,
+    level: getEffectiveLevel(u.level, u.matricNumber),
     avatarUrl: u.avatarUrl,
     verificationStatus: u.verificationStatus,
     badgeType:

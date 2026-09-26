@@ -25,6 +25,11 @@ export const GetMyProfileResponse = zod.object({
   school: zod.string(),
   campusLocation: zod.string(),
   level: zod.string(),
+  manualLevel: zod
+    .string()
+    .describe(
+      "Saved selection; empty when level is computed from the matric number.",
+    ),
   faculty: zod.string(),
   enrollmentStatus: zod.string(),
   matricNumber: zod.string(),
@@ -49,7 +54,12 @@ export const UpdateMyProfileBody = zod.object({
   fullName: zod.string().optional(),
   school: zod.string().optional(),
   campusLocation: zod.string().optional(),
-  level: zod.string().optional(),
+  level: zod
+    .enum(["", "100L", "200L", "300L", "400L", "500L", "Alumni/Postgrad"])
+    .optional()
+    .describe(
+      "A manually selected level, or an empty string for automatic matric-based level.",
+    ),
   faculty: zod.string().optional(),
   enrollmentStatus: zod.string().optional(),
   matricNumber: zod.string().optional(),
@@ -66,6 +76,11 @@ export const UpdateMyProfileResponse = zod.object({
   school: zod.string(),
   campusLocation: zod.string(),
   level: zod.string(),
+  manualLevel: zod
+    .string()
+    .describe(
+      "Saved selection; empty when level is computed from the matric number.",
+    ),
   faculty: zod.string(),
   enrollmentStatus: zod.string(),
   matricNumber: zod.string(),

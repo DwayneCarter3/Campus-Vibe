@@ -78,6 +78,9 @@ function PostCard({ post }: { post: Post }) {
             <View style={[styles.badge, { backgroundColor: colors.primary + "22" }]}>
               <Text style={[styles.badgeText, { color: colors.primary }]}>{post.authorFaculty}</Text>
             </View>
+            {!post.isAnonymous && (
+              <Text style={[styles.timeText, { color: colors.mutedForeground }]}>{post.authorLevel}</Text>
+            )}
             <Text style={[styles.timeText, { color: colors.mutedForeground }]}>{timeAgo}</Text>
           </View>
         </View>

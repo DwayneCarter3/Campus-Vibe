@@ -10,4 +10,5 @@
 - [Early-bird launch eligibility](early-bird-launch.md) — use the database registration sequence/rank, case-insensitive non-empty email uniqueness, explicit promo expiry fields, and paid-tier fallback after expiry.
 - [Role verification invariant](role-verification.md) — CEO/admin accounts stay Premium_Approved and display both trust badges across reads, role changes, and expiry paths.
 - [Pending verification and promo expiry](pending-verification-expiry.md) — expiring launch perks must not erase a submitted pending review; manual admin overrides must outlive a promo timer.
+- [Academic level session anchor](academic-level-session.md) — matric-based level uses the 2025/26 session (start year 2025), not the 2026 calendar year.
 - [Verification badge tiers](verification-badge-tiers.md) — gold vendor badge is opt-in until a real paid business-vendor entitlement exists; do not infer it from student status or listing promotion.

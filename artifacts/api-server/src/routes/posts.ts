@@ -6,6 +6,7 @@ import { requireAuth } from "../middlewares/auth";
 import { broadcastNotification } from "../sse-manager";
 import { computeCampusTitle } from "./admin";
 import { isVerifiedAccount } from "../lib/verification";
+import { getEffectiveLevel } from "../lib/academic-level";
 import {
   ListPostsQueryParams,
   ListPostsResponse,
@@ -103,6 +104,7 @@ async function buildPostWithMeta(postId: number, clerkUserId?: string) {
       authorName: usersTable.fullName,
       authorFaculty: usersTable.faculty,
       authorLevel: usersTable.level,
+      authorMatricNumber: usersTable.matricNumber,
       authorCampusLocation: usersTable.campusLocation,
       authorAvatarUrl: usersTable.avatarUrl,
       authorRole: usersTable.role,
@@ -146,11 +148,12 @@ async function buildPostWithMeta(postId: number, clerkUserId?: string) {
   const postCount = await getPostCount(post.authorId);
   const campusTitle = computeCampusTitle(role, postCount);
 
+  const { authorMatricNumber, ...publicPost } = post;
   const built = {
-    ...post,
+    ...publicPost,
     authorName: post.authorName ?? "Unknown",
     authorFaculty: post.authorFaculty ?? "Unknown",
-    authorLevel: post.authorLevel ?? "Unknown",
+    authorLevel: getEffectiveLevel(post.authorLevel, authorMatricNumber),
     authorCampusLocation: post.authorCampusLocation ?? "Ojo",
     authorAvatarUrl: post.authorAvatarUrl ?? null,
     authorCampusTitle: campusTitle,
@@ -207,6 +210,7 @@ router.get("/posts", async (req, res): Promise<void> => {
       authorName: usersTable.fullName,
       authorFaculty: usersTable.faculty,
       authorLevel: usersTable.level,
+      authorMatricNumber: usersTable.matricNumber,
       authorCampusLocation: usersTable.campusLocation,
       authorAvatarUrl: usersTable.avatarUrl,
       authorRole: usersTable.role,
@@ -255,11 +259,12 @@ router.get("/posts", async (req, res): Promise<void> => {
       const postCount = await getPostCount(post.authorId);
       const campusTitle = computeCampusTitle(role, postCount);
 
+      const { authorMatricNumber, ...publicPost } = post;
       const built = {
-        ...post,
+        ...publicPost,
         authorName: post.authorName ?? "Unknown",
         authorFaculty: post.authorFaculty ?? "Unknown",
-        authorLevel: post.authorLevel ?? "Unknown",
+        authorLevel: getEffectiveLevel(post.authorLevel, authorMatricNumber),
         authorCampusLocation: post.authorCampusLocation ?? "Ojo",
         authorAvatarUrl: post.authorAvatarUrl ?? null,
         authorCampusTitle: campusTitle,
@@ -532,6 +537,7 @@ router.get("/posts/:postId/comments", async (req, res): Promise<void> => {
       createdAt: postCommentsTable.createdAt,
       authorName: usersTable.fullName,
       authorLevel: usersTable.level,
+      authorMatricNumber: usersTable.matricNumber,
       authorVerificationStatus: usersTable.verificationStatus,
       authorRole: usersTable.role,
     })
@@ -540,10 +546,10 @@ router.get("/posts/:postId/comments", async (req, res): Promise<void> => {
     .where(eq(postCommentsTable.postId, params.data.postId))
     .orderBy(postCommentsTable.createdAt);
 
-  const mapped = comments.map((c) => ({
+  const mapped = comments.map(({ authorMatricNumber, ...c }) => ({
     ...c,
     authorName: c.authorName ?? "Unknown",
-    authorLevel: c.authorLevel ?? "Unknown",
+    authorLevel: getEffectiveLevel(c.authorLevel, authorMatricNumber),
     authorIsVerified: isVerifiedAccount(c.authorVerificationStatus, c.authorRole),
   }));
 
@@ -580,6 +586,7 @@ router.post("/posts/:postId/comments", requireAuth, async (req, res): Promise<vo
     .select({
       fullName: usersTable.fullName,
       level: usersTable.level,
+      matricNumber: usersTable.matricNumber,
       role: usersTable.role,
       verificationStatus: usersTable.verificationStatus,
     })
@@ -593,7 +600,7 @@ router.post("/posts/:postId/comments", requireAuth, async (req, res): Promise<vo
     content: inserted.content,
     createdAt: inserted.createdAt,
     authorName: author?.fullName ?? "Unknown",
-    authorLevel: author?.level ?? "Unknown",
+    authorLevel: getEffectiveLevel(author?.level, author?.matricNumber),
     authorIsVerified: isVerifiedAccount(author?.verificationStatus, author?.role),
   });
 });

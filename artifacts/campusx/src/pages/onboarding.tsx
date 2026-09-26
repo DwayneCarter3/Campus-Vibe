@@ -35,7 +35,7 @@ const formSchema = z
     fullName: z.string().min(2, "Full name is required"),
     school: z.string().min(1, "School is required"),
     campusLocation: z.string().min(1, "Campus location is required"),
-    level: z.string().min(1, "Level is required"),
+    level: z.enum(["", "100L", "200L", "300L", "400L", "500L", "Alumni/Postgrad"]),
     faculty: z.string().min(1, "Faculty is required"),
     enrollmentStatus: z.string().min(1, "Enrollment status is required"),
     matricNumber: z.string().default(""),
@@ -46,6 +46,13 @@ const formSchema = z
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message: "Matriculation number is required",
+        path: ["matricNumber"],
+      });
+    }
+    if (data.level === "" && (!/^\d{2}/.test(data.matricNumber.trim()) || Number(data.matricNumber.trim().slice(0, 2)) > 25)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Automatic level needs a matric number starting with a valid two-digit entry year",
         path: ["matricNumber"],
       });
     }
@@ -91,7 +98,8 @@ export default function Onboarding() {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: getGetMyProfileQueryKey() });
         setLocation("/feed");
-      }
+      },
+      onError: () => alert("Could not save your profile. Please check your details and try again."),
     });
   };
 
@@ -277,14 +285,15 @@ export default function Onboarding() {
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Level</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value}>
+                        <Select onValueChange={(value) => field.onChange(value === "automatic" ? "" : value)} value={field.value || "automatic"}>
                           <FormControl>
                             <SelectTrigger data-testid="select-level" className="bg-background/50 border-white/10">
                               <SelectValue placeholder="Select Level" />
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            {["100L", "200L", "300L", "400L", "500L"].map(lvl => (
+                            <SelectItem value="automatic">Automatic (from matric number)</SelectItem>
+                            {["100L", "200L", "300L", "400L", "500L", "Alumni/Postgrad"].map(lvl => (
                               <SelectItem key={lvl} value={lvl}>{lvl}</SelectItem>
                             ))}
                           </SelectContent>

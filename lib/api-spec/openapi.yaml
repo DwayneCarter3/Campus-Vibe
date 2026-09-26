@@ -1091,6 +1091,9 @@ components:
           type: string
         level:
           type: string
+        manualLevel:
+          type: string
+          description: "Saved selection; empty when level is computed from the matric number."
         faculty:
           type: string
         enrollmentStatus:
@@ -1132,6 +1135,7 @@ components:
         - school
         - campusLocation
         - level
+        - manualLevel
         - faculty
         - enrollmentStatus
         - matricNumber
@@ -1209,6 +1213,8 @@ components:
           type: string
         level:
           type: string
+          description: "A manually selected level, or an empty string for automatic matric-based level."
+          enum: ["", 100L, 200L, 300L, 400L, 500L, Alumni/Postgrad]
         faculty:
           type: string
         enrollmentStatus:

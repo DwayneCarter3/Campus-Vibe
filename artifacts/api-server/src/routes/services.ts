@@ -4,6 +4,7 @@ import { db, servicesTable, usersTable, postsTable, notificationsTable } from "@
 import { requireAuth } from "../middlewares/auth";
 import { broadcastNotification } from "../sse-manager";
 import { isVerifiedAccount } from "../lib/verification";
+import { getEffectiveLevel } from "../lib/academic-level";
 import { computeCampusTitle } from "./admin";
 import {
   ListServicesQueryParams,
@@ -42,6 +43,7 @@ async function buildServiceWithMeta(serviceId: number) {
       providerName: usersTable.fullName,
       providerFaculty: usersTable.faculty,
       providerLevel: usersTable.level,
+      providerMatricNumber: usersTable.matricNumber,
       providerCampusLocation: usersTable.campusLocation,
       providerAvatarUrl: usersTable.avatarUrl,
       providerVerificationStatus: usersTable.verificationStatus,
@@ -53,14 +55,14 @@ async function buildServiceWithMeta(serviceId: number) {
 
   if (!service) return null;
 
-  const { providerVerificationStatus, ...rest } = service;
+  const { providerVerificationStatus, providerMatricNumber, ...rest } = service;
   const role = service.providerRole ?? "student";
 
   return {
     ...rest,
     providerName: service.providerName ?? "Unknown",
     providerFaculty: service.providerFaculty ?? "Unknown",
-    providerLevel: service.providerLevel ?? "Unknown",
+    providerLevel: getEffectiveLevel(service.providerLevel, providerMatricNumber),
     providerCampusLocation: service.providerCampusLocation ?? "Ojo",
     providerAvatarUrl: service.providerAvatarUrl ?? null,
     providerIsVerified: isVerifiedAccount(providerVerificationStatus, role),
@@ -97,6 +99,7 @@ router.get("/services", async (req, res): Promise<void> => {
       providerName: usersTable.fullName,
       providerFaculty: usersTable.faculty,
       providerLevel: usersTable.level,
+      providerMatricNumber: usersTable.matricNumber,
       providerCampusLocation: usersTable.campusLocation,
       providerAvatarUrl: usersTable.avatarUrl,
       providerVerificationStatus: usersTable.verificationStatus,
@@ -115,13 +118,13 @@ router.get("/services", async (req, res): Promise<void> => {
     .where(conditions.length === 1 ? conditions[0] : and(...conditions));
 
   const enriched = await Promise.all(services.map(async (s) => {
-    const { providerVerificationStatus, ...rest } = s;
+    const { providerVerificationStatus, providerMatricNumber, ...rest } = s;
     const role = s.providerRole ?? "student";
     return {
       ...rest,
       providerName: s.providerName ?? "Unknown",
       providerFaculty: s.providerFaculty ?? "Unknown",
-      providerLevel: s.providerLevel ?? "Unknown",
+      providerLevel: getEffectiveLevel(s.providerLevel, providerMatricNumber),
       providerCampusLocation: s.providerCampusLocation ?? "Ojo",
       providerAvatarUrl: s.providerAvatarUrl ?? null,
       providerIsVerified: isVerifiedAccount(providerVerificationStatus, role),

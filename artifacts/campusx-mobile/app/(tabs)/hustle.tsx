@@ -88,6 +88,7 @@ function ServiceCard({ service }: { service: Service }) {
               <Text style={[styles.authorName, { color: colors.foreground }]} numberOfLines={1}>{service.providerName}</Text>
               {service.providerIsVerified && <VerificationBadge fontSize={13} kind="business" />}
             </View>
+            <Text style={[styles.priceText, { color: colors.mutedForeground }]}>{service.providerLevel}</Text>
             {service.price ? (
               <Text style={[styles.priceText, { color: colors.accent }]}>{service.price}</Text>
             ) : null}

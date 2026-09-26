@@ -17,6 +17,7 @@ import {
 } from "@workspace/api-zod";
 import { CEO_EMAIL, computeCampusTitle } from "./admin";
 import { isPrivilegedRole, isVerifiedAccount, PENDING_VERIFICATION_STATUSES } from "../lib/verification";
+import { decodeMatricEntryYear, getEffectiveLevel } from "../lib/academic-level";
 
 const opAlias = alias(postsTable, "op");
 const ouAlias = alias(usersTable, "ou");
@@ -114,7 +115,9 @@ router.get("/users/me", requireAuth, async (req, res): Promise<void> => {
   const postCount = await getPostCount(userId);
   const campusTitle = computeCampusTitle(user.role, postCount);
 
-  res.json(GetMyProfileResponse.parse({ ...user, campusTitle }));
+  res.json(GetMyProfileResponse.parse({
+    ...user, manualLevel: user.level, level: getEffectiveLevel(user.level, user.matricNumber), campusTitle,
+  }));
 });
 
 router.put("/users/me", requireAuth, async (req, res): Promise<void> => {
@@ -135,8 +138,12 @@ router.put("/users/me", requireAuth, async (req, res): Promise<void> => {
   if (existing.length === 0) {
     // ── New registration ─────────────────────────────────────────
     const data = parsed.data as any;
-    if (!data.fullName || !data.level || !data.faculty || !data.enrollmentStatus || !data.matricNumber) {
+    if (!data.fullName || data.level === undefined || !data.faculty || !data.enrollmentStatus || !data.matricNumber) {
       res.status(400).json({ error: "Missing required profile fields" });
+      return;
+    }
+    if (data.level === "" && decodeMatricEntryYear(data.matricNumber) === null) {
+      res.status(400).json({ error: "Automatic level needs a matric number beginning with a valid two-digit entry year." });
       return;
     }
 
@@ -235,6 +242,12 @@ router.put("/users/me", requireAuth, async (req, res): Promise<void> => {
     }
   } else {
     // ── Profile update (existing user) ─────────────────────────────
+    const nextLevel = parsed.data.level ?? existing[0].level;
+    const nextMatric = parsed.data.matricNumber ?? existing[0].matricNumber;
+    if (nextLevel === "" && decodeMatricEntryYear(nextMatric) === null) {
+      res.status(400).json({ error: "Automatic level needs a matric number beginning with a valid two-digit entry year." });
+      return;
+    }
     // If user is trying to change their matric number, check uniqueness
     if (parsed.data.matricNumber && parsed.data.matricNumber !== existing[0].matricNumber) {
       const [conflict] = await db
@@ -278,7 +291,9 @@ router.put("/users/me", requireAuth, async (req, res): Promise<void> => {
   const postCount = await getPostCount(userId);
   const campusTitle = computeCampusTitle(user.role, postCount);
 
-  res.json(UpdateMyProfileResponse.parse({ ...user, campusTitle }));
+  res.json(UpdateMyProfileResponse.parse({
+    ...user, manualLevel: user.level, level: getEffectiveLevel(user.level, user.matricNumber), campusTitle,
+  }));
 });
 
 router.post("/users/me/request-badge", requireAuth, async (req, res): Promise<void> => {
@@ -369,6 +384,7 @@ router.get("/users/:userId/posts", async (req, res): Promise<void> => {
       authorName: usersTable.fullName,
       authorFaculty: usersTable.faculty,
       authorLevel: usersTable.level,
+      authorMatricNumber: usersTable.matricNumber,
       authorCampusLocation: usersTable.campusLocation,
       authorAvatarUrl: usersTable.avatarUrl,
       authorRole: usersTable.role,
@@ -418,12 +434,13 @@ router.get("/users/:userId/posts", async (req, res): Promise<void> => {
       const role = post.authorRole ?? "student";
       const postCount = await getPostCount(post.authorId);
       const campusTitle = computeCampusTitle(role, postCount);
+      const { authorMatricNumber, ...publicPost } = post;
 
       return {
-        ...post,
+        ...publicPost,
         authorName: post.authorName ?? "Unknown",
         authorFaculty: post.authorFaculty ?? "Unknown",
-        authorLevel: post.authorLevel ?? "Unknown",
+        authorLevel: getEffectiveLevel(post.authorLevel, authorMatricNumber),
         authorCampusLocation: post.authorCampusLocation ?? "Ojo",
         authorAvatarUrl: post.authorAvatarUrl ?? null,
         authorCampusTitle: campusTitle,
@@ -480,6 +497,7 @@ router.get("/users/:userId/services", async (req, res): Promise<void> => {
       providerName: usersTable.fullName,
       providerFaculty: usersTable.faculty,
       providerLevel: usersTable.level,
+      providerMatricNumber: usersTable.matricNumber,
       providerCampusLocation: usersTable.campusLocation,
       providerAvatarUrl: usersTable.avatarUrl,
       providerVerificationStatus: usersTable.verificationStatus,
@@ -498,14 +516,14 @@ router.get("/users/:userId/services", async (req, res): Promise<void> => {
     .where(and(eq(servicesTable.providerId, userId), eq(servicesTable.isActive, true)));
 
   const enriched = await Promise.all(services.map(async (s) => {
-    const { providerVerificationStatus, providerRole, ...rest } = s;
+    const { providerVerificationStatus, providerRole, providerMatricNumber, ...rest } = s;
     const role = providerRole ?? "student";
     const postCount = await getPostCount(s.providerId);
     return {
       ...rest,
       providerName: s.providerName ?? "Unknown",
       providerFaculty: s.providerFaculty ?? "Unknown",
-      providerLevel: s.providerLevel ?? "Unknown",
+      providerLevel: getEffectiveLevel(s.providerLevel, providerMatricNumber),
       providerCampusLocation: s.providerCampusLocation ?? "Ojo",
       providerAvatarUrl: s.providerAvatarUrl ?? null,
       providerIsVerified: isVerifiedAccount(providerVerificationStatus, role),
@@ -556,6 +574,7 @@ router.get("/users/:userId", async (req, res): Promise<void> => {
 
   res.json(GetUserProfileResponse.parse({
     ...publicUser,
+    level: getEffectiveLevel(user.level, matricNumber),
     isVerified: isVerifiedAccount(user.verificationStatus, user.role),
     role: user.role ?? "student",
     campusTitle,

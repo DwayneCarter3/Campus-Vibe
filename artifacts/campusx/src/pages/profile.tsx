@@ -11,7 +11,7 @@ import {
   useClaimAdmin,
   useInitializePayment,
 } from "@workspace/api-client-react";
-import type { PaymentPackage } from "@workspace/api-client-react";
+import type { PaymentPackage, UpdateProfileBodyLevel } from "@workspace/api-client-react";
 import { useUser, useClerk } from "@clerk/react";
 import { useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
@@ -23,6 +23,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Lock,
   LogOut,
@@ -60,6 +61,7 @@ export default function MyProfilePage() {
   const [editOpen, setEditOpen] = useState(false);
   const [avatarModalOpen, setAvatarModalOpen] = useState(false);
   const [editBio, setEditBio] = useState("");
+  const [editLevel, setEditLevel] = useState<UpdateProfileBodyLevel>("");
   const [editAvatarUrl, setEditAvatarUrl] = useState("");
   const [isAvatarUploading, setIsAvatarUploading] = useState(false);
   const [legalOpen, setLegalOpen] = useState<"privacy" | "terms" | null>(null);
@@ -111,6 +113,8 @@ export default function MyProfilePage() {
 
   const openEdit = () => {
     setEditBio(profile?.bio ?? "");
+    const savedLevel = profile?.manualLevel ?? "";
+    setEditLevel((["", "100L", "200L", "300L", "400L", "500L", "Alumni/Postgrad"].includes(savedLevel) ? savedLevel : "") as UpdateProfileBodyLevel);
     setEditAvatarUrl(profile?.avatarUrl ?? "");
     setEditOpen(true);
   };
@@ -151,12 +155,13 @@ export default function MyProfilePage() {
   const handleSaveEdit = () => {
     if (!profile) return;
     updateProfile.mutate(
-      { data: { bio: editBio || null, avatarUrl: editAvatarUrl || null } },
+      { data: { bio: editBio || null, avatarUrl: editAvatarUrl || null, level: editLevel } },
       {
         onSuccess: () => {
-          queryClient.invalidateQueries({ queryKey: getGetMyProfileQueryKey() });
+          queryClient.invalidateQueries();
           setEditOpen(false);
         },
+        onError: () => alert("Could not save your profile. Please try again."),
       }
     );
   };
@@ -537,7 +542,7 @@ export default function MyProfilePage() {
           <div className="bg-gradient-to-br from-primary/10 to-transparent p-6 border-b border-white/5">
             <DialogHeader>
               <DialogTitle className="gradient-text font-bold">Edit Profile</DialogTitle>
-              <p className="text-sm text-muted-foreground mt-1">Update your bio and profile photo URL.</p>
+              <p className="text-sm text-muted-foreground mt-1">Update your photo, academic level, and bio.</p>
             </DialogHeader>
           </div>
           <div className="p-6 space-y-4">
@@ -583,6 +588,21 @@ export default function MyProfilePage() {
                   )}
                 </div>
               </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-level" className="text-sm font-medium">Level</Label>
+              <Select value={editLevel || "automatic"} onValueChange={(value) => setEditLevel(value === "automatic" ? "" : value as UpdateProfileBodyLevel)}>
+                <SelectTrigger id="edit-level" className="bg-background/40 border-white/10">
+                  <SelectValue placeholder="Select Level" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="automatic">Automatic (from matric number)</SelectItem>
+                  {["100L", "200L", "300L", "400L", "500L", "Alumni/Postgrad"].map((level) => (
+                    <SelectItem key={level} value={level}>{level}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">Automatic follows the 2025/26 academic session using the first two digits of your matric number.</p>
             </div>
             <div className="space-y-2">
               <Label className="text-sm font-medium">Bio</Label>
