@@ -1260,6 +1260,8 @@ components:
           type: string
         authorRole:
           type: string
+        authorIsVerified:
+          type: boolean
         isAnonymous:
           type: boolean
         content:
@@ -1303,6 +1305,7 @@ components:
         - authorAvatarUrl
         - authorCampusTitle
         - authorRole
+        - authorIsVerified
         - isAnonymous
         - content
         - imageUrl
@@ -1381,6 +1384,8 @@ components:
           type: string
         authorLevel:
           type: string
+        authorIsVerified:
+          type: boolean
         content:
           type: string
         createdAt:
@@ -1392,6 +1397,7 @@ components:
         - authorId
         - authorName
         - authorLevel
+        - authorIsVerified
         - content
         - createdAt
 
@@ -1576,7 +1582,7 @@ components:
 
     EmbeddedPost:
       type: object
-      required: [id, authorId, authorName, authorAvatarUrl, content, imageUrl, createdAt]
+      required: [id, authorId, authorName, authorAvatarUrl, authorIsVerified, content, imageUrl, createdAt]
       properties:
         id:
           type: integer
@@ -1586,6 +1592,8 @@ components:
           type: string
         authorAvatarUrl:
           type: ["string", "null"]
+        authorIsVerified:
+          type: boolean
         content:
           type: string
         imageUrl:

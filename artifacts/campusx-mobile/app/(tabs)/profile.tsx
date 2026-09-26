@@ -35,6 +35,7 @@ import type { PaymentPackage } from "@workspace/api-client-react";
 import { useColors } from "@/hooks/useColors";
 import * as ImagePicker from "expo-image-picker";
 import { PRIVACY_POLICY, TERMS_OF_SERVICE } from "@/constants/legal";
+import { VerificationBadge } from "@/components/VerificationBadge";
 
 const CEO_EMAIL = "dwaynecartergabriel@gmail.com";
 
@@ -202,11 +203,6 @@ export default function ProfileScreen() {
             ) : (
               <Text style={[styles.bigAvatarText, { color: colors.primary }]}>{displayName.charAt(0)}</Text>
             )}
-            {isVerified && !isAvatarUploading && (
-              <View style={styles.verifiedDot}>
-                <Feather name="check" size={8} color="#fff" />
-              </View>
-            )}
             {/* Camera badge */}
             {!isAvatarUploading && (
               <View style={[styles.cameraBadge, { backgroundColor: colors.surface, borderColor: colors.border }]}>
@@ -216,7 +212,10 @@ export default function ProfileScreen() {
           </TouchableOpacity>
 
           {/* Name + campus title */}
-          <Text style={[styles.profileName, { color: colors.foreground }]}>{displayName}</Text>
+          <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 6 }}>
+            <Text style={[styles.profileName, { color: colors.foreground, marginBottom: 0 }]}>{displayName}</Text>
+            {(isVerified || isPremium) && <VerificationBadge size="lg" fontSize={20} />}
+          </View>
           {campusTitle && (
             <View style={[styles.titlePill, { backgroundColor: (titleColor ?? colors.primary) + "20", borderColor: (titleColor ?? colors.primary) + "40" }]}>
               {isCEO && <Feather name="award" size={10} color={titleColor ?? colors.primary} />}
@@ -232,12 +231,6 @@ export default function ProfileScreen() {
               <View style={[styles.badge, { backgroundColor: colors.accent + "20" }]}>
                 <Text style={[styles.badgeText, { color: colors.accent }]}>{level}</Text>
               </View>
-              {isVerified && (
-                <View style={[styles.badge, { backgroundColor: "#10B98120", flexDirection: "row", gap: 4 }]}>
-                  <Feather name="shield" size={11} color="#10B981" />
-                  <Text style={[styles.badgeText, { color: "#10B981" }]}>Verified</Text>
-                </View>
-              )}
             </View>
           )}
 

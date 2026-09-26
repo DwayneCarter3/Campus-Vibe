@@ -16,6 +16,7 @@ import {
   GetUserServicesResponse,
 } from "@workspace/api-zod";
 import { CEO_EMAIL, computeCampusTitle } from "./admin";
+import { isVerifiedAccount } from "../lib/verification";
 
 const opAlias = alias(postsTable, "op");
 const ouAlias = alias(usersTable, "ou");
@@ -353,6 +354,7 @@ router.get("/users/:userId/posts", async (req, res): Promise<void> => {
       authorCampusLocation: usersTable.campusLocation,
       authorAvatarUrl: usersTable.avatarUrl,
       authorRole: usersTable.role,
+      authorVerificationStatus: usersTable.verificationStatus,
       opId: opAlias.id,
       opAuthorId: opAlias.authorId,
       opContent: opAlias.content,
@@ -360,6 +362,9 @@ router.get("/users/:userId/posts", async (req, res): Promise<void> => {
       opCreatedAt: opAlias.createdAt,
       opAuthorName: ouAlias.fullName,
       opAuthorAvatarUrl: ouAlias.avatarUrl,
+      opAuthorVerificationStatus: ouAlias.verificationStatus,
+      opAuthorRole: ouAlias.role,
+      opIsAnonymous: opAlias.isAnonymous,
     })
     .from(postsTable)
     .leftJoin(usersTable, eq(postsTable.authorId, usersTable.clerkUserId))
@@ -405,6 +410,7 @@ router.get("/users/:userId/posts", async (req, res): Promise<void> => {
         authorAvatarUrl: post.authorAvatarUrl ?? null,
         authorCampusTitle: campusTitle,
         authorRole: role,
+        authorIsVerified: isVerifiedAccount(post.authorVerificationStatus, role),
         isAnonymous: post.isAnonymous ?? false,
         commentsCount: commentsCount ?? 0,
         reshareCount: post.reshareCount ?? 0,
@@ -414,6 +420,7 @@ router.get("/users/:userId/posts", async (req, res): Promise<void> => {
           authorId: post.opAuthorId ?? "",
           authorName: post.opAuthorName ?? "Unknown",
           authorAvatarUrl: post.opAuthorAvatarUrl ?? null,
+          authorIsVerified: !post.opIsAnonymous && isVerifiedAccount(post.opAuthorVerificationStatus, post.opAuthorRole),
           content: post.opContent ?? "",
           imageUrl: post.opImageUrl ?? null,
           createdAt: (post.opCreatedAt ?? new Date()).toISOString(),
@@ -457,7 +464,7 @@ router.get("/users/:userId/services", async (req, res): Promise<void> => {
       providerLevel: usersTable.level,
       providerCampusLocation: usersTable.campusLocation,
       providerAvatarUrl: usersTable.avatarUrl,
-      providerMatricNumber: usersTable.matricNumber,
+      providerVerificationStatus: usersTable.verificationStatus,
       providerRole: usersTable.role,
     })
     .from(servicesTable)
@@ -473,7 +480,7 @@ router.get("/users/:userId/services", async (req, res): Promise<void> => {
     .where(and(eq(servicesTable.providerId, userId), eq(servicesTable.isActive, true)));
 
   const enriched = await Promise.all(services.map(async (s) => {
-    const { providerMatricNumber, providerRole, ...rest } = s;
+    const { providerVerificationStatus, providerRole, ...rest } = s;
     const role = providerRole ?? "student";
     const postCount = await getPostCount(s.providerId);
     return {
@@ -483,7 +490,7 @@ router.get("/users/:userId/services", async (req, res): Promise<void> => {
       providerLevel: s.providerLevel ?? "Unknown",
       providerCampusLocation: s.providerCampusLocation ?? "Ojo",
       providerAvatarUrl: s.providerAvatarUrl ?? null,
-      providerIsVerified: !!(providerMatricNumber && providerMatricNumber.trim()),
+      providerIsVerified: isVerifiedAccount(providerVerificationStatus, role),
       providerCampusTitle: computeCampusTitle(role, postCount),
       providerRole: role,
     };
@@ -531,7 +538,7 @@ router.get("/users/:userId", async (req, res): Promise<void> => {
 
   res.json(GetUserProfileResponse.parse({
     ...publicUser,
-    isVerified: !!(matricNumber && matricNumber.trim()),
+    isVerified: isVerifiedAccount(user.verificationStatus, user.role),
     role: user.role ?? "student",
     campusTitle,
     verificationStatus: user.verificationStatus ?? "none",

@@ -44,6 +44,7 @@ import { motion } from "framer-motion";
 import { PostCard } from "@/components/post-card";
 import { ServiceCard } from "@/components/service-card";
 import { CampusTitleBadge } from "@/components/campus-title-badge";
+import { VerificationBadge } from "@/components/verification-badge";
 import { AvatarModal } from "@/components/avatar-modal";
 import { cn } from "@/lib/utils";
 import { PRIVACY_POLICY, TERMS_OF_SERVICE } from "@/lib/legal";
@@ -200,26 +201,16 @@ export default function MyProfilePage() {
               <div className="absolute inset-0 rounded-full bg-black/0 group-hover/avatar:bg-black/20 transition-colors flex items-center justify-center">
                 <Camera className="h-5 w-5 text-white opacity-0 group-hover/avatar:opacity-80 transition-opacity" />
               </div>
-              {hasMatric && (
-                <div className="absolute -bottom-1 -right-1 h-6 w-6 rounded-full bg-emerald-500 border-2 border-background flex items-center justify-center">
-                  <ShieldCheck className="h-3 w-3 text-white" />
-                </div>
-              )}
             </div>
 
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap mb-1">
-                <h1 className="text-xl font-bold">{profile.fullName}</h1>
-                {hasMatric && ["approved", "Student_Verified", "Premium_Approved"].includes(profile.verificationStatus) && (
-                  <Badge className="text-[10px] px-1.5 py-0 h-4 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-medium flex items-center gap-0.5">
-                    <ShieldCheck className="h-2.5 w-2.5" /> Student Verified
-                  </Badge>
-                )}
-                {profile.verificationStatus === "Premium_Approved" && (
-                  <Badge className="text-[10px] px-1.5 py-0 h-4 bg-blue-500/20 text-blue-300 border border-blue-400/40 font-medium flex items-center gap-0.5 shadow-[0_0_12px_rgba(59,130,246,0.45)]">
-                    <Star className="h-2.5 w-2.5" /> Premium Blue Tick
-                  </Badge>
-                )}
+                <h1 className="text-xl font-bold inline-flex items-center gap-1.5">
+                  {profile.fullName}
+                  {["approved", "Student_Verified", "Premium_Approved"].includes(profile.verificationStatus) && (
+                    <VerificationBadge size="lg" />
+                  )}
+                </h1>
                 {profile.campusTitle && (
                   <CampusTitleBadge title={profile.campusTitle} role={profile.role ?? undefined} />
                 )}

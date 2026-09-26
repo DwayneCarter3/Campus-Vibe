@@ -1,8 +1,10 @@
 import { Router, type IRouter } from "express";
 import { eq, desc, sql, and } from "drizzle-orm";
-import { db, servicesTable, usersTable, notificationsTable } from "@workspace/db";
+import { db, servicesTable, usersTable, postsTable, notificationsTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/auth";
 import { broadcastNotification } from "../sse-manager";
+import { isVerifiedAccount } from "../lib/verification";
+import { computeCampusTitle } from "./admin";
 import {
   ListServicesQueryParams,
   ListServicesResponse,
@@ -16,6 +18,14 @@ import {
 } from "@workspace/api-zod";
 
 const router: IRouter = Router();
+
+async function getProviderTitle(providerId: string, role: string) {
+  const [{ count }] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(postsTable)
+    .where(eq(postsTable.authorId, providerId));
+  return computeCampusTitle(role, count ?? 0);
+}
 
 async function buildServiceWithMeta(serviceId: number) {
   const [service] = await db
@@ -34,7 +44,8 @@ async function buildServiceWithMeta(serviceId: number) {
       providerLevel: usersTable.level,
       providerCampusLocation: usersTable.campusLocation,
       providerAvatarUrl: usersTable.avatarUrl,
-      providerMatricNumber: usersTable.matricNumber,
+      providerVerificationStatus: usersTable.verificationStatus,
+      providerRole: usersTable.role,
     })
     .from(servicesTable)
     .leftJoin(usersTable, eq(servicesTable.providerId, usersTable.clerkUserId))
@@ -42,7 +53,8 @@ async function buildServiceWithMeta(serviceId: number) {
 
   if (!service) return null;
 
-  const { providerMatricNumber, ...rest } = service;
+  const { providerVerificationStatus, ...rest } = service;
+  const role = service.providerRole ?? "student";
 
   return {
     ...rest,
@@ -51,7 +63,9 @@ async function buildServiceWithMeta(serviceId: number) {
     providerLevel: service.providerLevel ?? "Unknown",
     providerCampusLocation: service.providerCampusLocation ?? "Ojo",
     providerAvatarUrl: service.providerAvatarUrl ?? null,
-    providerIsVerified: !!(providerMatricNumber && providerMatricNumber.trim()),
+    providerIsVerified: isVerifiedAccount(providerVerificationStatus, role),
+    providerRole: role,
+    providerCampusTitle: await getProviderTitle(service.providerId, role),
   };
 }
 
@@ -85,7 +99,8 @@ router.get("/services", async (req, res): Promise<void> => {
       providerLevel: usersTable.level,
       providerCampusLocation: usersTable.campusLocation,
       providerAvatarUrl: usersTable.avatarUrl,
-      providerMatricNumber: usersTable.matricNumber,
+      providerVerificationStatus: usersTable.verificationStatus,
+      providerRole: usersTable.role,
     })
     .from(servicesTable)
     .leftJoin(usersTable, eq(servicesTable.providerId, usersTable.clerkUserId))
@@ -99,8 +114,9 @@ router.get("/services", async (req, res): Promise<void> => {
     .from(servicesTable)
     .where(conditions.length === 1 ? conditions[0] : and(...conditions));
 
-  const enriched = services.map((s) => {
-    const { providerMatricNumber, ...rest } = s;
+  const enriched = await Promise.all(services.map(async (s) => {
+    const { providerVerificationStatus, ...rest } = s;
+    const role = s.providerRole ?? "student";
     return {
       ...rest,
       providerName: s.providerName ?? "Unknown",
@@ -108,9 +124,11 @@ router.get("/services", async (req, res): Promise<void> => {
       providerLevel: s.providerLevel ?? "Unknown",
       providerCampusLocation: s.providerCampusLocation ?? "Ojo",
       providerAvatarUrl: s.providerAvatarUrl ?? null,
-      providerIsVerified: !!(providerMatricNumber && providerMatricNumber.trim()),
+      providerIsVerified: isVerifiedAccount(providerVerificationStatus, role),
+      providerRole: role,
+      providerCampusTitle: await getProviderTitle(s.providerId, role),
     };
-  });
+  }));
 
   res.json(ListServicesResponse.parse({ services: enriched, total: count }));
 });

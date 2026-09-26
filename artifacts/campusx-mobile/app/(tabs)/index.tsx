@@ -27,6 +27,7 @@ import {
   Post,
 } from "@workspace/api-client-react";
 import { useColors } from "@/hooks/useColors";
+import { VerificationBadge } from "@/components/VerificationBadge";
 
 const FACULTIES = [
   "Arts", "Science", "Law", "Social Sciences", "Education",
@@ -50,12 +51,12 @@ function PostCard({ post }: { post: Post }) {
 
   const handleFire = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    likeMutation.mutate({ postId: String(post.id) });
+    likeMutation.mutate({ postId: post.id });
   };
 
   const handleNoCap = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    noCapMutation.mutate({ postId: String(post.id) });
+    noCapMutation.mutate({ postId: post.id });
   };
 
   const timeAgo = formatDistanceToNow(new Date(post.createdAt), { addSuffix: true });
@@ -69,7 +70,10 @@ function PostCard({ post }: { post: Post }) {
           </Text>
         </View>
         <View style={styles.authorInfo}>
-          <Text style={[styles.authorName, { color: colors.foreground }]}>{post.authorName}</Text>
+          <View style={{ flexDirection: "row", alignItems: "center" }}>
+            <Text style={[styles.authorName, { color: colors.foreground }]} numberOfLines={1}>{post.authorName}</Text>
+            {!post.isAnonymous && post.authorIsVerified && <VerificationBadge fontSize={15} />}
+          </View>
           <View style={styles.metaRow}>
             <View style={[styles.badge, { backgroundColor: colors.primary + "22" }]}>
               <Text style={[styles.badgeText, { color: colors.primary }]}>{post.authorFaculty}</Text>

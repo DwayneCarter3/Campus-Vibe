@@ -5,6 +5,7 @@ import { db, postsTable, postLikesTable, postNoCapsTable, postCommentsTable, use
 import { requireAuth } from "../middlewares/auth";
 import { broadcastNotification } from "../sse-manager";
 import { computeCampusTitle } from "./admin";
+import { isVerifiedAccount } from "../lib/verification";
 import {
   ListPostsQueryParams,
   ListPostsResponse,
@@ -77,6 +78,7 @@ function maskAnonymousPost(post: any, requesterId?: string) {
       authorAvatarUrl: null,
       authorCampusTitle: "",
       authorRole: "student",
+      authorIsVerified: false,
     };
   }
   return post;
@@ -104,6 +106,7 @@ async function buildPostWithMeta(postId: number, clerkUserId?: string) {
       authorCampusLocation: usersTable.campusLocation,
       authorAvatarUrl: usersTable.avatarUrl,
       authorRole: usersTable.role,
+      authorVerificationStatus: usersTable.verificationStatus,
       opId: originalPostAlias.id,
       opAuthorId: originalPostAlias.authorId,
       opContent: originalPostAlias.content,
@@ -111,6 +114,9 @@ async function buildPostWithMeta(postId: number, clerkUserId?: string) {
       opCreatedAt: originalPostAlias.createdAt,
       opAuthorName: originalUserAlias.fullName,
       opAuthorAvatarUrl: originalUserAlias.avatarUrl,
+      opAuthorVerificationStatus: originalUserAlias.verificationStatus,
+      opAuthorRole: originalUserAlias.role,
+      opIsAnonymous: originalPostAlias.isAnonymous,
     })
     .from(postsTable)
     .leftJoin(usersTable, eq(postsTable.authorId, usersTable.clerkUserId))
@@ -149,6 +155,7 @@ async function buildPostWithMeta(postId: number, clerkUserId?: string) {
     authorAvatarUrl: post.authorAvatarUrl ?? null,
     authorCampusTitle: campusTitle,
     authorRole: role,
+    authorIsVerified: isVerifiedAccount(post.authorVerificationStatus, role),
     isAnonymous: post.isAnonymous ?? false,
     commentsCount: commentsCount ?? 0,
     reshareCount: post.reshareCount ?? 0,
@@ -158,6 +165,7 @@ async function buildPostWithMeta(postId: number, clerkUserId?: string) {
       authorId: post.opAuthorId ?? "",
       authorName: post.opAuthorName ?? "Unknown",
       authorAvatarUrl: post.opAuthorAvatarUrl ?? null,
+      authorIsVerified: !post.opIsAnonymous && isVerifiedAccount(post.opAuthorVerificationStatus, post.opAuthorRole),
       content: post.opContent ?? "",
       imageUrl: post.opImageUrl ?? null,
       createdAt: (post.opCreatedAt ?? new Date()).toISOString(),
@@ -202,6 +210,7 @@ router.get("/posts", async (req, res): Promise<void> => {
       authorCampusLocation: usersTable.campusLocation,
       authorAvatarUrl: usersTable.avatarUrl,
       authorRole: usersTable.role,
+      authorVerificationStatus: usersTable.verificationStatus,
       opId: originalPostAlias.id,
       opAuthorId: originalPostAlias.authorId,
       opContent: originalPostAlias.content,
@@ -209,6 +218,9 @@ router.get("/posts", async (req, res): Promise<void> => {
       opCreatedAt: originalPostAlias.createdAt,
       opAuthorName: originalUserAlias.fullName,
       opAuthorAvatarUrl: originalUserAlias.avatarUrl,
+      opAuthorVerificationStatus: originalUserAlias.verificationStatus,
+      opAuthorRole: originalUserAlias.role,
+      opIsAnonymous: originalPostAlias.isAnonymous,
     })
     .from(postsTable)
     .leftJoin(usersTable, eq(postsTable.authorId, usersTable.clerkUserId))
@@ -252,6 +264,7 @@ router.get("/posts", async (req, res): Promise<void> => {
         authorAvatarUrl: post.authorAvatarUrl ?? null,
         authorCampusTitle: campusTitle,
         authorRole: role,
+        authorIsVerified: isVerifiedAccount(post.authorVerificationStatus, role),
         isAnonymous: post.isAnonymous ?? false,
         commentsCount: commentsCount ?? 0,
         reshareCount: post.reshareCount ?? 0,
@@ -261,6 +274,7 @@ router.get("/posts", async (req, res): Promise<void> => {
           authorId: post.opAuthorId ?? "",
           authorName: post.opAuthorName ?? "Unknown",
           authorAvatarUrl: post.opAuthorAvatarUrl ?? null,
+          authorIsVerified: !post.opIsAnonymous && isVerifiedAccount(post.opAuthorVerificationStatus, post.opAuthorRole),
           content: post.opContent ?? "",
           imageUrl: post.opImageUrl ?? null,
           createdAt: (post.opCreatedAt ?? new Date()).toISOString(),
@@ -518,6 +532,8 @@ router.get("/posts/:postId/comments", async (req, res): Promise<void> => {
       createdAt: postCommentsTable.createdAt,
       authorName: usersTable.fullName,
       authorLevel: usersTable.level,
+      authorVerificationStatus: usersTable.verificationStatus,
+      authorRole: usersTable.role,
     })
     .from(postCommentsTable)
     .leftJoin(usersTable, eq(postCommentsTable.authorId, usersTable.clerkUserId))
@@ -528,6 +544,7 @@ router.get("/posts/:postId/comments", async (req, res): Promise<void> => {
     ...c,
     authorName: c.authorName ?? "Unknown",
     authorLevel: c.authorLevel ?? "Unknown",
+    authorIsVerified: isVerifiedAccount(c.authorVerificationStatus, c.authorRole),
   }));
 
   res.json(ListPostCommentsResponse.parse({ comments: mapped, total: mapped.length }));
@@ -560,7 +577,12 @@ router.post("/posts/:postId/comments", requireAuth, async (req, res): Promise<vo
     .returning();
 
   const [author] = await db
-    .select({ fullName: usersTable.fullName, level: usersTable.level })
+    .select({
+      fullName: usersTable.fullName,
+      level: usersTable.level,
+      role: usersTable.role,
+      verificationStatus: usersTable.verificationStatus,
+    })
     .from(usersTable)
     .where(eq(usersTable.clerkUserId, userId));
 
@@ -572,6 +594,7 @@ router.post("/posts/:postId/comments", requireAuth, async (req, res): Promise<vo
     createdAt: inserted.createdAt,
     authorName: author?.fullName ?? "Unknown",
     authorLevel: author?.level ?? "Unknown",
+    authorIsVerified: isVerifiedAccount(author?.verificationStatus, author?.role),
   });
 });
 

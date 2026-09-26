@@ -111,6 +111,7 @@ export interface EmbeddedPost {
   authorName: string;
   /** @nullable */
   authorAvatarUrl: string | null;
+  authorIsVerified: boolean;
   content: string;
   /** @nullable */
   imageUrl: string | null;
@@ -128,6 +129,7 @@ export interface Post {
   authorAvatarUrl: string | null;
   authorCampusTitle: string;
   authorRole: string;
+  authorIsVerified: boolean;
   isAnonymous: boolean;
   content: string;
   /** @nullable */
@@ -178,6 +180,7 @@ export interface Comment {
   authorId: string;
   authorName: string;
   authorLevel: string;
+  authorIsVerified: boolean;
   content: string;
   createdAt: string;
 }

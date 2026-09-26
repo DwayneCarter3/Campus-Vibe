@@ -19,6 +19,7 @@ import { Link, useLocation } from "wouter";
 import { PostCard } from "@/components/post-card";
 import { ServiceCard } from "@/components/service-card";
 import { cn } from "@/lib/utils";
+import { VerificationBadge } from "@/components/verification-badge";
 
 type Tab = "posts" | "hustles";
 
@@ -97,21 +98,14 @@ export default function UserProfilePage() {
                   {profile.fullName.charAt(0)}
                 </AvatarFallback>
               </Avatar>
-              {profile.isVerified && (
-                <div className="absolute -bottom-1 -right-1 h-6 w-6 rounded-full bg-emerald-500 border-2 border-background flex items-center justify-center">
-                  <ShieldCheck className="h-3 w-3 text-white" />
-                </div>
-              )}
             </div>
 
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap mb-2">
-                <h1 className="text-xl font-bold">{profile.fullName}</h1>
-                {profile.isVerified && (
-                  <Badge className="text-[10px] px-1.5 py-0 h-4 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-medium flex items-center gap-0.5">
-                    <ShieldCheck className="h-2.5 w-2.5" /> Verified Student
-                  </Badge>
-                )}
+                <h1 className="text-xl font-bold inline-flex items-center gap-1.5">
+                  {profile.fullName}
+                  {profile.isVerified && <VerificationBadge size="lg" />}
+                </h1>
               </div>
 
               <div className="flex flex-wrap gap-2 mb-2">

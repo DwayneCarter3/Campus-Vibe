@@ -28,6 +28,7 @@ import {
   Service,
 } from "@workspace/api-client-react";
 import { useColors } from "@/hooks/useColors";
+import { VerificationBadge } from "@/components/VerificationBadge";
 
 const CATEGORIES = ["All", "Clothing", "Electronics", "Books", "Hostels/Accommodation", "Food & Pastries", "Services", "Others"];
 
@@ -54,7 +55,7 @@ function ServiceCard({ service }: { service: Service }) {
     const url = `https://wa.me/234${number.slice(-10)}?text=${encodeURIComponent(`Hi! I saw your "${service.title}" listing on CampusX. I'm interested!`)}`;
     Linking.openURL(url).catch(() => {});
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    trackClick.mutate({ serviceId: String(service.id) });
+    trackClick.mutate({ serviceId: service.id });
   };
 
   const handleMessage = () => {
@@ -72,12 +73,6 @@ function ServiceCard({ service }: { service: Service }) {
             <Feather name={CATEGORY_ICONS[service.category] as any || "package"} size={11} color={colors.primary} />
             <Text style={[styles.categoryText, { color: colors.primary }]}>{service.category}</Text>
           </View>
-          {service.providerIsVerified && (
-            <View style={[styles.verifiedBadge, { backgroundColor: "#10B98120" }]}>
-              <Feather name="check-circle" size={11} color="#10B981" />
-              <Text style={[styles.verifiedText, { color: "#10B981" }]}>Verified</Text>
-            </View>
-          )}
         </View>
         <Text style={[styles.serviceTitle, { color: colors.foreground }]}>{service.title}</Text>
         <Text style={[styles.serviceDesc, { color: colors.mutedForeground }]} numberOfLines={2}>{service.description}</Text>
@@ -89,7 +84,10 @@ function ServiceCard({ service }: { service: Service }) {
             <Text style={[styles.avatarSmText, { color: colors.primary }]}>{service.providerName.charAt(0)}</Text>
           </View>
           <View>
-            <Text style={[styles.authorName, { color: colors.foreground }]}>{service.providerName}</Text>
+            <View style={{ flexDirection: "row", alignItems: "center" }}>
+              <Text style={[styles.authorName, { color: colors.foreground }]} numberOfLines={1}>{service.providerName}</Text>
+              {service.providerIsVerified && <VerificationBadge fontSize={13} kind="business" />}
+            </View>
             {service.price ? (
               <Text style={[styles.priceText, { color: colors.accent }]}>{service.price}</Text>
             ) : null}

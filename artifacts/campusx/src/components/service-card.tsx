@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { CampusTitleBadge } from "@/components/campus-title-badge";
+import { VerificationBadge } from "@/components/verification-badge";
 import { useStartConversation } from "@workspace/api-client-react";
 
 async function notifyWhatsappClick(serviceId: number) {
@@ -120,15 +121,20 @@ export function ServiceCard({ service, index = 0, currentUserId }: ServiceCardPr
 
           {/* Provider info */}
           <div className="pt-3 border-t border-white/5">
-            <Link href={`/profile/${service.providerId}`} className="flex items-center gap-2 hover:opacity-80 transition-opacity mb-2">
-              <Avatar className="h-8 w-8 border border-white/10">
-                <AvatarImage src={service.providerAvatarUrl || undefined} />
-                <AvatarFallback className="text-xs gradient-text font-bold">
-                  {service.providerName.charAt(0)}
-                </AvatarFallback>
-              </Avatar>
+            <div className="flex items-center gap-2 mb-2">
+              <Link href={`/profile/${service.providerId}`} className="hover:opacity-80 transition-opacity shrink-0">
+                <Avatar className="h-8 w-8 border border-white/10">
+                  <AvatarImage src={service.providerAvatarUrl || undefined} />
+                  <AvatarFallback className="text-xs gradient-text font-bold">
+                    {service.providerName.charAt(0)}
+                  </AvatarFallback>
+                </Avatar>
+              </Link>
               <div className="min-w-0">
-                <div className="text-sm font-semibold truncate leading-tight">{service.providerName}</div>
+                <div className="text-sm font-semibold leading-tight flex items-center gap-1">
+                  <Link href={`/profile/${service.providerId}`} className="truncate hover:text-primary transition-colors">{service.providerName}</Link>
+                  {service.providerIsVerified && <VerificationBadge kind="business" />}
+                </div>
                 <div className="flex items-center gap-1 text-[11px] text-muted-foreground mt-0.5 flex-wrap">
                   <span>{service.providerFaculty}</span>
                   <span>•</span>
@@ -138,18 +144,12 @@ export function ServiceCard({ service, index = 0, currentUserId }: ServiceCardPr
                   </span>
                 </div>
               </div>
-            </Link>
+            </div>
 
             <div className="flex items-center gap-1.5 flex-wrap">
               <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 border-primary/30 text-primary font-medium">
                 {service.providerLevel}
               </Badge>
-              {service.providerIsVerified && (
-                <Badge className="text-[10px] px-1.5 py-0 h-4 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-medium flex items-center gap-0.5">
-                  <ShieldCheck className="h-2.5 w-2.5" />
-                  Verified Student
-                </Badge>
-              )}
               {service.providerCampusTitle && (
                 <CampusTitleBadge title={service.providerCampusTitle} role={service.providerRole} />
               )}

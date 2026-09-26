@@ -34,6 +34,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { AvatarModal } from "@/components/avatar-modal";
 import { CampusTitleBadge } from "@/components/campus-title-badge";
+import { VerificationBadge } from "@/components/verification-badge";
 
 interface PostCardProps {
   post: Post;
@@ -214,13 +215,16 @@ export function PostCard({ post, isAdmin, isModerator }: PostCardProps) {
               <div className="flex justify-between items-start gap-2">
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    {authorProfileLink ? (
-                      <Link href={authorProfileLink} className="font-semibold hover:text-primary transition-colors truncate">
-                        {authorName}
-                      </Link>
-                    ) : (
-                      <span className="font-semibold text-muted-foreground">{authorName}</span>
-                    )}
+                    <span className="inline-flex items-center gap-1 min-w-0">
+                      {authorProfileLink ? (
+                        <Link href={authorProfileLink} className="font-semibold hover:text-primary transition-colors truncate">
+                          {authorName}
+                        </Link>
+                      ) : (
+                        <span className="font-semibold text-muted-foreground">{authorName}</span>
+                      )}
+                      {!isAnon && post.authorIsVerified && <VerificationBadge />}
+                    </span>
                     {!isAnon && (
                       <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 border-primary/30 text-primary shrink-0">
                         {post.authorLevel}
@@ -338,6 +342,7 @@ export function PostCard({ post, isAdmin, isModerator }: PostCardProps) {
                       <Link href={`/profile/${post.originalPost.authorId}`} className="text-xs font-semibold hover:text-primary transition-colors truncate">
                         {post.originalPost.authorName}
                       </Link>
+                      {post.originalPost.authorIsVerified && <span className="text-xs"><VerificationBadge /></span>}
                       <span className="text-[10px] text-muted-foreground ml-auto shrink-0">
                         {formatDistanceToNow(new Date(post.originalPost.createdAt), { addSuffix: true })}
                       </span>
@@ -459,6 +464,7 @@ export function PostCard({ post, isAdmin, isModerator }: PostCardProps) {
                     </AvatarFallback>
                   </Avatar>
                   <span className="text-xs font-semibold truncate">{post.originalPost?.authorName ?? post.authorName}</span>
+                  {(post.originalPost?.authorIsVerified ?? post.authorIsVerified) && <span className="text-xs"><VerificationBadge /></span>}
                 </div>
                 <p className="text-xs text-foreground/70 line-clamp-3 leading-relaxed">
                   {post.originalPost?.content || post.content || <span className="italic text-muted-foreground">No text</span>}
@@ -568,7 +574,10 @@ function CommentRow({ comment, currentUserId }: { comment: Comment; currentUserI
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-baseline gap-1.5 flex-wrap">
-          <span className="text-xs font-semibold leading-none">{comment.authorName}</span>
+          <span className="text-xs font-semibold leading-none inline-flex items-center gap-1">
+            {comment.authorName}
+            {comment.authorIsVerified && <VerificationBadge />}
+          </span>
           <Badge variant="outline" className="text-[9px] px-1 py-0 h-3.5 border-primary/25 text-primary/80 leading-none">
             {comment.authorLevel}
           </Badge>
