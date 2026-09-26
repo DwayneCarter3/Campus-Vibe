@@ -19,6 +19,8 @@ import type {
 import type {
   AdminClaimResponse,
   ApproveBadgeResponse,
+  CgpaPlan,
+  CgpaPlanInput,
   Comment,
   ConversationDetail,
   CreateCommentBody,
@@ -491,6 +493,167 @@ export const useUpdateMyProfile = <
   TContext
 > => {
   return useMutation(getUpdateMyProfileMutationOptions(options));
+};
+
+/**
+ * @summary Get the authenticated user's private CGPA plan
+ */
+export const getGetMyCgpaPlanUrl = () => {
+  return `/api/users/me/cgpa-plan`;
+};
+
+export const getMyCgpaPlan = async (
+  options?: RequestInit,
+): Promise<CgpaPlan> => {
+  return customFetch<CgpaPlan>(getGetMyCgpaPlanUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetMyCgpaPlanQueryKey = () => {
+  return [`/api/users/me/cgpa-plan`] as const;
+};
+
+export const getGetMyCgpaPlanQueryOptions = <
+  TData = Awaited<ReturnType<typeof getMyCgpaPlan>>,
+  TError = ErrorType<void>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getMyCgpaPlan>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetMyCgpaPlanQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getMyCgpaPlan>>> = ({
+    signal,
+  }) => getMyCgpaPlan({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getMyCgpaPlan>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetMyCgpaPlanQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getMyCgpaPlan>>
+>;
+export type GetMyCgpaPlanQueryError = ErrorType<void>;
+
+/**
+ * @summary Get the authenticated user's private CGPA plan
+ */
+
+export function useGetMyCgpaPlan<
+  TData = Awaited<ReturnType<typeof getMyCgpaPlan>>,
+  TError = ErrorType<void>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getMyCgpaPlan>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetMyCgpaPlanQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Replace the authenticated user's private CGPA plan
+ */
+export const getSaveMyCgpaPlanUrl = () => {
+  return `/api/users/me/cgpa-plan`;
+};
+
+export const saveMyCgpaPlan = async (
+  cgpaPlanInput: CgpaPlanInput,
+  options?: RequestInit,
+): Promise<CgpaPlan> => {
+  return customFetch<CgpaPlan>(getSaveMyCgpaPlanUrl(), {
+    ...options,
+    method: "PUT",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(cgpaPlanInput),
+  });
+};
+
+export const getSaveMyCgpaPlanMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof saveMyCgpaPlan>>,
+    TError,
+    { data: BodyType<CgpaPlanInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof saveMyCgpaPlan>>,
+  TError,
+  { data: BodyType<CgpaPlanInput> },
+  TContext
+> => {
+  const mutationKey = ["saveMyCgpaPlan"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof saveMyCgpaPlan>>,
+    { data: BodyType<CgpaPlanInput> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return saveMyCgpaPlan(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type SaveMyCgpaPlanMutationResult = NonNullable<
+  Awaited<ReturnType<typeof saveMyCgpaPlan>>
+>;
+export type SaveMyCgpaPlanMutationBody = BodyType<CgpaPlanInput>;
+export type SaveMyCgpaPlanMutationError = ErrorType<void>;
+
+/**
+ * @summary Replace the authenticated user's private CGPA plan
+ */
+export const useSaveMyCgpaPlan = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof saveMyCgpaPlan>>,
+    TError,
+    { data: BodyType<CgpaPlanInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof saveMyCgpaPlan>>,
+  TError,
+  { data: BodyType<CgpaPlanInput> },
+  TContext
+> => {
+  return useMutation(getSaveMyCgpaPlanMutationOptions(options));
 };
 
 /**

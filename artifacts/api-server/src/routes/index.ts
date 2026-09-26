@@ -13,6 +13,7 @@ import messagesRouter from "./messages";
 import paymentsRouter from "./payments";
 import reportsRouter from "./reports";
 import shuttleStatusRouter from "./shuttle-status";
+import cgpaPlanRouter from "./cgpa-plan";
 
 const router: IRouter = Router();
 
@@ -30,5 +31,6 @@ router.use(messagesRouter);
 router.use(paymentsRouter);
 router.use(reportsRouter);
 router.use(shuttleStatusRouter);
+router.use(cgpaPlanRouter);
 
 export default router;

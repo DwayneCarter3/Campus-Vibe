@@ -5,6 +5,88 @@
  * CampusX API specification
  * OpenAPI spec version: 0.1.0
  */
+export type CgpaPlanCourseGrade =
+  (typeof CgpaPlanCourseGrade)[keyof typeof CgpaPlanCourseGrade];
+
+export const CgpaPlanCourseGrade = {
+  A: "A",
+  B: "B",
+  C: "C",
+  D: "D",
+  E: "E",
+  F: "F",
+} as const;
+
+export interface CgpaPlanCourse {
+  /**
+   * @minLength 1
+   * @maxLength 32
+   */
+  code: string;
+  /**
+   * @minimum 1
+   * @maximum 30
+   */
+  units: number;
+  grade: CgpaPlanCourseGrade;
+}
+
+export interface CgpaPlanInput {
+  /**
+   * @minimum 0
+   * @maximum 5
+   * @nullable
+   */
+  currentCgpa: number | null;
+  /**
+   * @minimum 0
+   * @nullable
+   */
+  completedUnits: number | null;
+  /**
+   * @minimum 0
+   * @maximum 5
+   * @nullable
+   */
+  targetCgpa: number | null;
+  /**
+   * @minimum 0
+   * @nullable
+   */
+  remainingUnits: number | null;
+  /** @maxItems 100 */
+  courses: CgpaPlanCourse[];
+}
+
+export interface CgpaPlan {
+  /**
+   * @minimum 0
+   * @maximum 5
+   * @nullable
+   */
+  currentCgpa: number | null;
+  /**
+   * @minimum 0
+   * @nullable
+   */
+  completedUnits: number | null;
+  /**
+   * @minimum 0
+   * @maximum 5
+   * @nullable
+   */
+  targetCgpa: number | null;
+  /**
+   * @minimum 0
+   * @nullable
+   */
+  remainingUnits: number | null;
+  /** @maxItems 100 */
+  courses: CgpaPlanCourse[];
+  /** @nullable */
+  updatedAt: string | null;
+}
+
 export interface AppNotification {
   id: number;
   type: string;

@@ -4,7 +4,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { NotificationBell } from "@/components/notification-bell";
 import { StudentSearch } from "@/components/student-search";
-import { MessageCircle, Shield } from "lucide-react";
+import { Calculator, MessageCircle, Shield } from "lucide-react";
 import { useGetMyProfile, getGetMyProfileQueryKey, useListConversations, getListConversationsQueryKey } from "@workspace/api-client-react";
 
 export function Navbar() {
@@ -46,6 +46,15 @@ export function Navbar() {
               className={`hidden md:inline text-sm font-medium transition-colors ${isActive('/earn') ? 'text-primary' : 'text-muted-foreground hover:text-foreground'}`}
             >
               Marketplace
+            </Link>
+            <Link
+              href="/cgpa"
+              aria-label="CGPA planner"
+              data-testid="link-cgpa"
+              className={`inline-flex items-center gap-1.5 text-sm font-medium transition-colors ${isActive('/cgpa') ? 'text-primary' : 'text-muted-foreground hover:text-foreground'}`}
+            >
+              <Calculator className="h-4 w-4" />
+              <span className="hidden sm:inline">CGPA</span>
             </Link>
 
             {/* Messages */}

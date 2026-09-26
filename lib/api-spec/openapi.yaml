@@ -113,6 +113,46 @@ paths:
         "401":
           description: Unauthorized
 
+  /users/me/cgpa-plan:
+    get:
+      operationId: getMyCgpaPlan
+      tags: [users]
+      summary: Get the authenticated user's private CGPA plan
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Current user's CGPA plan, or an empty plan when none has been saved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CgpaPlan"
+        "401":
+          description: Unauthorized
+    put:
+      operationId: saveMyCgpaPlan
+      tags: [users]
+      summary: Replace the authenticated user's private CGPA plan
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CgpaPlanInput"
+      responses:
+        "200":
+          description: Saved CGPA plan
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CgpaPlan"
+        "400":
+          description: Invalid CGPA plan
+        "401":
+          description: Unauthorized
+
   /users/me/request-badge:
     post:
       operationId: requestPremiumBadge
@@ -1358,7 +1398,81 @@ paths:
                 $ref: "#/components/schemas/MarketplaceStats"
 
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
   schemas:
+    CgpaPlanCourse:
+      type: object
+      additionalProperties: false
+      required: [code, units, grade]
+      properties:
+        code:
+          type: string
+          minLength: 1
+          maxLength: 32
+        units:
+          type: integer
+          minimum: 1
+          maximum: 30
+        grade:
+          type: string
+          enum: [A, B, C, D, E, F]
+
+    CgpaPlanInput:
+      type: object
+      additionalProperties: false
+      required: [currentCgpa, completedUnits, targetCgpa, remainingUnits, courses]
+      properties:
+        currentCgpa:
+          type: [number, "null"]
+          minimum: 0
+          maximum: 5
+        completedUnits:
+          type: [integer, "null"]
+          minimum: 0
+        targetCgpa:
+          type: [number, "null"]
+          minimum: 0
+          maximum: 5
+        remainingUnits:
+          type: [integer, "null"]
+          minimum: 0
+        courses:
+          type: array
+          maxItems: 100
+          items:
+            $ref: "#/components/schemas/CgpaPlanCourse"
+
+    CgpaPlan:
+      type: object
+      additionalProperties: false
+      required: [currentCgpa, completedUnits, targetCgpa, remainingUnits, courses, updatedAt]
+      properties:
+        currentCgpa:
+          type: [number, "null"]
+          minimum: 0
+          maximum: 5
+        completedUnits:
+          type: [integer, "null"]
+          minimum: 0
+        targetCgpa:
+          type: [number, "null"]
+          minimum: 0
+          maximum: 5
+        remainingUnits:
+          type: [integer, "null"]
+          minimum: 0
+        courses:
+          type: array
+          maxItems: 100
+          items:
+            $ref: "#/components/schemas/CgpaPlanCourse"
+        updatedAt:
+          type: [string, "null"]
+          format: date-time
+
     AppNotification:
       type: object
       properties:

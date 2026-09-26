@@ -80,6 +80,7 @@ function RootLayoutNav() {
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="sign-in" options={{ headerShown: false }} />
+      <Stack.Screen name="cgpa" options={{ headerShown: false }} />
       <Stack.Screen
         name="admin"
         options={{ headerShown: false, presentation: "modal" }}

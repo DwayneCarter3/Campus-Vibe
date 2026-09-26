@@ -447,6 +447,10 @@ export default function ProfileScreen() {
             <Text style={[styles.actionTitle, { color: colors.foreground }]}>Settings & legal</Text>
           </View>
           <View style={styles.settingsButtons}>
+            <TouchableOpacity onPress={() => router.push("/cgpa")} style={[styles.legalButton, { borderColor: colors.border }]}>
+              <Feather name="bar-chart-2" size={14} color={colors.primary} />
+              <Text style={[styles.legalButtonText, { color: colors.foreground }]}>CGPA Calculator</Text>
+            </TouchableOpacity>
             <TouchableOpacity onPress={() => setLegalOpen("privacy")} style={[styles.legalButton, { borderColor: colors.border }]}>
               <Feather name="shield" size={14} color={colors.primary} />
               <Text style={[styles.legalButtonText, { color: colors.foreground }]}>Privacy Policy</Text>

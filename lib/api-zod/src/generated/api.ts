@@ -165,6 +165,158 @@ export const UpdateMyProfileResponse = zod.object({
 });
 
 /**
+ * @summary Get the authenticated user's private CGPA plan
+ */
+export const getMyCgpaPlanResponseCurrentCgpaMin = 0;
+export const getMyCgpaPlanResponseCurrentCgpaMax = 5;
+
+export const getMyCgpaPlanResponseCompletedUnitsMin = 0;
+
+export const getMyCgpaPlanResponseTargetCgpaMin = 0;
+export const getMyCgpaPlanResponseTargetCgpaMax = 5;
+
+export const getMyCgpaPlanResponseRemainingUnitsMin = 0;
+
+export const getMyCgpaPlanResponseCoursesItemCodeMax = 32;
+
+export const getMyCgpaPlanResponseCoursesItemUnitsMax = 30;
+
+export const getMyCgpaPlanResponseCoursesMax = 100;
+
+export const GetMyCgpaPlanResponse = zod.object({
+  currentCgpa: zod
+    .number()
+    .min(getMyCgpaPlanResponseCurrentCgpaMin)
+    .max(getMyCgpaPlanResponseCurrentCgpaMax)
+    .nullable(),
+  completedUnits: zod
+    .number()
+    .min(getMyCgpaPlanResponseCompletedUnitsMin)
+    .nullable(),
+  targetCgpa: zod
+    .number()
+    .min(getMyCgpaPlanResponseTargetCgpaMin)
+    .max(getMyCgpaPlanResponseTargetCgpaMax)
+    .nullable(),
+  remainingUnits: zod
+    .number()
+    .min(getMyCgpaPlanResponseRemainingUnitsMin)
+    .nullable(),
+  courses: zod
+    .array(
+      zod.object({
+        code: zod.string().min(1).max(getMyCgpaPlanResponseCoursesItemCodeMax),
+        units: zod
+          .number()
+          .min(1)
+          .max(getMyCgpaPlanResponseCoursesItemUnitsMax),
+        grade: zod.enum(["A", "B", "C", "D", "E", "F"]),
+      }),
+    )
+    .max(getMyCgpaPlanResponseCoursesMax),
+  updatedAt: zod.coerce.date().nullable(),
+});
+
+/**
+ * @summary Replace the authenticated user's private CGPA plan
+ */
+export const saveMyCgpaPlanBodyCurrentCgpaMin = 0;
+export const saveMyCgpaPlanBodyCurrentCgpaMax = 5;
+
+export const saveMyCgpaPlanBodyCompletedUnitsMin = 0;
+
+export const saveMyCgpaPlanBodyTargetCgpaMin = 0;
+export const saveMyCgpaPlanBodyTargetCgpaMax = 5;
+
+export const saveMyCgpaPlanBodyRemainingUnitsMin = 0;
+
+export const saveMyCgpaPlanBodyCoursesItemCodeMax = 32;
+
+export const saveMyCgpaPlanBodyCoursesItemUnitsMax = 30;
+
+export const saveMyCgpaPlanBodyCoursesMax = 100;
+
+export const SaveMyCgpaPlanBody = zod.object({
+  currentCgpa: zod
+    .number()
+    .min(saveMyCgpaPlanBodyCurrentCgpaMin)
+    .max(saveMyCgpaPlanBodyCurrentCgpaMax)
+    .nullable(),
+  completedUnits: zod
+    .number()
+    .min(saveMyCgpaPlanBodyCompletedUnitsMin)
+    .nullable(),
+  targetCgpa: zod
+    .number()
+    .min(saveMyCgpaPlanBodyTargetCgpaMin)
+    .max(saveMyCgpaPlanBodyTargetCgpaMax)
+    .nullable(),
+  remainingUnits: zod
+    .number()
+    .min(saveMyCgpaPlanBodyRemainingUnitsMin)
+    .nullable(),
+  courses: zod
+    .array(
+      zod.object({
+        code: zod.string().min(1).max(saveMyCgpaPlanBodyCoursesItemCodeMax),
+        units: zod.number().min(1).max(saveMyCgpaPlanBodyCoursesItemUnitsMax),
+        grade: zod.enum(["A", "B", "C", "D", "E", "F"]),
+      }),
+    )
+    .max(saveMyCgpaPlanBodyCoursesMax),
+});
+
+export const saveMyCgpaPlanResponseCurrentCgpaMin = 0;
+export const saveMyCgpaPlanResponseCurrentCgpaMax = 5;
+
+export const saveMyCgpaPlanResponseCompletedUnitsMin = 0;
+
+export const saveMyCgpaPlanResponseTargetCgpaMin = 0;
+export const saveMyCgpaPlanResponseTargetCgpaMax = 5;
+
+export const saveMyCgpaPlanResponseRemainingUnitsMin = 0;
+
+export const saveMyCgpaPlanResponseCoursesItemCodeMax = 32;
+
+export const saveMyCgpaPlanResponseCoursesItemUnitsMax = 30;
+
+export const saveMyCgpaPlanResponseCoursesMax = 100;
+
+export const SaveMyCgpaPlanResponse = zod.object({
+  currentCgpa: zod
+    .number()
+    .min(saveMyCgpaPlanResponseCurrentCgpaMin)
+    .max(saveMyCgpaPlanResponseCurrentCgpaMax)
+    .nullable(),
+  completedUnits: zod
+    .number()
+    .min(saveMyCgpaPlanResponseCompletedUnitsMin)
+    .nullable(),
+  targetCgpa: zod
+    .number()
+    .min(saveMyCgpaPlanResponseTargetCgpaMin)
+    .max(saveMyCgpaPlanResponseTargetCgpaMax)
+    .nullable(),
+  remainingUnits: zod
+    .number()
+    .min(saveMyCgpaPlanResponseRemainingUnitsMin)
+    .nullable(),
+  courses: zod
+    .array(
+      zod.object({
+        code: zod.string().min(1).max(saveMyCgpaPlanResponseCoursesItemCodeMax),
+        units: zod
+          .number()
+          .min(1)
+          .max(saveMyCgpaPlanResponseCoursesItemUnitsMax),
+        grade: zod.enum(["A", "B", "C", "D", "E", "F"]),
+      }),
+    )
+    .max(saveMyCgpaPlanResponseCoursesMax),
+  updatedAt: zod.coerce.date().nullable(),
+});
+
+/**
  * @summary Request premium badge verification
  */
 export const RequestPremiumBadgeBody = zod.object({

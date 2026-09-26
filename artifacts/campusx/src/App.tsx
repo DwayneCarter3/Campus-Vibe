@@ -19,6 +19,7 @@ import Onboarding from "@/pages/onboarding";
 import FeedPage from "@/pages/feed";
 import PostDetailPage from "@/pages/post-detail";
 import EarnPage from "@/pages/earn";
+import CgpaPage from "@/pages/cgpa";
 import MyProfilePage from "@/pages/profile";
 import UserProfilePage from "@/pages/user-profile";
 import MessagesPage from "@/pages/messages";
@@ -165,6 +166,7 @@ function ClerkProviderWithRoutes() {
               <Route path="/feed" component={() => <ProtectedRoute component={FeedPage} />} />
                <Route path="/post/:id" component={() => <ProtectedRoute component={PostDetailPage} />} />
               <Route path="/earn" component={() => <ProtectedRoute component={EarnPage} />} />
+               <Route path="/cgpa" component={() => <ProtectedRoute component={CgpaPage} />} />
               <Route path="/messages" component={() => <ProtectedRoute component={MessagesPage} />} />
               <Route path="/admin" component={() => <ProtectedRoute component={AdminPage} />} />
               <Route path="/profile" component={() => <ProtectedRoute component={MyProfilePage} />} />
