@@ -40,6 +40,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { Link } from "wouter";
+import { PullToRefresh } from "@/components/pull-to-refresh";
 
 // ─── Categories ─────────────────────────────────────────────────────────────
 
@@ -92,7 +93,7 @@ export default function EarnPage() {
 
   const activeCategory = FILTER_TABS.find((t) => t.id === activeTab)?.dbValue ?? undefined;
 
-  const { data, isLoading } = useListServices(
+  const { data, isLoading, refetch } = useListServices(
     { category: activeCategory },
     { query: { queryKey: getListServicesQueryKey({ category: activeCategory }) } }
   );
@@ -135,7 +136,7 @@ export default function EarnPage() {
   const isFiltered = search.trim() !== "";
 
   return (
-    <div className="container mx-auto px-4 py-6 max-w-6xl relative min-h-screen pb-24">
+    <PullToRefresh className="container mx-auto px-4 py-6 max-w-6xl relative min-h-screen pb-24" onRefresh={() => refetch()}>
 
       {/* Header */}
       <div className="mb-5">
@@ -383,7 +384,7 @@ export default function EarnPage() {
           </div>
         </DialogContent>
       </Dialog>
-    </div>
+    </PullToRefresh>
   );
 }
 

@@ -12,6 +12,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { UserVerificationMarks } from "@/components/user-verification-marks";
+import { PullToRefresh } from "@/components/pull-to-refresh";
 
 const TRENDING_BUBBLES = [
   { id: "shuttle", label: "Shuttle Updates", emoji: "🚌", color: "from-orange-500/20 to-orange-500/5 border-orange-500/30 hover:border-orange-500/60" },
@@ -57,7 +58,7 @@ export default function FeedPage() {
     query: { retry: false, queryKey: getGetMyProfileQueryKey() }
   });
 
-  const { data, isLoading } = useListPosts(undefined, {
+  const { data, isLoading, refetch } = useListPosts(undefined, {
     query: { queryKey: getListPostsQueryKey() }
   });
 
@@ -129,7 +130,7 @@ export default function FeedPage() {
   }
 
   return (
-    <div className="container mx-auto px-4 max-w-2xl py-6">
+    <PullToRefresh className="container mx-auto px-4 max-w-2xl py-6" onRefresh={() => refetch()}>
 
       {/* Hidden file inputs */}
       <input
@@ -405,6 +406,6 @@ export default function FeedPage() {
           ))
         )}
       </div>
-    </div>
+    </PullToRefresh>
   );
 }

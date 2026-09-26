@@ -12,6 +12,7 @@ import {
   KeyboardAvoidingView,
   Linking,
   ActivityIndicator,
+  RefreshControl,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
@@ -233,7 +234,7 @@ export default function HustleMarketplace() {
   const [activeCategory, setActiveCategory] = useState("All");
   const [addOpen, setAddOpen] = useState(false);
 
-  const { data, isLoading, isError, refetch } = useListServices();
+  const { data, isLoading, isError, refetch, isRefetching } = useListServices();
   const allServices = data?.services ?? [];
   const filtered = activeCategory === "All" ? allServices : allServices.filter((s) => s.category === activeCategory);
 
@@ -284,6 +285,14 @@ export default function HustleMarketplace() {
           renderItem={({ item }) => <ServiceCard service={item} />}
           contentContainerStyle={[styles.listContent, { paddingBottom: 100 + bottomPad }]}
           showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefetching}
+              onRefresh={() => { void refetch(); }}
+              tintColor={colors.primary}
+              colors={[colors.primary]}
+            />
+          }
           ListEmptyComponent={
             <View style={styles.emptyState}>
               <Feather name="shopping-bag" size={40} color={colors.border} />
