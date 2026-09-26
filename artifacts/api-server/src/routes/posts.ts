@@ -97,6 +97,7 @@ async function buildPostWithMeta(postId: number, clerkUserId?: string) {
       authorId: postsTable.authorId,
       isAnonymous: postsTable.isAnonymous,
       content: postsTable.content,
+      category: postsTable.category,
       imageUrl: postsTable.imageUrl,
       videoUrl: postsTable.videoUrl,
       likesCount: postsTable.likesCount,
@@ -196,7 +197,7 @@ router.get("/posts", async (req, res): Promise<void> => {
     return;
   }
 
-  const { limit, offset } = params.data;
+  const { limit, offset, category } = params.data;
   const clerkUserId = (req as any).userId as string | undefined;
 
   const posts = await db
@@ -205,6 +206,7 @@ router.get("/posts", async (req, res): Promise<void> => {
       authorId: postsTable.authorId,
       isAnonymous: postsTable.isAnonymous,
       content: postsTable.content,
+      category: postsTable.category,
       imageUrl: postsTable.imageUrl,
       videoUrl: postsTable.videoUrl,
       likesCount: postsTable.likesCount,
@@ -237,13 +239,15 @@ router.get("/posts", async (req, res): Promise<void> => {
     .leftJoin(usersTable, eq(postsTable.authorId, usersTable.clerkUserId))
     .leftJoin(originalPostAlias, eq(postsTable.originalPostId, originalPostAlias.id))
     .leftJoin(originalUserAlias, eq(originalPostAlias.authorId, originalUserAlias.clerkUserId))
+    .where(category ? eq(postsTable.category, category) : undefined)
     .orderBy(desc(postsTable.isPinnedToFeed), desc(postsTable.createdAt))
     .limit(limit ?? 20)
     .offset(offset ?? 0);
 
   const [{ count }] = await db
     .select({ count: sql<number>`count(*)::int` })
-    .from(postsTable);
+    .from(postsTable)
+    .where(category ? eq(postsTable.category, category) : undefined);
 
   const postsWithReactions = await Promise.all(
     posts.map(async (post) => {
@@ -319,6 +323,7 @@ router.post("/posts", requireAuth, async (req, res): Promise<void> => {
     .values({
       authorId: userId,
       content: parsed.data.content,
+      category: parsed.data.category ?? "Amebo Hot",
       imageUrl: parsed.data.imageUrl ?? null,
       videoUrl: parsed.data.videoUrl ?? null,
       isAnonymous: (parsed.data as any).isAnonymous ?? false,
@@ -399,6 +404,7 @@ router.post("/posts/:postId/reshare", requireAuth, async (req, res): Promise<voi
   await db.insert(postsTable).values({
     authorId: userId,
     content: quoteText,
+    category: original.category,
     imageUrl: null,
     videoUrl: null,
     originalPostId: rootPostId,

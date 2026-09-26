@@ -34,6 +34,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { AvatarModal } from "@/components/avatar-modal";
 import { UserVerificationMarks } from "@/components/user-verification-marks";
+import { getPostCategoryMeta } from "@/components/post-categories";
 
 interface PostCardProps {
   post: Post;
@@ -43,6 +44,7 @@ interface PostCardProps {
 }
 
 export function PostCard({ post, isAdmin, isModerator, moderationMode = false }: PostCardProps) {
+  const category = getPostCategoryMeta(post.category);
   const { user } = useUser();
   const queryClient = useQueryClient();
   const likePost = useLikePost();
@@ -305,6 +307,12 @@ export function PostCard({ post, isAdmin, isModerator, moderationMode = false }:
                   </DropdownMenu>
                 )}
               </div>
+
+              {category && (
+                <div className={cn("mt-2 inline-flex items-center rounded-full border px-2.5 py-0.5 text-[11px] font-medium", category.pill)}>
+                  {category.emoji} {category.label}
+                </div>
+              )}
 
               {/* Pin badges */}
               {(post.isPinnedToFeed || post.isPinnedToProfile) && (

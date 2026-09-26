@@ -452,6 +452,7 @@ router.get("/users/:userId/posts", async (req, res): Promise<void> => {
       authorId: postsTable.authorId,
       isAnonymous: postsTable.isAnonymous,
       content: postsTable.content,
+      category: postsTable.category,
       imageUrl: postsTable.imageUrl,
       videoUrl: postsTable.videoUrl,
       likesCount: postsTable.likesCount,

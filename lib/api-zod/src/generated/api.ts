@@ -208,6 +208,12 @@ export const GetUserPostsResponse = zod.object({
       authorVerificationStatus: zod.string(),
       isAnonymous: zod.boolean(),
       content: zod.string(),
+      category: zod.enum([
+        "Shuttle Updates",
+        "Portal Down",
+        "Exam Timetable",
+        "Amebo Hot",
+      ]),
       imageUrl: zod.string().nullable(),
       videoUrl: zod.string().nullable(),
       likesCount: zod.number(),
@@ -290,6 +296,9 @@ export const ListPostsQueryParams = zod.object({
   limit: zod.coerce.number().default(listPostsQueryLimitDefault),
   offset: zod.coerce.number().default(listPostsQueryOffsetDefault),
   faculty: zod.coerce.string().nullish(),
+  category: zod
+    .enum(["Shuttle Updates", "Portal Down", "Exam Timetable", "Amebo Hot"])
+    .optional(),
 });
 
 export const ListPostsResponse = zod.object({
@@ -308,6 +317,12 @@ export const ListPostsResponse = zod.object({
       authorVerificationStatus: zod.string(),
       isAnonymous: zod.boolean(),
       content: zod.string(),
+      category: zod.enum([
+        "Shuttle Updates",
+        "Portal Down",
+        "Exam Timetable",
+        "Amebo Hot",
+      ]),
       imageUrl: zod.string().nullable(),
       videoUrl: zod.string().nullable(),
       likesCount: zod.number(),
@@ -344,6 +359,9 @@ export const ListPostsResponse = zod.object({
  */
 export const CreatePostBody = zod.object({
   content: zod.string(),
+  category: zod
+    .enum(["Shuttle Updates", "Portal Down", "Exam Timetable", "Amebo Hot"])
+    .optional(),
   imageUrl: zod.string().nullish(),
   videoUrl: zod.string().nullish(),
   isAnonymous: zod.boolean().optional(),
@@ -370,6 +388,12 @@ export const GetPostResponse = zod.object({
   authorVerificationStatus: zod.string(),
   isAnonymous: zod.boolean(),
   content: zod.string(),
+  category: zod.enum([
+    "Shuttle Updates",
+    "Portal Down",
+    "Exam Timetable",
+    "Amebo Hot",
+  ]),
   imageUrl: zod.string().nullable(),
   videoUrl: zod.string().nullable(),
   likesCount: zod.number(),

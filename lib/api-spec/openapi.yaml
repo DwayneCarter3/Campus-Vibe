@@ -225,6 +225,11 @@ paths:
           in: query
           schema:
             type: ["string", "null"]
+        - name: category
+          in: query
+          schema:
+            type: string
+            enum: [Shuttle Updates, Portal Down, Exam Timetable, Amebo Hot]
       responses:
         "200":
           description: List of posts
@@ -1371,6 +1376,9 @@ components:
           type: boolean
         content:
           type: string
+        category:
+          type: string
+          enum: [Shuttle Updates, Portal Down, Exam Timetable, Amebo Hot]
         imageUrl:
           type: ["string", "null"]
         videoUrl:
@@ -1414,6 +1422,7 @@ components:
         - authorVerificationStatus
         - isAnonymous
         - content
+        - category
         - imageUrl
         - videoUrl
         - likesCount
@@ -1446,6 +1455,9 @@ components:
       properties:
         content:
           type: string
+        category:
+          type: string
+          enum: [Shuttle Updates, Portal Down, Exam Timetable, Amebo Hot]
         imageUrl:
           type: ["string", "null"]
         videoUrl:

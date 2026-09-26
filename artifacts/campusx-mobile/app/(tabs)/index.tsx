@@ -37,6 +37,16 @@ const FACULTIES = [
   "Engineering", "Management Sciences", "Communication & Media Studies",
 ];
 
+const CATEGORIES = [
+  { label: "All Gist", value: undefined, emoji: "✨" },
+  { label: "Shuttle Updates", value: "Shuttle Updates", emoji: "🚌" },
+  { label: "Portal Down", value: "Portal Down", emoji: "💻" },
+  { label: "Exam Timetable", value: "Exam Timetable", emoji: "📅" },
+  { label: "Amebo Hot", value: "Amebo Hot", emoji: "🌶️" },
+] as const;
+
+type FeedCategory = Post["category"];
+
 function PostCard({ post }: { post: Post }) {
   const colors = useColors();
   const queryClient = useQueryClient();
@@ -89,6 +99,11 @@ function PostCard({ post }: { post: Post }) {
         </View>
       </View>
 
+      <View style={{ alignSelf: "flex-start", borderColor: colors.primary + "55", backgroundColor: colors.primary + "16", borderWidth: 1, borderRadius: 20, paddingHorizontal: 9, paddingVertical: 3, marginTop: 8 }}>
+        <Text style={{ color: colors.primary, fontSize: 11, fontWeight: "600" }}>
+          {CATEGORIES.find((item) => item.value === post.category)?.emoji ?? "🌶️"} {post.category}
+        </Text>
+      </View>
       <Text style={[styles.content, { color: colors.foreground }]}>{post.content}</Text>
 
       <View style={[styles.reactions, { borderTopColor: colors.border }]}>
@@ -123,20 +138,23 @@ function PostCard({ post }: { post: Post }) {
   );
 }
 
-function ComposeModal({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+function ComposeModal({ visible, onClose, onPosted }: { visible: boolean; onClose: () => void; onPosted: (category: FeedCategory) => void }) {
   const colors = useColors();
   const queryClient = useQueryClient();
   const insets = useSafeAreaInsets();
   const [content, setContent] = useState("");
+  const [category, setCategory] = useState<FeedCategory | "All">("Amebo Hot");
   const [showFacultyPicker, setShowFacultyPicker] = useState(false);
   const [selectedFaculty] = useState("LASU Ojo");
 
   const createPost = useCreatePost({
     mutation: {
-      onSuccess: () => {
+      onSuccess: (_post, variables) => {
         queryClient.invalidateQueries({ queryKey: getListPostsQueryKey() });
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        onPosted(variables.data.category ?? "Amebo Hot");
         setContent("");
+        setCategory("Amebo Hot");
         onClose();
       },
       onError: () => {
@@ -147,7 +165,7 @@ function ComposeModal({ visible, onClose }: { visible: boolean; onClose: () => v
 
   const handlePost = () => {
     if (!content.trim()) return;
-    createPost.mutate({ data: { content: content.trim() } });
+    createPost.mutate({ data: { content: content.trim(), category: category === "All" ? "Amebo Hot" : category } });
   };
 
   return (
@@ -194,6 +212,24 @@ function ComposeModal({ visible, onClose }: { visible: boolean; onClose: () => v
               autoFocus
               maxLength={500}
             />
+            <Text style={{ color: colors.mutedForeground, fontSize: 12, fontWeight: "600", marginTop: 12, marginBottom: 8 }}>Post category</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingBottom: 8 }}>
+              {CATEGORIES.map((item) => {
+                const value = item.value ?? "All";
+                return (
+                  <TouchableOpacity
+                    key={item.label}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: category === value }}
+                    onPress={() => setCategory(value)}
+                    style={{ borderWidth: 1, borderColor: category === value ? colors.primary : colors.border, backgroundColor: category === value ? colors.primary + "20" : colors.surface, borderRadius: 20, paddingHorizontal: 12, paddingVertical: 8 }}
+                  >
+                    <Text style={{ color: category === value ? colors.primary : colors.mutedForeground, fontSize: 12 }}>{item.emoji} {item.label}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+            {category === "All" && <Text style={{ color: colors.mutedForeground, fontSize: 11 }}>All Gist is a feed view. This post will be tagged Amebo Hot.</Text>}
             <Text style={[styles.charCount, { color: colors.mutedForeground }]}>{content.length}/500</Text>
           </ScrollView>
         </View>
@@ -207,8 +243,12 @@ export default function AmeboFeed() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const [composeOpen, setComposeOpen] = useState(false);
+  const [activeCategory, setActiveCategory] = useState<FeedCategory | undefined>(undefined);
 
-  const { data, isLoading, isError, refetch, isRefetching } = useListPosts();
+  const { data, isLoading, isError, refetch, isRefetching } = useListPosts(
+    { category: activeCategory },
+    { query: { queryKey: getListPostsQueryKey({ category: activeCategory }) } },
+  );
   const { data: notificationData } = useListNotifications(
     { limit: 50 },
     {
@@ -256,6 +296,23 @@ export default function AmeboFeed() {
         </View>
       </View>
 
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0, borderBottomWidth: 1, borderBottomColor: colors.border }} contentContainerStyle={{ gap: 8, paddingHorizontal: 14, paddingVertical: 11 }}>
+        {CATEGORIES.map((item) => (
+          <TouchableOpacity
+            key={item.label}
+            accessibilityRole="button"
+            accessibilityState={{ selected: activeCategory === item.value }}
+            onPress={() => setActiveCategory(item.value)}
+            style={{ borderWidth: 1, borderColor: activeCategory === item.value ? colors.primary : colors.border, backgroundColor: activeCategory === item.value ? colors.primary + "20" : colors.surface, borderRadius: 16, paddingHorizontal: 12, paddingVertical: 8 }}
+          >
+            <Text style={{ color: activeCategory === item.value ? colors.primary : colors.mutedForeground, fontSize: 12, fontWeight: "600" }}>{item.emoji} {item.label}</Text>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+      <Text style={{ color: colors.foreground, fontSize: 15, fontWeight: "700", paddingHorizontal: 16, paddingTop: 12, paddingBottom: 4 }}>
+        {activeCategory ? activeCategory === "Amebo Hot" ? "Amebo Hot Posts" : `${activeCategory} Gist` : "Campus Gist"}
+      </Text>
+
       {isLoading ? (
         <View style={styles.centered}>
           <ActivityIndicator color={colors.primary} size="large" />
@@ -270,6 +327,7 @@ export default function AmeboFeed() {
         </View>
       ) : (
         <FlatList
+          key={activeCategory ?? "all"}
           data={posts}
           keyExtractor={(item) => String(item.id)}
           renderItem={({ item }) => <PostCard post={item} />}
@@ -286,8 +344,8 @@ export default function AmeboFeed() {
           ListEmptyComponent={
             <View style={styles.emptyState}>
               <Feather name="radio" size={40} color={colors.border} />
-              <Text style={[styles.emptyTitle, { color: colors.foreground }]}>No gist yet</Text>
-              <Text style={[styles.emptySub, { color: colors.mutedForeground }]}>Be the first to drop something on the feed</Text>
+               <Text style={[styles.emptyTitle, { color: colors.foreground }]}>{activeCategory ? "No posts in this category yet. Be the first to share an update!" : "No gist yet"}</Text>
+               {!activeCategory && <Text style={[styles.emptySub, { color: colors.mutedForeground }]}>Be the first to drop something on the feed</Text>}
             </View>
           }
         />
@@ -301,7 +359,7 @@ export default function AmeboFeed() {
         <Feather name="plus" size={24} color="#fff" />
       </TouchableOpacity>
 
-      <ComposeModal visible={composeOpen} onClose={() => setComposeOpen(false)} />
+      <ComposeModal visible={composeOpen} onClose={() => setComposeOpen(false)} onPosted={setActiveCategory} />
     </View>
   );
 }

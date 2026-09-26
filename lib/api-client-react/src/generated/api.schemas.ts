@@ -163,6 +163,15 @@ export interface RequestBadgeResponse {
   verificationStatus: string;
 }
 
+export type PostCategory = (typeof PostCategory)[keyof typeof PostCategory];
+
+export const PostCategory = {
+  Shuttle_Updates: "Shuttle Updates",
+  Portal_Down: "Portal Down",
+  Exam_Timetable: "Exam Timetable",
+  Amebo_Hot: "Amebo Hot",
+} as const;
+
 export interface EmbeddedPost {
   id: number;
   authorId: string;
@@ -192,6 +201,7 @@ export interface Post {
   authorVerificationStatus: string;
   isAnonymous: boolean;
   content: string;
+  category: PostCategory;
   /** @nullable */
   imageUrl: string | null;
   /** @nullable */
@@ -215,8 +225,19 @@ export interface ListPostsResponse {
   total: number;
 }
 
+export type CreatePostBodyCategory =
+  (typeof CreatePostBodyCategory)[keyof typeof CreatePostBodyCategory];
+
+export const CreatePostBodyCategory = {
+  Shuttle_Updates: "Shuttle Updates",
+  Portal_Down: "Portal Down",
+  Exam_Timetable: "Exam Timetable",
+  Amebo_Hot: "Amebo Hot",
+} as const;
+
 export interface CreatePostBody {
   content: string;
+  category?: CreatePostBodyCategory;
   /** @nullable */
   imageUrl?: string | null;
   /** @nullable */
@@ -553,7 +574,18 @@ export type ListPostsParams = {
    * @nullable
    */
   faculty?: string | null;
+  category?: ListPostsCategory;
 };
+
+export type ListPostsCategory =
+  (typeof ListPostsCategory)[keyof typeof ListPostsCategory];
+
+export const ListPostsCategory = {
+  Shuttle_Updates: "Shuttle Updates",
+  Portal_Down: "Portal Down",
+  Exam_Timetable: "Exam Timetable",
+  Amebo_Hot: "Amebo Hot",
+} as const;
 
 export type ListServicesParams = {
   limit?: number;

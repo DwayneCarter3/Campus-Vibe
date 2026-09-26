@@ -13,13 +13,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { UserVerificationMarks } from "@/components/user-verification-marks";
 import { PullToRefresh } from "@/components/pull-to-refresh";
-
-const TRENDING_BUBBLES = [
-  { id: "shuttle", label: "Shuttle Updates", emoji: "🚌", color: "from-orange-500/20 to-orange-500/5 border-orange-500/30 hover:border-orange-500/60" },
-  { id: "portal", label: "Portal Down", emoji: "💻", color: "from-red-500/20 to-red-500/5 border-red-500/30 hover:border-red-500/60" },
-  { id: "exam", label: "Exam Timetable", emoji: "📅", color: "from-blue-500/20 to-blue-500/5 border-blue-500/30 hover:border-blue-500/60" },
-  { id: "amebo", label: "Amebo Hot", emoji: "🌶️", color: "from-pink-500/20 to-pink-500/5 border-pink-500/30 hover:border-pink-500/60" },
-];
+import { POST_CATEGORIES, type PostCategory } from "@/components/post-categories";
 
 type MediaUpload = {
   type: "image" | "video";
@@ -49,7 +43,9 @@ async function uploadToPresignedUrl(file: File, uploadURL: string): Promise<void
 export default function FeedPage() {
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
-  const [activeBubble, setActiveBubble] = useState<string | null>(null);
+  const [activeBubble, setActiveBubble] = useState("all");
+  const [postCategory, setPostCategory] = useState<PostCategory | "All">("Amebo Hot");
+  const activeCategory = POST_CATEGORIES.find((bubble) => bubble.id === activeBubble)?.category;
   const scrollRef = useRef<HTMLDivElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
@@ -58,8 +54,8 @@ export default function FeedPage() {
     query: { retry: false, queryKey: getGetMyProfileQueryKey() }
   });
 
-  const { data, isLoading, refetch } = useListPosts(undefined, {
-    query: { queryKey: getListPostsQueryKey() }
+  const { data, isLoading, refetch } = useListPosts({ category: activeCategory }, {
+    query: { queryKey: getListPostsQueryKey({ category: activeCategory }) }
   });
 
   const createPost = useCreatePost();
@@ -102,16 +98,20 @@ export default function FeedPage() {
 
   const handlePost = () => {
     if (!content.trim() && !media) return;
+    const publishedCategory = postCategory === "All" ? "Amebo Hot" : postCategory;
     createPost.mutate({
       data: {
         content,
+        category: publishedCategory,
         imageUrl: media?.type === "image" ? media.url : null,
         videoUrl: media?.type === "video" ? media.url : null,
         isAnonymous,
-      } as any
+      }
     }, {
       onSuccess: () => {
         setContent("");
+        setActiveBubble(POST_CATEGORIES.find((item) => item.category === publishedCategory)?.id ?? "all");
+        setPostCategory("Amebo Hot");
         setIsAnonymous(false);
         clearMedia();
         queryClient.invalidateQueries({ queryKey: getListPostsQueryKey() });
@@ -171,18 +171,19 @@ export default function FeedPage() {
         className="flex gap-3 overflow-x-auto pb-3 mb-6 scrollbar-none"
         style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
       >
-        {TRENDING_BUBBLES.map((bubble, i) => (
+        {POST_CATEGORIES.map((bubble, i) => (
           <motion.button
             key={bubble.id}
             data-testid={`btn-trending-${bubble.id}`}
             initial={{ opacity: 0, scale: 0.85 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ delay: i * 0.07 }}
-            onClick={() => setActiveBubble(activeBubble === bubble.id ? null : bubble.id)}
+            onClick={() => setActiveBubble(bubble.id)}
+            aria-pressed={activeBubble === bubble.id}
             className={cn(
               "flex-shrink-0 flex flex-col items-center gap-1.5 px-4 py-3 rounded-2xl border bg-gradient-to-b transition-all cursor-pointer",
               bubble.color,
-              activeBubble === bubble.id ? "scale-105 shadow-lg shadow-primary/10" : ""
+              activeBubble === bubble.id && "border-primary/80 ring-1 ring-primary/60 shadow-[0_0_24px_rgba(236,72,153,0.28)]"
             )}
           >
             <div className="text-2xl leading-none">{bubble.emoji}</div>
@@ -230,6 +231,31 @@ export default function FeedPage() {
               onChange={(e) => setContent(e.target.value)}
               onKeyDown={handleKeyDown}
             />
+            <div className="space-y-1.5" aria-label="Post category">
+              <span className="text-[11px] font-semibold text-muted-foreground">Post category</span>
+              <div className="flex flex-wrap gap-1.5">
+                {POST_CATEGORIES.map((item) => {
+                  const value = item.category ?? "All";
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      aria-pressed={postCategory === value}
+                      onClick={() => setPostCategory(value)}
+                      className={cn(
+                        "rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors",
+                        postCategory === value
+                          ? "border-primary/70 bg-primary/15 text-primary"
+                          : "border-white/10 text-muted-foreground hover:border-primary/40 hover:text-foreground"
+                      )}
+                    >
+                      {item.emoji} {item.label}
+                    </button>
+                  );
+                })}
+              </div>
+              {postCategory === "All" && <p className="text-[11px] text-muted-foreground">All Gist is a feed view. This post will be tagged Amebo Hot.</p>}
+            </div>
 
             {/* Media preview */}
             <AnimatePresence>
@@ -358,7 +384,9 @@ export default function FeedPage() {
 
       {/* Feed Header */}
       <div className="flex items-center gap-2 mb-4">
-        <h2 className="font-bold text-base">Campus Gist</h2>
+        <h2 className="font-bold text-base">
+          {activeCategory ? activeCategory === "Amebo Hot" ? "Amebo Hot Posts" : `${activeCategory} Gist` : "Campus Gist"}
+        </h2>
         {data && (
           <span className="text-xs text-muted-foreground">({data.total} posts)</span>
         )}
@@ -390,8 +418,8 @@ export default function FeedPage() {
             className="text-center py-16 text-muted-foreground border border-dashed border-white/10 rounded-2xl"
           >
             <div className="text-4xl mb-3">🎙️</div>
-            <p className="font-medium">No gist yet on campus.</p>
-            <p className="text-sm mt-1">Be the first to drop something.</p>
+            <p className="font-medium">{activeCategory ? "No posts in this category yet. Be the first to share an update!" : "No gist yet on campus."}</p>
+            {!activeCategory && <p className="text-sm mt-1">Be the first to drop something.</p>}
           </motion.div>
         ) : (
           data?.posts.map((post, i) => (

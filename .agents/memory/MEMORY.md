@@ -13,3 +13,4 @@
 - [Academic level session anchor](academic-level-session.md) — matric-based level uses the 2025/26 session (start year 2025), not the 2026 calendar year.
 - [Verification badge tiers](verification-badge-tiers.md) — public headers show student/paid tier marks, never role badges; gold needs a real vendor entitlement.
 - [Drizzle serial push mismatch](drizzle-serial-push.md) — Drizzle push can emit invalid SQL for an existing serial-backed rank; avoid force or sequence drops.
+- [Feed category semantics](feed-category-semantics.md) — “All Gist” is only a view, not a stored post category; default untagged and older posts to Amebo Hot.
