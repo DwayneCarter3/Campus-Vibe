@@ -35,11 +35,21 @@ app.use(
 
 app.use(CLERK_PROXY_PATH, clerkProxyMiddleware());
 
-app.use(cors({ credentials: true, origin: true }));
+app.use(
+  cors({
+    origin: [
+      "https://campus-vibe-campusx.vercel.app",
+      "http://localhost:5173",
+      "http://localhost:3000",
+    ],
+    credentials: true,
+  }),
+);
 app.use(
   express.json({
     verify(req, _res, buffer) {
-      (req as express.Request & { rawBody?: Buffer }).rawBody = Buffer.from(buffer);
+      (req as express.Request & { rawBody?: Buffer }).rawBody =
+        Buffer.from(buffer);
     },
   }),
 );
