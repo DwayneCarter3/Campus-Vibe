@@ -35,7 +35,10 @@ app.use(
 
 app.use(CLERK_PROXY_PATH, clerkProxyMiddleware());
 
-app.use(cors({ credentials: true, origin: true }));
+app.use(cors({
+  origin: '*',
+  credentials: true
+}));
 app.use(
   express.json({
     verify(req, _res, buffer) {
