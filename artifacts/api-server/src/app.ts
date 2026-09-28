@@ -7,9 +7,9 @@ import {
   CLERK_PROXY_PATH,
   clerkProxyMiddleware,
   getClerkProxyHost,
-} from "./middlewares/clerkProxyMiddleware";
-import router from "./routes";
-import { logger } from "./lib/logger";
+} from "./middlewares/clerkProxyMiddleware.js";
+import router from "./routes.js";
+import { logger } from "./lib/logger.js";
 
 const app: Express = express();
 
