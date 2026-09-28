@@ -18,7 +18,6 @@ import {
   WAZOBIA_BOT_NAME,
   WAZOBIA_LANGUAGES,
 } from "../lib/wazobia";
-import { fetchWazobiaWithRetry, WazobiaQuotaExceededError } from "../lib/wazobia-retry";
 
 const router: IRouter = Router();
 const CHAT_RATE_LIMIT = 10;
@@ -73,14 +72,6 @@ const LANGUAGE_INSTRUCTIONS = {
   hausa: "Hausa",
   igbo: "Igbo",
 } as const;
-const QUOTA_FALLBACK = {
-  english: "WAZOBIA is taking a quick breather to handle all the messages coming in! Try sending your question again in a moment.",
-  pidgin: "WAZOBIA dey take small breather to handle plenty messages! Abeg try send your question again in a moment.",
-  yoruba: "WAZOBIA ń sinmi díẹ̀ láti dáhùn àwọn ìfiránṣẹ́ tó pọ̀! Jọ̀wọ́ tún ìbéèrè rẹ ránṣẹ́ lẹ́yìn ìṣẹ́jú díẹ̀.",
-  hausa: "WAZOBIA na ɗan hutawa don amsa saƙonni masu yawa! Da fatan za ka sake aika tambayarka nan ba da jimawa ba.",
-  igbo: "WAZOBIA na-ezu obere ike iji zaa ọtụtụ ozi! Biko zipụ ajụjụ gị ọzọ n'oge na-adịghị anya.",
-} as const;
-const QUOTA_FALLBACK_MESSAGES = new Set<string>(Object.values(QUOTA_FALLBACK));
 
 type HistoryItem = { senderId: string; content: string };
 
@@ -92,7 +83,6 @@ async function generateReply(
   language: keyof typeof LANGUAGE_INSTRUCTIONS,
   history: HistoryItem[],
   content: string,
-  onRetry: (attempt: number, delayMs: number) => void,
 ): Promise<string> {
   const systemInstruction = buildLanguageInstruction(language);
   const messages = [...history, { senderId: "", content }];
@@ -102,48 +92,45 @@ async function generateReply(
     });
   }
 
-  const response = await fetchWazobiaWithRetry(
-    () => process.env.GEMINI_API_KEY
-      ? fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(process.env.GEMINI_MODEL || "gemini-3-flash-preview")}:generateContent`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-goog-api-key": process.env.GEMINI_API_KEY,
-          },
-          signal: AbortSignal.timeout(10_000),
-          body: JSON.stringify({
-            systemInstruction: { parts: [{ text: systemInstruction }] },
-            contents: messages.map((message) => ({
-              role: message.senderId === WAZOBIA_BOT_ID ? "model" : "user",
-              parts: [{ text: message.content }],
-            })),
-            generationConfig: { maxOutputTokens: 800 },
-          }),
-        },
-      )
-      : fetch("https://api.openai.com/v1/chat/completions", {
+  const response = process.env.GEMINI_API_KEY
+    ? await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(process.env.GEMINI_MODEL || "gemini-3-flash-preview")}:generateContent`,
+      {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+          "x-goog-api-key": process.env.GEMINI_API_KEY,
         },
-        signal: AbortSignal.timeout(10_000),
+        signal: AbortSignal.timeout(25_000),
         body: JSON.stringify({
-          model: process.env.OPENAI_MODEL || "gpt-4o-mini",
-          messages: [
-            { role: "system", content: systemInstruction },
-            ...messages.map((message) => ({
-              role: message.senderId === WAZOBIA_BOT_ID ? "assistant" : "user",
-              content: message.content,
-            })),
-          ],
-          max_tokens: 800,
+          systemInstruction: { parts: [{ text: systemInstruction }] },
+          contents: messages.map((message) => ({
+            role: message.senderId === WAZOBIA_BOT_ID ? "model" : "user",
+            parts: [{ text: message.content }],
+          })),
+          generationConfig: { maxOutputTokens: 800 },
         }),
+      },
+    )
+    : await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+      },
+      signal: AbortSignal.timeout(25_000),
+      body: JSON.stringify({
+        model: process.env.OPENAI_MODEL || "gpt-4o-mini",
+        messages: [
+          { role: "system", content: systemInstruction },
+          ...messages.map((message) => ({
+            role: message.senderId === WAZOBIA_BOT_ID ? "assistant" : "user",
+            content: message.content,
+          })),
+        ],
+        max_tokens: 800,
       }),
-    { onRetry },
-  );
+    });
 
   if (!response.ok) {
     throw Object.assign(new Error(`WAZOBIA AI provider returned HTTP ${response.status}.`), {
@@ -204,9 +191,7 @@ router.post("/wazobia/chat", requireAuth, async (req, res): Promise<void> => {
   const language = await getWazobiaLanguage(userId);
   const conversationId = await ensureWazobiaConversation(userId);
   const history = (await getRecentWazobiaHistory(conversationId))
-    .filter((message) =>
-      message.content !== "[[WAZOBIA_WELCOME_V1]]" &&
-      !(message.senderId === WAZOBIA_BOT_ID && QUOTA_FALLBACK_MESSAGES.has(message.content)))
+    .filter((message) => message.content !== "[[WAZOBIA_WELCOME_V1]]")
     .reverse()
     .slice(-12);
 
@@ -244,23 +229,16 @@ router.post("/wazobia/chat", requireAuth, async (req, res): Promise<void> => {
 
   let text: string;
   try {
-    text = await generateReply(language, history, savedUserMessage.content, (attempt, delayMs) => {
-      req.log.warn({ conversationId, attempt, delayMs }, "WAZOBIA AI quota exceeded; retrying");
-    });
+    text = await generateReply(language, history, savedUserMessage.content);
   } catch (error) {
-    if (error instanceof WazobiaQuotaExceededError) {
-      req.log.warn({ conversationId }, "WAZOBIA AI quota exhausted after retries; sending fallback");
-      text = QUOTA_FALLBACK[language];
-    } else {
-      req.log.warn({ err: error, conversationId }, "WAZOBIA reply unavailable; outgoing message saved");
-      res.json(ChatWithWazobiaResponse.parse({
-        conversationId,
-        userMessage,
-        reply: null,
-        warning: "Your message was sent, but WAZOBIA cannot reply right now.",
-      }));
-      return;
-    }
+    req.log.warn({ err: error, conversationId }, "WAZOBIA reply unavailable; outgoing message saved");
+    res.json(ChatWithWazobiaResponse.parse({
+      conversationId,
+      userMessage,
+      reply: null,
+      warning: "Your message was sent, but WAZOBIA cannot reply right now.",
+    }));
+    return;
   }
 
   let savedReply: typeof savedUserMessage;
