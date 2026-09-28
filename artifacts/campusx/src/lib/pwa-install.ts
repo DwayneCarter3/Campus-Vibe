@@ -18,10 +18,12 @@ if (typeof window !== "undefined") {
 }
 
 export function isAppInstalled(): boolean {
-  return typeof window !== "undefined" && (
-    window.matchMedia("(display-mode: standalone)").matches ||
-    (navigator as Navigator & { standalone?: boolean }).standalone === true
-  );
+  if (typeof window === "undefined") return false;
+  const isStandalone = typeof window.matchMedia === "function" &&
+    window.matchMedia("(display-mode: standalone)").matches;
+  const isIOSStandalone = typeof navigator !== "undefined" &&
+    (navigator as Navigator & { standalone?: boolean }).standalone === true;
+  return isStandalone || isIOSStandalone;
 }
 
 /** Returns true if a native prompt was displayed, even when dismissed. */

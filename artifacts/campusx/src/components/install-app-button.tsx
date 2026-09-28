@@ -4,12 +4,15 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { isAppInstalled, promptToInstall } from "@/lib/pwa-install";
 
-type Device = "iphone" | "android";
+type Device = "iphone" | "android" | "desktop";
 
 function initialDevice(): Device {
+  if (typeof navigator === "undefined") return "desktop";
   const iOS = /iPad|iPhone|iPod/i.test(navigator.userAgent) ||
     (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-  return iOS ? "iphone" : "android";
+  if (iOS) return "iphone";
+  if (/Android/i.test(navigator.userAgent)) return "android";
+  return "desktop";
 }
 
 const steps = {
@@ -22,6 +25,10 @@ const steps = {
   android: [
     <>Tap the <strong>three dots</strong> menu in Chrome.</>,
     <>Tap <strong>Install app</strong> or <strong>Add to Home Screen</strong>.</>,
+  ],
+  desktop: [
+    <>Open CampusX in <strong>Chrome</strong> or <strong>Microsoft Edge</strong>.</>,
+    <>Select the <strong>Install</strong> icon in the address bar, or open the browser menu and choose <strong>Install CampusX</strong>.</>,
   ],
 };
 
@@ -71,12 +78,12 @@ export function InstallAppButton() {
             </div>
             <DialogTitle className="text-xl font-bold">Take CampusX with you</DialogTitle>
             <DialogDescription className="text-sm leading-relaxed text-slate-300">
-              Add CampusX to your home screen for quick access. Choose your phone to see how.
+              Add CampusX for quick access. Choose your device to see how.
             </DialogDescription>
           </DialogHeader>
 
-          <div className="grid grid-cols-2 gap-2 rounded-xl bg-white/5 p-1" role="group" aria-label="Choose your phone">
-            {(["iphone", "android"] as const).map((option) => (
+          <div className="grid grid-cols-3 gap-1 rounded-xl bg-white/5 p-1" role="group" aria-label="Choose your device">
+            {(["iphone", "android", "desktop"] as const).map((option) => (
               <button
                 key={option}
                 type="button"
@@ -85,7 +92,7 @@ export function InstallAppButton() {
                 onClick={() => setDevice(option)}
                 className={`rounded-lg px-3 py-2 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fuchsia-400 ${device === option ? "bg-gradient-to-r from-fuchsia-600 to-violet-600 text-white shadow-md" : "text-slate-300 hover:bg-white/10 hover:text-white"}`}
               >
-                {option === "iphone" ? "iPhone · Safari" : "Android · Chrome"}
+                {option === "iphone" ? "iPhone" : option === "android" ? "Android" : "Desktop"}
               </button>
             ))}
           </div>
@@ -96,11 +103,11 @@ export function InstallAppButton() {
                 <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-fuchsia-500/20 text-xs font-bold text-fuchsia-300">{index + 1}</span>
                 <span>{step}</span>
                 {device === "iphone" && index === 1 && <Share2 className="mt-0.5 h-4 w-4 shrink-0 text-fuchsia-300" aria-hidden="true" />}
-                {device === "android" && index === 0 && <MoreVertical className="mt-0.5 h-4 w-4 shrink-0 text-fuchsia-300" aria-hidden="true" />}
+                {(device === "android" || device === "desktop") && index === 0 && <MoreVertical className="mt-0.5 h-4 w-4 shrink-0 text-fuchsia-300" aria-hidden="true" />}
               </li>
             ))}
           </ol>
-          <p className="text-xs text-slate-400">No app store needed. You can open CampusX from your home screen anytime.</p>
+          <p className="text-xs text-slate-400">No app store needed. Open CampusX from your home screen or apps list.</p>
         </DialogContent>
       </Dialog>
     </>
