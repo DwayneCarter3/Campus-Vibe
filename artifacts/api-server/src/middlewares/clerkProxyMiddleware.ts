@@ -63,7 +63,7 @@ export function clerkProxyMiddleware(): RequestHandler {
     return (_req, _res, next) => next();
   }
 
-  return (createProxyMiddleware as any)({
+  return createProxyMiddleware({
     target: CLERK_FAPI,
     changeOrigin: true,
     pathRewrite: (path: string) =>

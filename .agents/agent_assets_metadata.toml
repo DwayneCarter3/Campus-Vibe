@@ -1,14 +1,8 @@
 uploads = []
+outputs = []
 
 [[generated]]
 id = "pbjrRUy56uh9I1n8ybxYG"
 uri = "file://artifacts/campusx-mobile/assets/images/icon.png"
 type = "image"
 title = "campusx mobile icon"
-
-[[outputs]]
-id = "hKhOSAlj3AUXHXgzRmHvJ"
-uri = "file://artifacts/campusx-film/public/audio/bg_music.mp3"
-type = "audio"
-title = "CampusX film music"
-description = "Generated music: Original upbeat future-campus brand film instrumental, warm electronic percussion with subtle West African-inspired syncopation, round synth bass, plucked keys and bright restrained …"

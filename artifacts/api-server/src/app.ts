@@ -7,14 +7,14 @@ import {
   CLERK_PROXY_PATH,
   clerkProxyMiddleware,
   getClerkProxyHost,
-} from "./middlewares/clerkProxyMiddleware.js";
-import router from "./routes/index.js";
-import { logger } from "./lib/logger.js";
+} from "./middlewares/clerkProxyMiddleware";
+import router from "./routes";
+import { logger } from "./lib/logger";
 
-const app = express();
+const app: Express = express();
 
 app.use(
-    (pinoHttp as any)({
+  pinoHttp({
     logger,
     serializers: {
       req(req) {
@@ -35,21 +35,11 @@ app.use(
 
 app.use(CLERK_PROXY_PATH, clerkProxyMiddleware());
 
-app.use(
-  cors({
-    origin: [
-      "https://campus-vibe-campusx.vercel.app",
-      "http://localhost:5173",
-      "http://localhost:3000",
-    ],
-    credentials: true,
-  }),
-);
+app.use(cors({ credentials: true, origin: true }));
 app.use(
   express.json({
     verify(req, _res, buffer) {
-      (req as express.Request & { rawBody?: Buffer }).rawBody =
-        Buffer.from(buffer);
+      (req as express.Request & { rawBody?: Buffer }).rawBody = Buffer.from(buffer);
     },
   }),
 );

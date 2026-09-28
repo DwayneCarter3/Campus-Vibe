@@ -2,15 +2,10 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "outDir": "dist",
-    "rootDir": ".",
-    "types": ["node"],
-    "noEmit": false,
-    "moduleResolution": "bundler",
-    "noImplicitAny": false,
-    "esModuleInterop": true,
-    "strict": false
+    "rootDir": "src",
+    "types": ["node"]
   },
-  "include": ["src", "api"],
+  "include": ["src"],
   "references": [
     {
       "path": "../../lib/db"
