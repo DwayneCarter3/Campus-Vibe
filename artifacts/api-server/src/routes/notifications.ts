@@ -1,44 +1,4 @@
-getAuth} frm "@lerk/express";
-mprt * a dModu*asapiZodModuleworkspaai-zod.js
-cns
-  db,
- notifictionsTable,
-  usersTable,
-} = bMoue as any;
-
-const apZod = apiZodModul as ay;
-consgetScha = (name: string) =>
-  apiZd[nam] || {
-    pars: (data: ay) => daa,
-  saePase: (data: any) => ({ success: true, data }),
-  };
-
-cnstLitNotificationQuryParams = getSche("ListNotificatiosQuyParams)ListNificationsRsponse =getSchema("ListNotificationsesponse");
-
-const r as any: any: anytry {
-    clerkUgetAuth;
-   if (!clerkUserId) {
-      res.sttu(401).json({error: "Unauthorized" });
-      return;
-    }
-
-    con quey = ListNotifcatiosQueryParams.safeParse(req.query)  querysuccess&& query.da?lit ?data.:5  notificatin      clerkU    Result  c    
-        
-          clerkU
-         
-         as any
-        csturedCut =Result[0]?.count?? 0    es.seHead("Ce-Ctol"pvatno-to");
-   .jn(LitNotifictioRpone.pase({ ,   unrCount,
-    );
-  } catc (ror: y) {
-    rs.su(500)jon({ ror:ror?.message || "Faile toftch "}}-all: any: any{  clekU=gAuh()useclkU  1Uuhrized          userkU;
-s.jsosuccessru}cch (rror: any50error?.message || Failed to mark nsasreapach:id/duirAhasync (qany, r: ayPromise<>ry{
-clerkUgetA(req)  clerkU        con rwI = Array.isArayrq.as.id?q.paramid[0] : rq.pms.id;
-    stifitionId = Numbr(wId
-    await db
-    upatotifiasTb    ({ isR: t}    we        and(        qnotifiatisTabl.i, otificatioId,        eq(notifictionsTab.clekUsrId   asany );
-json{succss: tu }(error:any){
-s.sus(jsro: ror?.mssge||"Failedtomak ntificato a ra"}import { Router } from "express";
+import { Router } from "express";
 import { eq, desc, and, sql } from "drizzle-orm";
 import { getAuth } from "@clerk/express";
 import * as dbModule from "@workspace/db";
