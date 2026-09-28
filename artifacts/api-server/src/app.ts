@@ -8,10 +8,10 @@ import {
   clerkProxyMiddleware,
   getClerkProxyHost,
 } from "./middlewares/clerkProxyMiddleware.js";
-import router from "./routes";
+import router from "./routes/index.js";
 import { logger } from "./lib/logger.js";
 
-const app: Express = express();
+const app = express();
 
 app.use(
   pinoHttp({
