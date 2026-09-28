@@ -4,7 +4,11 @@
     "outDir": "dist",
     "rootDir": ".",
     "types": ["node"],
-    "noEmit": false
+    "noEmit": false,
+    "moduleResolution": "bundler",
+    "noImplicitAny": false,
+    "esModuleInterop": true,
+    "strict": false
   },
   "include": ["src", "api"],
   "references": [
