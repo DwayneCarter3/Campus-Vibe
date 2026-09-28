@@ -23,6 +23,7 @@ const steps = {
     <>Tap <strong>Add</strong> to place it on your home screen.</>,
   ],
   android: [
+    <>Open CampusX in <strong>Chrome</strong>.</>,
     <>Tap the <strong>three dots</strong> menu in Chrome.</>,
     <>Tap <strong>Install app</strong> or <strong>Add to Home Screen</strong>.</>,
   ],
