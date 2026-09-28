@@ -1,104 +1,175 @@
-import { Router, type IRouter, type Request, type Response } from "express";
-import { eq, desc, and, sql } from "drizzle-orm";
-import { db, notificationsTable } from "@workspace/db";
-import { getAuth } from "@clerk/express";
-import { requireAuth } from "../middlewares/auth";
-import { addClient, removeClient } from "../sse-manager";
+getAuth} frm "@lerk/express";
+mprt * a dModu*asapiZodModuleworkspaai-zod.js
+cns
+  db,
+ notifictionsTable,
+  usersTable,
+} = bMoue as any;
 
-const router: IRouter = Router();
+const apZod = apiZodModul as ay;
+consgetScha = (name: string) =>
+  apiZd[nam] || {
+    pars: (data: ay) => daa,
+  saePase: (data: any) => ({ success: true, data }),
+  };
 
-router.get("/notifications", requireAuth, async (req, res): Promise<void> => {
-  const userId = (req as any).userId as string;
-  const limit = Math.max(1, Math.min(100, Number(req.query.limit) || 30));
+cnstLitNotificationQuryParams = getSche("ListNotificatiosQuyParams)ListNificationsRsponse =getSchema("ListNotificationsesponse");
 
-  const rows = await db
-    .select()
-    .from(notificationsTable)
-    .where(eq(notificationsTable.userId, userId))
-    .orderBy(desc(notificationsTable.createdAt))
-    .limit(limit);
-  const notifications = rows.map((notification) => ({
-    ...notification,
-    // Older notifications predate content; preserve their original message as content.
-    content: notification.content || notification.message,
-  }));
-
-  const [{ unreadCount }] = await db
-    .select({ unreadCount: sql<number>`count(*)::int` })
-    .from(notificationsTable)
-    .where(and(eq(notificationsTable.userId, userId), eq(notificationsTable.isRead, false)));
-
-  res.json({ notifications, unreadCount });
-});
-
-router.patch("/notifications/read", requireAuth, async (req, res): Promise<void> => {
-  const userId = (req as any).userId as string;
-
-  await db
-    .update(notificationsTable)
-    .set({ isRead: true })
-    .where(and(eq(notificationsTable.userId, userId), eq(notificationsTable.isRead, false)));
-
-  res.sendStatus(204);
-});
-
-router.patch("/notifications/:notificationId/read", requireAuth, async (req, res): Promise<void> => {
-  const userId = (req as any).userId as string;
-  const raw = Array.isArray(req.params.notificationId)
-    ? req.params.notificationId[0]
-    : req.params.notificationId;
-  const notificationId = Number(raw);
-
-  if (!Number.isSafeInteger(notificationId) || notificationId < 1) {
-    res.status(400).json({ error: "Invalid notification ID" });
-    return;
-  }
-
-  const [updated] = await db
-    .update(notificationsTable)
-    .set({ isRead: true })
-    .where(and(eq(notificationsTable.id, notificationId), eq(notificationsTable.userId, userId)))
-    .returning({ id: notificationsTable.id });
-
-  if (!updated) {
-    res.status(404).json({ error: "Notification not found" });
-    return;
-  }
-
-  res.sendStatus(204);
-});
-
-router.get("/notifications/stream", (req: Request, res: Response): void => {
-  const auth = getAuth(req);
-  const userId = auth?.userId;
-
-  if (!userId) {
-    res.status(401).json({ error: "Unauthorized" });
-    return;
-  }
-
-  res.setHeader("Content-Type", "text/event-stream");
-  res.setHeader("Cache-Control", "no-cache, no-transform");
-  res.setHeader("Connection", "keep-alive");
-  res.setHeader("X-Accel-Buffering", "no");
-  res.flushHeaders();
-
-  res.write(`: connected\n\n`);
-
-  addClient(userId, res);
-
-  const heartbeat = setInterval(() => {
-    try {
-      res.write(`: heartbeat\n\n`);
-    } catch {
-      clearInterval(heartbeat);
+const r as any: any: anytry {
+    clerkUgetAuth;
+   if (!clerkUserId) {
+      res.sttu(401).json({error: "Unauthorized" });
+      return;
     }
-  }, 25000);
 
-  req.on("close", () => {
-    clearInterval(heartbeat);
-    removeClient(userId, res);
-  });
-});
+    con quey = ListNotifcatiosQueryParams.safeParse(req.query)  querysuccess&& query.da?lit ?data.:5  notificatin      clerkU    Result  c    
+        
+          clerkU
+         
+         as any
+        csturedCut =Result[0]?.count?? 0    es.seHead("Ce-Ctol"pvatno-to");
+   .jn(LitNotifictioRpone.pase({ ,   unrCount,
+    );
+  } catc (ror: y) {
+    rs.su(500)jon({ ror:ror?.message || "Faile toftch "}}-all: any: any{  clekU=gAuh()useclkU  1Uuhrized          userkU;
+s.jsosuccessru}cch (rror: any50error?.message || Failed to mark nsasreapach:id/duirAhasync (qany, r: ayPromise<>ry{
+clerkUgetA(req)  clerkU        con rwI = Array.isArayrq.as.id?q.paramid[0] : rq.pms.id;
+    stifitionId = Numbr(wId
+    await db
+    upatotifiasTb    ({ isR: t}    we        and(        qnotifiatisTabl.i, otificatioId,        eq(notifictionsTab.clekUsrId   asany );
+json{succss: tu }(error:any){
+s.sus(jsro: ror?.mssge||"Failedtomak ntificato a ra"}import { Router } from "express";
+import { eq, desc, and, sql } from "drizzle-orm";
+import { getAuth } from "@clerk/express";
+import * as dbModule from "@workspace/db";
+import * as apiZodModule from "@workspace/api-zod";
+import { requireAuth } from "../middlewares/auth.js";
+
+const { db, notificationsTable, usersTable } = dbModule as any;
+
+const apiZod = apiZodModule as any;
+const getSchema = (name: string) =>
+  apiZod[name] || {
+    parse: (data: any) => data,
+    safeParse: (data: any) => ({ success: true, data }),
+  };
+
+const ListNotificationsQueryParams = getSchema("ListNotificationsQueryParams");
+const ListNotificationsResponse = getSchema("ListNotificationsResponse");
+
+const router = Router() as any;
+
+router.get(
+  "/notifications",
+  requireAuth,
+  async (req: any, res: any): Promise<void> => {
+    try {
+      const clerkUserId = getAuth(req).userId;
+      if (!clerkUserId) {
+        res.status(401).json({ error: "Unauthorized" });
+        return;
+      }
+
+      const query = ListNotificationsQueryParams.safeParse(req.query);
+      const limit =
+        query.success && query.data?.limit ? Number(query.data.limit) : 50;
+
+      const notifications = await db
+        .select()
+        .from(notificationsTable)
+        .where(eq(notificationsTable.userId, clerkUserId))
+        .orderBy(desc(notificationsTable.createdAt))
+        .limit(limit);
+
+      const unreadCountResult = await db
+        .select({ count: sql`count(*)::int` })
+        .from(notificationsTable)
+        .where(
+          and(
+            eq(notificationsTable.userId, clerkUserId),
+            eq(notificationsTable.isRead, false),
+          ) as any,
+        );
+
+      const unreadCount = unreadCountResult[0]?.count ?? 0;
+
+      res.setHeader("Cache-Control", "private, no-store");
+      res.json(
+        ListNotificationsResponse.parse({
+          notifications,
+          unreadCount,
+        }),
+      );
+    } catch (error: any) {
+      res
+        .status(500)
+        .json({ error: error?.message || "Failed to fetch notifications" });
+    }
+  },
+);
+
+router.patch(
+  "/notifications/read-all",
+  requireAuth,
+  async (req: any, res: any): Promise<void> => {
+    try {
+      const clerkUserId = getAuth(req).userId;
+      if (!clerkUserId) {
+        res.status(401).json({ error: "Unauthorized" });
+        return;
+      }
+
+      await db
+        .update(notificationsTable)
+        .set({ isRead: true })
+        .where(eq(notificationsTable.userId, clerkUserId));
+
+      res.json({ success: true });
+    } catch (error: any) {
+      res
+        .status(500)
+        .json({
+          error: error?.message || "Failed to mark notifications as read",
+        });
+    }
+  },
+);
+
+router.patch(
+  "/notifications/:id/read",
+  requireAuth,
+  async (req: any, res: any): Promise<void> => {
+    try {
+      const clerkUserId = getAuth(req).userId;
+      if (!clerkUserId) {
+        res.status(401).json({ error: "Unauthorized" });
+        return;
+      }
+
+      const rawId = Array.isArray(req.params.id)
+        ? req.params.id[0]
+        : req.params.id;
+      const notificationId = Number(rawId);
+
+      await db
+        .update(notificationsTable)
+        .set({ isRead: true })
+        .where(
+          and(
+            eq(notificationsTable.id, notificationId),
+            eq(notificationsTable.userId, clerkUserId),
+          ) as any,
+        );
+
+      res.json({ success: true });
+    } catch (error: any) {
+      res
+        .status(500)
+        .json({
+          error: error?.message || "Failed to mark notification as read",
+        });
+    }
+  },
+);
 
 export default router;
