@@ -88,7 +88,7 @@ export function StudentSearch() {
               id="student-search-input"
               type="search"
               aria-label="Search students at your school"
-              aria-controls="student-search-results"
+              aria-controls={term.length >= 2 ? "student-search-results" : undefined}
               aria-expanded={term.length >= 2}
               aria-autocomplete="list"
               autoComplete="off"
