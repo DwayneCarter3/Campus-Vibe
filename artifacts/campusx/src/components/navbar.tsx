@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { NotificationBell } from "@/components/notification-bell";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { StudentSearch } from "@/components/student-search";
-import { Calculator, MessageCircle, Shield } from "lucide-react";
+import { Calculator, Home, MessageCircle, Shield, ShoppingBag } from "lucide-react";
 import { useGetMyProfile, getGetMyProfileQueryKey, useListConversations, getListConversationsQueryKey } from "@workspace/api-client-react";
 
 export function Navbar() {
@@ -29,7 +29,7 @@ export function Navbar() {
   return (
     <nav aria-label="CampusX header" className="fixed top-0 left-0 right-0 z-50 glass h-16">
       <div className="container mx-auto px-2 sm:px-4 h-full flex items-center gap-1 sm:gap-2">
-        <Link href="/" className="shrink-0 whitespace-nowrap text-2xl font-bold tracking-tighter gradient-text">
+        <Link href="/" className="shrink-0 whitespace-nowrap text-lg font-bold tracking-tighter gradient-text min-[361px]:text-xl sm:text-2xl">
           CampusX
         </Link>
 
@@ -40,38 +40,45 @@ export function Navbar() {
             </div>
             <div
               aria-label="Main navigation links"
-              className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto overscroll-x-contain whitespace-nowrap px-1"
+              className="flex min-w-0 flex-1 items-center justify-center gap-[2px] overflow-hidden whitespace-nowrap px-0.5 min-[361px]:gap-1 sm:justify-start sm:gap-2"
               role="navigation"
-              tabIndex={0}
             >
               <Link
                 href="/feed"
-                className={`shrink-0 text-sm font-medium transition-colors ${isActive('/feed') ? 'text-primary' : 'text-muted-foreground hover:text-foreground'}`}
+                aria-label="Feed"
+                title="Feed"
+                className={`inline-flex min-w-0 flex-1 basis-0 items-center justify-center gap-1 text-sm font-medium transition-colors sm:flex-none sm:justify-start ${isActive('/feed') ? 'text-primary' : 'text-muted-foreground hover:text-foreground'}`}
               >
-                Feed
+                <Home aria-hidden="true" className="h-[14px] w-[14px] min-[361px]:h-4 min-[361px]:w-4 sm:hidden" />
+                <span className="hidden sm:inline">Feed</span>
               </Link>
               <Link
                 href="/earn"
-                className={`shrink-0 text-sm font-medium transition-colors ${isActive('/earn') ? 'text-primary' : 'text-muted-foreground hover:text-foreground'}`}
+                aria-label="Marketplace"
+                title="Marketplace"
+                className={`inline-flex min-w-0 flex-1 basis-0 items-center justify-center gap-1 text-sm font-medium transition-colors sm:flex-none sm:justify-start ${isActive('/earn') ? 'text-primary' : 'text-muted-foreground hover:text-foreground'}`}
               >
-                Marketplace
+                <ShoppingBag aria-hidden="true" className="h-[14px] w-[14px] min-[361px]:h-4 min-[361px]:w-4 sm:hidden" />
+                <span className="hidden sm:inline">Marketplace</span>
               </Link>
               <Link
                 href="/cgpa"
                 aria-label="CGPA planner"
+                title="CGPA"
                 data-testid="link-cgpa"
-                className={`inline-flex shrink-0 items-center gap-1.5 text-sm font-medium transition-colors ${isActive('/cgpa') ? 'text-primary' : 'text-muted-foreground hover:text-foreground'}`}
+                className={`inline-flex min-w-0 flex-1 basis-0 items-center justify-center gap-1 text-sm font-medium transition-colors sm:flex-none sm:justify-start sm:gap-1.5 ${isActive('/cgpa') ? 'text-primary' : 'text-muted-foreground hover:text-foreground'}`}
               >
-                <Calculator className="h-4 w-4" />
+                <Calculator className="h-[14px] w-[14px] min-[361px]:h-4 min-[361px]:w-4" />
                 <span className="hidden sm:inline">CGPA</span>
               </Link>
 
               <Link
                 href="/messages"
                 aria-label="Direct messages"
-                className={`relative inline-flex shrink-0 items-center gap-1 text-sm font-medium transition-colors ${isActive('/messages') ? 'text-primary' : 'text-muted-foreground hover:text-foreground'}`}
+                title="Direct messages"
+                className={`relative inline-flex min-w-0 flex-1 basis-0 items-center justify-center gap-1 text-sm font-medium transition-colors sm:flex-none sm:justify-start ${isActive('/messages') ? 'text-primary' : 'text-muted-foreground hover:text-foreground'}`}
               >
-                <MessageCircle className="h-4 w-4" />
+                <MessageCircle className="h-[14px] w-[14px] min-[361px]:h-4 min-[361px]:w-4" />
                 <span className="hidden sm:inline">DMs</span>
                 {totalUnread > 0 && (
                   <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[9px] font-bold text-white">
@@ -84,9 +91,10 @@ export function Navbar() {
                 <Link
                   href="/admin"
                   aria-label="Admin"
-                  className={`inline-flex shrink-0 items-center gap-1 text-sm font-medium transition-colors ${isActive('/admin') ? 'text-primary' : 'text-muted-foreground hover:text-foreground'}`}
+                  title="Admin"
+                  className={`inline-flex min-w-0 flex-1 basis-0 items-center justify-center gap-1 text-sm font-medium transition-colors sm:flex-none sm:justify-start ${isActive('/admin') ? 'text-primary' : 'text-muted-foreground hover:text-foreground'}`}
                 >
-                  <Shield className="h-4 w-4" />
+                  <Shield className="h-[14px] w-[14px] min-[361px]:h-4 min-[361px]:w-4" />
                   <span className="hidden sm:inline">Admin</span>
                 </Link>
               )}

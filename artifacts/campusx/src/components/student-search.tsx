@@ -10,6 +10,7 @@ export function StudentSearch() {
   const [debounced, setDebounced] = useState("");
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const resultRefs = useRef<(HTMLAnchorElement | null)[]>([]);
   const term = query.trim();
@@ -26,6 +27,10 @@ export function StudentSearch() {
     document.addEventListener("pointerdown", onPointerDown);
     return () => document.removeEventListener("pointerdown", onPointerDown);
   }, []);
+
+  useEffect(() => {
+    if (open) inputRef.current?.focus();
+  }, [open]);
 
   const search = useSearchStudents(
     { q: debounced },
@@ -48,11 +53,37 @@ export function StudentSearch() {
   };
 
   return (
-    <div ref={rootRef} className="relative min-w-0 shrink">
-      <div className="relative">
-        <Search aria-hidden="true" className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+    <div ref={rootRef} className="relative shrink-0">
+      <button
+        ref={triggerRef}
+        type="button"
+        aria-label={open ? "Close student search" : "Search students"}
+        aria-controls="student-search-panel"
+        aria-expanded={open}
+        title={open ? "Close student search" : "Search students"}
+        onClick={() => {
+          if (open) {
+            setOpen(false);
+            inputRef.current?.blur();
+          } else {
+            setOpen(true);
+          }
+        }}
+        className="flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-background/40 text-muted-foreground transition-colors hover:border-primary/50 hover:bg-background/70 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring min-[361px]:h-9 min-[361px]:w-9"
+      >
+        <Search aria-hidden="true" className="h-4 w-4" />
+      </button>
+
+      {open && (
+        <div
+          id="student-search-panel"
+          className="fixed left-1/2 top-[4.75rem] z-[60] w-[min(92vw,380px)] -translate-x-1/2 space-y-2"
+        >
+          <div className="relative">
+            <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <input
           ref={inputRef}
+          id="student-search-input"
           type="search"
           aria-label="Search students at your school"
           aria-controls="student-search-results"
@@ -62,7 +93,6 @@ export function StudentSearch() {
           maxLength={80}
           value={query}
           placeholder="Find students"
-          onFocus={() => setOpen(true)}
           onChange={(event) => {
             setQuery(event.target.value);
             setOpen(true);
@@ -77,7 +107,7 @@ export function StudentSearch() {
               resultRefs.current[0]?.focus();
             }
           }}
-          className="h-9 w-[104px] sm:w-[190px] lg:w-[240px] rounded-full border border-white/10 bg-background/40 pl-9 pr-8 text-sm text-foreground outline-none placeholder:text-muted-foreground transition-[border-color,background-color] focus:border-primary/50 focus:bg-background/70"
+          className="h-10 w-full rounded-full border border-white/10 bg-card/95 pl-10 pr-10 text-sm text-foreground shadow-xl shadow-black/20 outline-none placeholder:text-muted-foreground backdrop-blur-xl transition-[border-color,background-color] focus:border-primary/50 focus:bg-card"
         />
         {query && (
           <button
@@ -87,7 +117,7 @@ export function StudentSearch() {
               setQuery("");
               inputRef.current?.focus();
             }}
-            className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-full p-1 text-muted-foreground hover:text-foreground"
+            className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-1.5 text-muted-foreground hover:text-foreground"
           >
             <X className="h-3.5 w-3.5" />
           </button>
@@ -100,7 +130,7 @@ export function StudentSearch() {
           role="region"
           aria-label="Student search results"
           aria-live="polite"
-          className="absolute top-[calc(100%+12px)] right-0 z-[60] w-[min(88vw,380px)] max-h-[min(70dvh,440px)] overflow-y-auto rounded-2xl border border-white/10 bg-card/95 p-2 shadow-2xl shadow-black/30 backdrop-blur-xl"
+          className="max-h-[min(70dvh,440px)] overflow-y-auto rounded-2xl border border-white/10 bg-card/95 p-2 shadow-2xl shadow-black/30 backdrop-blur-xl"
         >
           <div className="px-3 py-2 flex items-center justify-between gap-3 border-b border-white/5">
             <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Students at your school</span>
@@ -182,6 +212,8 @@ export function StudentSearch() {
               ))}
             </div>
           )}
+        </div>
+      )}
         </div>
       )}
     </div>
