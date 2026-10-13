@@ -1,4 +1,5 @@
 - [Codegen barrel fix](codegen-barrel-fix.md) — after every `codegen` run, must manually fix both barrels; run `typecheck:libs` after.
+- [Supabase authentication direction](supabase-auth-direction.md) — user chose full auth/data migration; preserve existing account/content links before switching live.
 - [UploadUrlResponse field name](upload-url-fields.md) — generated type uses `uploadURL` (not `signedUrl`) and `objectPath`.
 - [Admin bootstrap authorization](admin-bootstrap.md) — initial CEO claim requires fresh verified designated Clerk email; role flags alone never authorize it.
 - [Barrel split: api-zod vs api-client-react](codegen-barrel-fix.md) — api-zod generated dir has only `api.ts`; api-client-react has `api.ts` + `api.schemas.ts`. Never export `api.schemas` from api-zod barrel.
