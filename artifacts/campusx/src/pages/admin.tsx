@@ -378,7 +378,7 @@ export default function AdminPage() {
   };
 
   return (
-    <div className="container mx-auto px-4 py-6 max-w-5xl">
+    <div className="container mx-auto px-3 sm:px-4 py-6 max-w-5xl">
       {/* Header */}
       <div className="mb-6">
         <div className="flex items-center gap-3 mb-1">
@@ -395,20 +395,23 @@ export default function AdminPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 mb-6 bg-white/5 p-1 rounded-xl w-fit">
+      <div role="tablist" aria-label="Admin tools" className="grid grid-cols-2 gap-1 mb-6 bg-white/5 p-1 rounded-xl sm:flex sm:flex-wrap sm:w-fit">
         {tabs.map((tab) => (
           <button
             key={tab.id}
+            type="button"
+            role="tab"
+            aria-selected={displayedTab === tab.id}
             onClick={() => setActiveTab(tab.id)}
             className={cn(
-              "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all",
+              "flex min-h-11 min-w-0 items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs sm:text-sm font-medium text-left transition-all sm:justify-start sm:px-4",
               displayedTab === tab.id
                 ? "bg-primary/20 text-primary border border-primary/30"
                 : "text-muted-foreground hover:text-foreground hover:bg-white/5"
             )}
           >
-            {tab.icon}
-            {tab.label}
+            <span className="shrink-0">{tab.icon}</span>
+            <span className="min-w-0 leading-tight">{tab.label}</span>
             {tab.id === "verifications" && (pendingData?.users ?? []).length > 0 && (
               <span className="ml-1 h-5 w-5 rounded-full bg-primary text-[10px] font-bold text-white flex items-center justify-center">
                 {(pendingData?.users ?? []).length}
@@ -420,7 +423,7 @@ export default function AdminPage() {
       </div>
       {isAdminOrCEO && displayedTab === "reports" && (
         <section className="space-y-4">
-          <div className="flex items-end justify-between"><div><h2 className="text-lg font-bold">Pending reports</h2><p className="text-sm text-muted-foreground">Review flagged content without exposing private identities.</p></div><span className="text-xs text-muted-foreground">{pendingReports.length} awaiting review</span></div>
+          <div className="flex flex-wrap items-end justify-between gap-2"><div><h2 className="text-lg font-bold">Pending reports</h2><p className="text-sm text-muted-foreground">Review flagged content without exposing private identities.</p></div><span className="text-xs text-muted-foreground">{pendingReports.length} awaiting review</span></div>
           {reportsLoading && [1, 2, 3].map((i) => <Skeleton key={i} className="h-36 rounded-xl" />)}
           {reportsError && <div className="glass border border-rose-500/20 rounded-xl p-6"><p className="text-sm">Could not load reports.</p><Button variant="outline" className="mt-3" onClick={() => refetchReports()}>Try again</Button></div>}
           {!reportsLoading && !reportsError && pendingReports.length === 0 && <div className="glass rounded-2xl border border-white/10 py-16 text-center"><CheckCircle className="h-11 w-11 mx-auto mb-3 text-primary/60" /><p className="font-semibold">Queue is clear</p><p className="text-sm text-muted-foreground mt-1">New reports will appear here.</p></div>}
@@ -428,14 +431,14 @@ export default function AdminPage() {
             <article key={report.id} data-testid={`report-${report.id}`} className="glass rounded-2xl p-5 border border-white/10 space-y-4">
               <div className="flex flex-wrap items-start justify-between gap-3"><div className="min-w-0"><div className="flex items-center gap-2"><Badge className="bg-rose-500/10 text-rose-300 border border-rose-500/20">{report.postId != null ? "Post" : "Listing"}</Badge><span className="text-xs text-muted-foreground">Report #{report.id}</span></div><h3 className="font-semibold mt-2 break-words line-clamp-2">{report.targetTitle || "Content unavailable"}</h3></div><time className="text-xs text-muted-foreground" dateTime={report.createdAt}>{new Date(report.createdAt).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })}</time></div>
               <p className="text-sm"><span className="text-muted-foreground">Reason:</span> {report.reason}</p>
-              <div className="flex flex-wrap gap-2 border-t border-white/10 pt-4"><Button size="sm" variant="outline" disabled={reviewReport.isPending} onClick={() => review(report, "dismissed")}>Dismiss</Button><Button size="sm" variant="outline" disabled={reviewReport.isPending} onClick={() => review(report, "reviewed")}>Mark reviewed</Button><Button size="sm" className="bg-rose-600 hover:bg-rose-500 text-white" onClick={() => setDeleteTarget(report)}><Trash2 className="h-3.5 w-3.5 mr-1" />Delete {report.postId != null ? "post" : "listing"}</Button></div>
+              <div className="grid gap-2 border-t border-white/10 pt-4 sm:flex sm:flex-wrap [&>button]:min-h-10"><Button size="sm" variant="outline" disabled={reviewReport.isPending} onClick={() => review(report, "dismissed")}>Dismiss</Button><Button size="sm" variant="outline" disabled={reviewReport.isPending} onClick={() => review(report, "reviewed")}>Mark reviewed</Button><Button size="sm" className="bg-rose-600 hover:bg-rose-500 text-white" onClick={() => setDeleteTarget(report)}><Trash2 className="h-3.5 w-3.5 mr-1" />Delete {report.postId != null ? "post" : "listing"}</Button></div>
             </article>
           ))}
         </section>
       )}
       {isAdminOrCEO && displayedTab === "claims" && (
         <section className="space-y-4">
-          <div className="flex items-end justify-between gap-3">
+          <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
               <h2 className="text-lg font-bold">Matric fraud claims</h2>
               <p className="text-sm text-muted-foreground">Review private evidence. Decisions are recorded without transferring or editing accounts.</p>
@@ -456,8 +459,8 @@ export default function AdminPage() {
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <div className="flex items-center gap-2"><Badge className="bg-amber-500/10 text-amber-300 border border-amber-500/20">Pending</Badge><span className="text-xs text-muted-foreground">Claim #{claim.id}</span></div>
-                  <h3 className="mt-2 font-semibold">{claim.institution}</h3>
-                  <p className="text-sm text-muted-foreground">Matric <span className="font-mono text-foreground">{claim.matricNumber}</span> · Existing account #{claim.existingAccountId}</p>
+                  <h3 className="mt-2 font-semibold break-words">{claim.institution}</h3>
+                  <p className="text-sm text-muted-foreground break-words">Matric <span className="font-mono text-foreground break-all">{claim.matricNumber}</span> · Existing account #{claim.existingAccountId}</p>
                   <p className="mt-1 text-xs text-muted-foreground">Submitted proof: {claim.evidenceType === "student-id" ? "Student ID" : "Course form"}</p>
                 </div>
                 <time className="text-xs text-muted-foreground" dateTime={claim.createdAt}>{new Date(claim.createdAt).toLocaleString()}</time>
@@ -479,7 +482,7 @@ export default function AdminPage() {
                   className="bg-background/40 border-white/10"
                 />
               </div>
-              <div className="flex justify-end gap-2 border-t border-white/10 pt-4">
+              <div className="flex flex-col-reverse gap-2 border-t border-white/10 pt-4 sm:flex-row sm:justify-end [&>button]:min-h-11">
                 <Button type="button" variant="outline" className="border-rose-500/30 text-rose-300 hover:bg-rose-500/10" disabled={claimActionId === claim.id} onClick={() => void resolveMatricClaim(claim, "rejected")}>Reject review</Button>
                 <Button type="button" className="bg-emerald-600 hover:bg-emerald-500 text-white" disabled={claimActionId === claim.id} onClick={() => void resolveMatricClaim(claim, "approved")}>Approve review</Button>
               </div>
@@ -489,7 +492,7 @@ export default function AdminPage() {
       )}
       {isAdminOrCEO && displayedTab === "ads" && (
         <section className="space-y-4">
-          <div className="flex items-end justify-between gap-3">
+          <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
               <h2 className="text-lg font-bold">Ad campaign moderation</h2>
               <p className="text-sm text-muted-foreground">Review paid campaigns. Nothing is published until you explicitly approve it.</p>
@@ -533,7 +536,7 @@ export default function AdminPage() {
                   className="bg-background/40 border-white/10"
                 />
               </div>
-              <div className="flex justify-end gap-2 border-t border-white/10 pt-4">
+              <div className="flex flex-col-reverse gap-2 border-t border-white/10 pt-4 sm:flex-row sm:justify-end [&>button]:min-h-11">
                 <Button type="button" variant="outline" className="border-rose-500/30 text-rose-300 hover:bg-rose-500/10" disabled={adDecisionId === campaign.id} onClick={() => void decideAdCampaign(campaign, "rejected")}>Reject</Button>
                 <Button type="button" className="bg-emerald-600 hover:bg-emerald-500 text-white" disabled={adDecisionId === campaign.id} onClick={() => void decideAdCampaign(campaign, "approved")}>Approve &amp; publish</Button>
               </div>
@@ -542,7 +545,7 @@ export default function AdminPage() {
         </section>
       )}
       <Dialog open={!!deleteTarget} onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}>
-        <DialogContent className="glass border-rose-500/20 sm:max-w-sm"><DialogTitle>Remove reported content?</DialogTitle><p className="text-sm text-muted-foreground">This permanently deletes the {deleteTarget?.postId != null ? "post" : "listing"} and its associated reports. This cannot be undone.</p><div className="flex gap-2 justify-end"><Button variant="outline" onClick={() => setDeleteTarget(null)}>Cancel</Button><Button data-testid="button-confirm-delete-reported" disabled={deletePost.isPending || deleteService.isPending} className="bg-rose-600 hover:bg-rose-500 text-white" onClick={removeReportedContent}>Delete content</Button></div></DialogContent>
+        <DialogContent className="glass border-rose-500/20 sm:max-w-sm"><DialogTitle>Remove reported content?</DialogTitle><p className="text-sm text-muted-foreground">This permanently deletes the {deleteTarget?.postId != null ? "post" : "listing"} and its associated reports. This cannot be undone.</p><div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end"><Button variant="outline" onClick={() => setDeleteTarget(null)}>Cancel</Button><Button data-testid="button-confirm-delete-reported" disabled={deletePost.isPending || deleteService.isPending} className="bg-rose-600 hover:bg-rose-500 text-white" onClick={removeReportedContent}>Delete content</Button></div></DialogContent>
       </Dialog>
 
       {displayedTab === "posts" && (
@@ -560,13 +563,13 @@ export default function AdminPage() {
       {activeTab === "users" && isAdminOrCEO && (
         <div>
           {/* Search */}
-          <div className="relative mb-4 max-w-xs">
+          <div className="relative mb-4 w-full sm:max-w-xs">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
               placeholder="Search name, matric or email..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="pl-9 bg-background/40 border-white/10 focus:border-primary/40"
+              className="h-11 pl-9 bg-background/40 border-white/10 focus:border-primary/40"
             />
           </div>
 
@@ -590,7 +593,7 @@ export default function AdminPage() {
                     </AvatarFallback>
                   </Avatar>
 
-                  <div className="flex-1 min-w-[160px]">
+                  <div className="flex-1 min-w-0 basis-[calc(100%-3.5rem)] sm:basis-auto sm:min-w-[160px]">
                     <div className="flex items-center gap-1.5 flex-wrap">
                       <span className="font-semibold text-sm truncate">{u.fullName}</span>
                     </div>
@@ -603,13 +606,13 @@ export default function AdminPage() {
                     </div>
                   </div>
 
-                  <div className="shrink-0">
+                  <div className="flex-1 sm:flex-none">
                     <Select
                       value={u.role}
                       onValueChange={(val) => handleRoleChange(u.clerkUserId, val)}
                       disabled={updateRole.isPending || !isCEO}
                     >
-                      <SelectTrigger className={cn("h-8 text-xs w-32 border", ROLE_COLORS[u.role] ?? "border-white/10")}>
+                      <SelectTrigger className={cn("h-10 text-xs w-full sm:w-32 border", ROLE_COLORS[u.role] ?? "border-white/10")}>
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent className="glass border-white/10">
@@ -628,7 +631,7 @@ export default function AdminPage() {
                         size="sm"
                         variant="outline"
                         className={cn(
-                          "h-8 text-[11px] shrink-0",
+                          "h-10 text-[11px] flex-1 sm:flex-none",
                           protectedAccount
                             ? "border-amber-500/30 text-amber-300"
                             : verified
@@ -677,7 +680,7 @@ export default function AdminPage() {
                   key={u.clerkUserId}
                   initial={{ opacity: 0, y: 6 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className="glass rounded-xl p-5 flex items-center gap-4 border border-white/5"
+                  className="glass rounded-xl p-4 sm:p-5 flex flex-wrap items-center gap-3 sm:gap-4 border border-white/5"
                 >
                   <Avatar className="h-12 w-12 border border-white/10 shrink-0">
                     <AvatarImage src={u.avatarUrl ?? undefined} />
@@ -686,9 +689,9 @@ export default function AdminPage() {
                     </AvatarFallback>
                   </Avatar>
 
-                  <div className="flex-1 min-w-0">
+                  <div className="flex-1 min-w-0 basis-[calc(100%-4rem)] sm:basis-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-bold text-base">{u.fullName}</span>
+                      <span className="font-bold text-base break-words">{u.fullName}</span>
                       <Badge className={cn(
                         "text-[10px] px-2 py-0.5 h-5 border font-semibold",
                         u.badgeType.includes("Paid")
@@ -708,7 +711,7 @@ export default function AdminPage() {
                   </div>
 
                   <Button
-                    className="shrink-0 h-9 px-4 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 border border-emerald-500/30 text-xs font-bold gap-1.5"
+                    className="flex-1 sm:flex-none min-h-11 sm:min-h-9 h-auto whitespace-normal px-4 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 border border-emerald-500/30 text-xs font-bold gap-1.5"
                     onClick={() => handleApprove(u.clerkUserId)}
                     disabled={approveBadge.isPending}
                   >
@@ -717,7 +720,7 @@ export default function AdminPage() {
                   </Button>
                   <Button
                     variant="outline"
-                    className="shrink-0 h-9 px-3 border-rose-500/30 text-rose-300 hover:bg-rose-500/10 text-xs font-bold"
+                    className="flex-1 sm:flex-none min-h-11 sm:min-h-9 h-auto px-3 border-rose-500/30 text-rose-300 hover:bg-rose-500/10 text-xs font-bold"
                     onClick={() => handleReject(u.clerkUserId)}
                     disabled={rejectBadge.isPending}
                   >

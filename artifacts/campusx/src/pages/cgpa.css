@@ -71,6 +71,8 @@
 .cgpa-skeleton { background:linear-gradient(90deg,#211c28,#312631,#211c28); background-size:200% 100%; animation:cgpa-pulse 1.5s ease-in-out infinite; border-radius:9px; }
 @keyframes cgpa-pulse { to { background-position:-200% 0; } }
 @media(max-width:800px) { .cgpa-grid,.cgpa-bottom { grid-template-columns:1fr; } .cgpa-result { min-height:290px; } }
+@media(max-width:520px) { .cgpa-course-row { grid-template-columns:minmax(0,1fr) minmax(0,1fr) 44px !important; gap:10px !important; padding:12px; border:1px solid var(--cgpa-line); border-radius:12px; } .cgpa-course-row .cgpa-field:first-child { grid-column:1 / -1; } .cgpa-remove { width:44px !important; height:44px; } .cgpa-course-row .cgpa-input, .cgpa-course-row .cgpa-select, .cgpa-input, .cgpa-select { height:44px; font-size:16px; } .cgpa-add { min-height:44px; } .cgpa-projection strong { font-size:26px; } .cgpa-topline { flex-wrap:wrap; } }
+@media(max-width:340px) { .cgpa-field-grid, .cgpa-projection { grid-template-columns:1fr; } .cgpa-metric { font-size:54px; } }
 @media(max-width:520px) { .cgpa-page { width:calc(100% - 28px); padding:30px 0 70px; } .cgpa-panel-pad,.cgpa-result { padding:22px; } .cgpa-result:before { left:22px; right:22px; } .cgpa-field-grid { gap:13px; } .cgpa-course-head { flex-wrap:wrap; } .cgpa-course-row { grid-template-columns:minmax(0,1.3fr) 70px 80px 32px; gap:6px; } .cgpa-remove { width:32px; } .cgpa-course-row .cgpa-input { padding:0 8px; } }
 
 :root:not(.dark) .cgpa-page {

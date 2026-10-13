@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Bell, CheckCheck } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useNotifications } from "@/context/notifications";
@@ -16,6 +16,29 @@ export function NotificationBell() {
   const { notifications, unreadCount, markRead, isLoading } = useNotifications();
   const [open, setOpen] = useState(false);
   const [, setLocation] = useLocation();
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const panelContainerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setOpen(false);
+        triggerRef.current?.focus();
+      }
+    };
+    const closeOnOutsidePress = (event: PointerEvent) => {
+      if (event.target instanceof Node && !panelContainerRef.current?.contains(event.target)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("keydown", closeOnEscape);
+    document.addEventListener("pointerdown", closeOnOutsidePress, true);
+    return () => {
+      document.removeEventListener("keydown", closeOnEscape);
+      document.removeEventListener("pointerdown", closeOnOutsidePress, true);
+    };
+  }, [open]);
 
   const toggle = () => {
     setOpen((v) => !v);
@@ -39,11 +62,15 @@ export function NotificationBell() {
   };
 
   return (
-    <div className="relative">
+    <div ref={panelContainerRef} className="relative">
       <button
+        ref={triggerRef}
+        type="button"
         onClick={toggle}
         aria-label="Notifications"
-        className="relative h-9 w-9 rounded-full flex items-center justify-center border border-white/10 hover:border-primary/40 transition-colors bg-white/5 hover:bg-white/10"
+        aria-expanded={open}
+        aria-controls={open ? "notification-panel" : undefined}
+        className={cn("relative h-10 w-10 rounded-full flex items-center justify-center border border-white/10 hover:border-primary/40 transition-colors bg-white/5 hover:bg-white/10", open && "z-50")}
       >
         <Bell className="h-4 w-4 text-muted-foreground" />
         {unreadCount > 0 && (
@@ -60,15 +87,15 @@ export function NotificationBell() {
       <AnimatePresence>
         {open && (
           <>
-            {/* backdrop */}
-            <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-
             <motion.div
+              id="notification-panel"
+              role="region"
+              aria-label="Notifications"
               initial={{ opacity: 0, y: -8, scale: 0.96 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: -8, scale: 0.96 }}
               transition={{ duration: 0.15 }}
-              className="absolute right-0 top-11 z-50 w-80 max-w-[calc(100vw-2rem)] glass rounded-2xl border border-white/10 shadow-2xl shadow-black/40 overflow-hidden"
+              className="absolute right-0 top-11 z-50 w-80 max-w-[calc(100vw-2rem)] rounded-2xl border border-border bg-popover text-popover-foreground shadow-2xl shadow-black/40 overflow-hidden"
             >
               {/* Header */}
               <div className="flex items-center justify-between px-4 py-3 border-b border-white/5">
@@ -86,7 +113,7 @@ export function NotificationBell() {
               </div>
 
               {/* List */}
-              <div className="max-h-96 overflow-y-auto">
+              <div className="max-h-[min(24rem,calc(100dvh-8rem))] overflow-y-auto overscroll-contain">
                 {isLoading && notifications.length === 0 ? (
                   <div className="py-10 text-center text-sm text-muted-foreground">Loading notifications…</div>
                 ) : notifications.length === 0 ? (

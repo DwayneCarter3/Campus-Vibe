@@ -268,8 +268,10 @@ export default function EarnPage() {
         />
         {search && (
           <button
+            type="button"
+            aria-label="Clear search"
             onClick={() => setSearch("")}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+            className="absolute right-1 top-1/2 flex h-9 w-9 items-center justify-center -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
           >
             <X className="h-4 w-4" />
           </button>
@@ -278,8 +280,7 @@ export default function EarnPage() {
 
       {/* Category Tabs */}
       <div
-        className="flex gap-2 overflow-x-auto pb-2 mb-5"
-        style={{ scrollbarWidth: "none" }}
+        className="flex flex-wrap gap-2 pb-2 mb-5"
       >
         {FILTER_TABS.map((tab) => {
           const isActive = activeTab === tab.id;
@@ -289,7 +290,7 @@ export default function EarnPage() {
               data-testid={`tab-${tab.id ?? "all"}`}
               onClick={() => setActiveTab(tab.id)}
               className={cn(
-                "flex items-center gap-1.5 px-4 py-2 rounded-full border text-sm font-medium whitespace-nowrap transition-all shrink-0",
+                "flex min-h-10 items-center gap-1.5 px-4 py-2 rounded-full border text-sm font-medium whitespace-nowrap transition-all shrink-0",
                 isActive
                   ? "bg-primary text-primary-foreground border-primary shadow-md shadow-primary/25"
                   : "bg-white/5 border-white/10 text-muted-foreground hover:border-primary/30 hover:text-foreground"
@@ -300,7 +301,7 @@ export default function EarnPage() {
             </button>
           );
         })}
-        <button data-testid="tab-saved" onClick={() => { if (!profile) { setLocation("/sign-in"); return; } setActiveTab("saved"); }} className={cn("flex items-center gap-1.5 px-4 py-2 rounded-full border text-sm font-medium whitespace-nowrap transition-all shrink-0", activeTab === "saved" ? "bg-primary text-primary-foreground border-primary" : "bg-white/5 border-white/10 text-muted-foreground hover:border-primary/30 hover:text-foreground")}><Bookmark className="h-4 w-4" /> Saved listings</button>
+        <button data-testid="tab-saved" onClick={() => { if (!profile) { setLocation("/sign-in"); return; } setActiveTab("saved"); }} className={cn("flex min-h-10 items-center gap-1.5 px-4 py-2 rounded-full border text-sm font-medium whitespace-nowrap transition-all shrink-0", activeTab === "saved" ? "bg-primary text-primary-foreground border-primary" : "bg-white/5 border-white/10 text-muted-foreground hover:border-primary/30 hover:text-foreground")}><Bookmark className="h-4 w-4" /> Saved listings</button>
       </div>
 
       {/* Result count */}
@@ -377,7 +378,7 @@ export default function EarnPage() {
         whileTap={{ scale: 0.95 }}
         onClick={handleFabClick}
         data-testid="btn-fab-post"
-        className="fixed bottom-20 right-5 z-40 h-14 w-14 rounded-full gradient-btn flex items-center justify-center shadow-xl shadow-primary/30"
+        className="fixed bottom-[calc(1.25rem+env(safe-area-inset-bottom))] right-4 sm:bottom-20 sm:right-5 z-40 h-14 w-14 rounded-full gradient-btn flex items-center justify-center shadow-xl shadow-primary/30"
         aria-label="Post a hustle"
       >
         <Plus className="h-6 w-6" />
@@ -385,7 +386,7 @@ export default function EarnPage() {
 
       {/* Verification Prompt Dialog */}
       <Dialog open={dialogMode === "verify"} onOpenChange={(o) => !o && setDialogMode(null)}>
-        <DialogContent className="sm:max-w-[420px] glass border-amber-500/20 p-0 overflow-hidden">
+        <DialogContent className="sm:max-w-[420px] glass border-amber-500/20 p-0">
           <div className="bg-gradient-to-br from-amber-500/10 to-transparent p-6 border-b border-white/5">
             <DialogHeader>
               <div className="flex items-center gap-3 mb-2">
@@ -417,8 +418,8 @@ export default function EarnPage() {
 
       {/* Post Hustle Form Dialog */}
       <Dialog open={dialogMode === "form"} onOpenChange={(o) => !o && setDialogMode(null)}>
-        <DialogContent className="sm:max-w-[520px] glass border-primary/20 p-0 overflow-hidden">
-          <div className="bg-gradient-to-br from-primary/10 to-transparent p-6 border-b border-white/5">
+        <DialogContent className="sm:max-w-[520px] glass border-primary/20 p-0">
+          <div className="bg-gradient-to-br from-primary/10 to-transparent p-4 pr-12 sm:p-6 sm:pr-12 border-b border-white/5">
             <DialogHeader>
               <DialogTitle className="text-xl font-bold gradient-text">Post Your Hustle 🚀</DialogTitle>
               <p className="text-sm text-muted-foreground mt-1">
@@ -427,14 +428,14 @@ export default function EarnPage() {
             </DialogHeader>
           </div>
 
-          <div className="p-6 overflow-y-auto max-h-[70vh]">
+          <div className="p-4 sm:p-6">
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
 
                 <div className="space-y-2">
                   <span className="text-sm font-medium">Listing photo <span className="text-xs text-muted-foreground">optional · WebP under 80 KB</span></span>
                   <input ref={listingImageInput} type="file" accept="image/*" className="hidden" onChange={(event) => { void selectListingImage(event.target.files?.[0]); event.target.value = ""; }} />
-                  <div className="flex items-center gap-3">
+                  <div className="flex flex-wrap items-center gap-3">
                     <Button type="button" variant="outline" disabled={imageUploading} onClick={() => listingImageInput.current?.click()}><ImagePlus className="mr-2 h-4 w-4" />{imageUploading ? "Compressing…" : "Choose photo"}</Button>
                     {imageUploading && <Loader2 className="h-4 w-4 animate-spin text-primary" />}
                     {listingImage && <button type="button" onClick={() => setListingImage(null)} className="text-xs text-muted-foreground hover:text-foreground">Remove photo</button>}
@@ -459,7 +460,7 @@ export default function EarnPage() {
                 )} />
 
                 {/* Price + Category row */}
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 gap-3 min-[420px]:grid-cols-2">
                   <FormField control={form.control} name="price" render={({ field }) => (
                     <FormItem>
                       <FormLabel className="text-sm font-medium">Price (₦) <span className="text-muted-foreground text-xs">optional</span></FormLabel>

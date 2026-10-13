@@ -322,7 +322,7 @@ export function ServiceCard({ service, index = 0, currentUserId, directView = fa
 
       {/* Safety Warning Modal */}
       <Dialog open={showWarning} onOpenChange={setShowWarning}>
-        <DialogContent className="max-w-sm mx-4 bg-[#1a1008] border-2 border-orange-500 rounded-2xl p-0 overflow-hidden shadow-2xl shadow-orange-500/20 gap-0">
+        <DialogContent className="max-w-sm bg-[#1a1008] border-2 border-orange-500 rounded-2xl p-0 shadow-2xl shadow-orange-500/20 gap-0">
           <div className="bg-orange-500 px-5 py-4 flex items-center gap-3">
             <AlertTriangle className="h-6 w-6 text-white shrink-0" strokeWidth={2.5} />
             <DialogTitle className="text-white font-black text-base tracking-wide uppercase leading-tight">
@@ -359,7 +359,7 @@ export function ServiceCard({ service, index = 0, currentUserId, directView = fa
             <div className="space-y-2">
               <span className="text-sm font-medium">Listing photo <span className="text-xs text-muted-foreground">optional · WebP under 80 KB</span></span>
               <input ref={editImageInput} type="file" accept="image/*" className="hidden" onChange={(event) => { void selectEditImage(event.target.files?.[0]); event.target.value = ""; }} />
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center gap-3">
                 <Button type="button" variant="outline" disabled={imageUploading} onClick={() => editImageInput.current?.click()}><ImagePlus className="mr-2 h-4 w-4" />{imageUploading ? "Compressing…" : draft.imageUrl ? "Replace photo" : "Choose photo"}</Button>
                 {imageUploading && <Loader2 className="h-4 w-4 animate-spin text-primary" />}
                 {draft.imageUrl && <button type="button" className="text-xs text-muted-foreground hover:text-foreground" onClick={() => setDraft((current) => ({ ...current, imageUrl: "", blurDataUrl: "" }))}>Remove photo</button>}
@@ -379,7 +379,7 @@ export function ServiceCard({ service, index = 0, currentUserId, directView = fa
         <DialogContent className="glass border-rose-500/20 sm:max-w-sm">
           <DialogTitle>Delete this listing?</DialogTitle>
           <p className="text-sm text-muted-foreground">“{service.title}” will be permanently removed. This cannot be undone.</p>
-          <div className="flex justify-end gap-2"><Button variant="outline" onClick={() => setDialog(null)}>Cancel</Button><Button data-testid={`button-confirm-delete-listing-${service.id}`} disabled={busy} className="bg-rose-600 hover:bg-rose-500 text-white" onClick={() => deleteService.mutate({ serviceId: service.id }, { onSuccess: () => { setDialog(null); refresh(); toast({ title: "Listing deleted" }); }, onError: failed })}>{deleteService.isPending ? "Deleting…" : "Delete listing"}</Button></div>
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end"><Button variant="outline" onClick={() => setDialog(null)}>Cancel</Button><Button data-testid={`button-confirm-delete-listing-${service.id}`} disabled={busy} className="bg-rose-600 hover:bg-rose-500 text-white" onClick={() => deleteService.mutate({ serviceId: service.id }, { onSuccess: () => { setDialog(null); refresh(); toast({ title: "Listing deleted" }); }, onError: failed })}>{deleteService.isPending ? "Deleting…" : "Delete listing"}</Button></div>
         </DialogContent>
       </Dialog>
       <Dialog open={dialog === "report"} onOpenChange={(open) => !open && setDialog(null)}>

@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { NotificationBell } from "@/components/notification-bell";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { StudentSearch } from "@/components/student-search";
+import { MobileNavDrawer } from "@/components/mobile-nav-drawer";
 import { Calculator, Home, MessageCircle, Shield, ShoppingBag } from "lucide-react";
 import { useGetMyProfile, getGetMyProfileQueryKey, useListConversations, getListConversationsQueryKey } from "@workspace/api-client-react";
 
@@ -40,7 +41,7 @@ export function Navbar() {
             </div>
             <div
               aria-label="Main navigation links"
-              className="flex min-w-0 flex-1 items-center justify-center gap-[2px] overflow-hidden whitespace-nowrap px-0.5 min-[361px]:gap-1 sm:justify-start sm:gap-2"
+              className="hidden min-w-0 flex-1 items-center justify-start gap-2 whitespace-nowrap px-0.5 md:flex"
               role="navigation"
             >
               <Link
@@ -81,7 +82,7 @@ export function Navbar() {
                 <MessageCircle className="h-[14px] w-[14px] min-[361px]:h-4 min-[361px]:w-4" />
                 <span className="hidden sm:inline">DMs</span>
                 {totalUnread > 0 && (
-                  <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[9px] font-bold text-white">
+                  <span className="flex h-4 min-w-4 shrink-0 items-center justify-center rounded-full bg-primary px-1 text-[9px] font-bold text-white">
                     {totalUnread > 9 ? "9+" : totalUnread}
                   </span>
                 )}
@@ -100,11 +101,21 @@ export function Navbar() {
               )}
             </div>
 
-            <div className="flex shrink-0 items-center gap-1">
+            <div className="ml-auto flex shrink-0 items-center gap-1 md:ml-0">
               <NotificationBell />
-              <ThemeToggle />
+              <div className="hidden md:block"><ThemeToggle /></div>
+              <div className="md:hidden">
+                <MobileNavDrawer
+                  isActive={isActive}
+                  showAdmin={!!isAdminOrAbove}
+                  totalUnread={totalUnread}
+                  avatarUrl={avatarUrl}
+                  displayName={profile?.fullName || user?.fullName || "Your profile"}
+                  initial={user?.firstName?.charAt(0) || "U"}
+                />
+              </div>
 
-              <Link href="/profile" aria-label="Your profile">
+              <Link href="/profile" aria-label="Your profile" className="hidden md:block">
                 <Avatar className="h-8 w-8 border border-primary/20 transition-colors hover:border-primary/50">
                   <AvatarImage src={avatarUrl ?? undefined} />
                   <AvatarFallback className="bg-secondary text-xs">{user?.firstName?.charAt(0) || 'U'}</AvatarFallback>

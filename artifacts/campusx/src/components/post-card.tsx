@@ -580,7 +580,7 @@ export function PostCard({ post, isAdmin, isModerator, moderationMode = false, o
 
         {/* Reshare Dialog */}
         <Dialog open={reshareOpen} onOpenChange={setReshareOpen}>
-          <DialogContent className="sm:max-w-[480px] glass border-primary/20 p-0 overflow-hidden">
+          <DialogContent className="sm:max-w-[480px] glass border-primary/20 p-0">
             <div className="bg-gradient-to-br from-primary/10 to-transparent p-5 border-b border-white/5">
               <DialogHeader>
                 <DialogTitle className="gradient-text font-bold flex items-center gap-2">

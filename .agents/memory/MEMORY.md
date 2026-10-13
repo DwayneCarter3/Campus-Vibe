@@ -25,3 +25,4 @@
 - [Private academic plans](private-academic-plans.md) — keep student academic planning data behind self-only session identity, not profile or admin lookups.
 - [Image upload rollout](image-upload-rollout.md) — new image receipts are verified WebP, but owner-verified older post receipts need compatibility during client rollout.
 - [Chat delivery vs AI reply](chat-delivery-vs-ai.md) — a WAZOBIA provider outage must not discard or misreport a student's outgoing message.
+- [Responsive management parity](responsive-management-parity.md) — phones and tablets must retain desktop management tools, including Admin, CGPA, and Marketplace.
