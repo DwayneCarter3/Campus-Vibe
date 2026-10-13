@@ -1,5 +1,5 @@
 import { Feather } from "@expo/vector-icons";
-import { useUser } from "@clerk/expo";
+import { useUser } from "@/lib/auth";
 import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
@@ -220,7 +220,7 @@ export default function OnboardingScreen() {
           faculty,
           enrollmentStatus,
           matricNumber: cleanMatric,
-          // Email is intentionally omitted: the API reads the verified primary email from Clerk.
+          // Email is intentionally omitted: the API reads the verified primary email from the signed-in session.
         },
       });
       queryClient.setQueryData(getGetMyProfileQueryKey(), profile);
@@ -278,7 +278,7 @@ export default function OnboardingScreen() {
             <Text style={[styles.label, { color: colors.mutedForeground }]}>Email address</Text>
             <View style={[styles.readOnly, { backgroundColor: colors.surface, borderColor: colors.border }]}>
               <Text numberOfLines={1} style={[styles.readOnlyText, { color: colors.mutedForeground }]}>
-                {user?.primaryEmailAddress?.emailAddress ?? "Verified by Clerk"}
+                {user?.primaryEmailAddress?.emailAddress ?? "Verified email"}
               </Text>
               <Feather name="lock" size={15} color={colors.mutedForeground} />
             </View>
@@ -365,7 +365,7 @@ export default function OnboardingScreen() {
           </Pressable>
         </View>
         <Text style={[styles.privacyNote, { color: colors.mutedForeground }]}>
-          By continuing, you confirm these details are accurate. Your email is verified directly with Clerk.
+          By continuing, you confirm these details are accurate. Your email is verified with your CampusX account.
         </Text>
       </KeyboardAwareScrollViewCompat>
     </View>

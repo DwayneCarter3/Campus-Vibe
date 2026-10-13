@@ -9,7 +9,7 @@ import { ObjectPermission } from "../lib/objectAcl";
 import { db, matricClaimsTable, uploadedMediaTable } from "@workspace/db";
 import { and, eq } from "drizzle-orm";
 import { requireAuth } from "../middlewares/auth";
-import { getAuth } from "@clerk/express";
+import { getAuth } from "../lib/auth-identity";
 import { hasAdminPrivileges } from "../lib/privilege";
 
 const router: IRouter = Router();

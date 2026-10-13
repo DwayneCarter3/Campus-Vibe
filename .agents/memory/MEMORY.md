@@ -1,10 +1,10 @@
 - [Codegen barrel fix](codegen-barrel-fix.md) — after every `codegen` run, must manually fix both barrels; run `typecheck:libs` after.
 - [Supabase authentication direction](supabase-auth-direction.md) — user chose full auth/data migration; preserve existing account/content links before switching live.
 - [UploadUrlResponse field name](upload-url-fields.md) — generated type uses `uploadURL` (not `signedUrl`) and `objectPath`.
-- [Admin bootstrap authorization](admin-bootstrap.md) — initial CEO claim requires fresh verified designated Clerk email; role flags alone never authorize it.
+- [Admin bootstrap authorization](admin-bootstrap.md) — initial CEO claim requires verified designated identity; role flags alone never authorize it.
 - [Barrel split: api-zod vs api-client-react](codegen-barrel-fix.md) — api-zod generated dir has only `api.ts`; api-client-react has `api.ts` + `api.schemas.ts`. Never export `api.schemas` from api-zod barrel.
-- [Campus titles + role system](campus-roles.md) — computeCampusTitle in admin.ts, imported by users.ts and posts.ts; CEO_EMAIL env auto-upgrades on login; role values: ceo/admin/moderator/student.
-- [CEO authorization](ceo-authorization.md) — privileged CEO requests must check a fresh verified Clerk primary email, not a stale stored address or role.
+- [CEO authorization](ceo-authorization.md) — permanent founder access uses verified Supabase identity; editable aliases never prove ownership.
+- [PostgreSQL schema export](postgres-schema-export.md) — Drizzle export can truncate semicolons inside quoted CHECK expressions; use native PostgreSQL exports for migrations.
 - [System DM actors](system-dm-actors.md) — automation in DMs should use a reserved actor, never a fabricated student/Clerk account.
 - [Gemini model availability](gemini-model-availability.md) — model listing alone does not prove generateContent works; probe a candidate before relying on it.
 - [Dispatch actor and audience](dispatch-audience.md) — one reserved bot identity and explicit institution-wide targets keep news separate from student campus posts.

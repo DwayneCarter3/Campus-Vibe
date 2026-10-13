@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { Show, useUser } from "@clerk/react";
+import { Show, useUser } from "@/lib/auth";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { NotificationBell } from "@/components/notification-bell";

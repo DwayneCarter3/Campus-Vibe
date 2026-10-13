@@ -1,4 +1,3 @@
-import { useSignIn, useSignUp, useAuth } from "@clerk/expo";
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
@@ -16,63 +15,48 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { useAuth } from "@/lib/auth";
 import { useColors } from "@/hooks/useColors";
 
-type Mode = "signIn" | "signUp" | "verify";
+type Mode = "signIn" | "signUp" | "confirm" | "forgot";
 
 export default function SignInScreen() {
   const colors = useColors();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { isSignedIn } = useAuth();
-
-  const { signIn, fetchStatus: signInFetchStatus } = useSignIn();
-  const { signUp, fetchStatus: signUpFetchStatus } = useSignUp();
+  const { isSignedIn, signIn, signUp, requestPasswordReset } = useAuth();
 
   const [mode, setMode] = useState<Mode>("signIn");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
-  const [verifyCode, setVerifyCode] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const authLoading = signInFetchStatus === "fetching" || signUpFetchStatus === "fetching";
 
   useEffect(() => {
     if (isSignedIn) router.replace("/(tabs)");
   }, [isSignedIn]);
 
   const isWeb = Platform.OS === "web";
-  const topPad = isWeb ? 24 : insets.top;
+  const topPad = isWeb ? 67 : insets.top;
+
+  const fail = (err: unknown, fallback: string) => {
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    setError(err instanceof Error && err.message ? err.message : fallback);
+  };
 
   const handleSignIn = async () => {
     if (!email.trim() || !password) return;
     setLoading(true);
     setError("");
     try {
-      const { error: signInError } = await signIn.password({
-        emailAddress: email.trim(),
-        password,
-      });
-      if (signInError) throw signInError;
-      if (signIn.status === "complete") {
-        await signIn.finalize({
-          navigate: ({ session }) => {
-            if (session?.currentTask) return;
-            router.replace("/(tabs)");
-          },
-        });
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      } else if (signIn.status === "needs_second_factor" || signIn.status === "needs_client_trust") {
-        setError("Your account needs an additional verification step. Please use the web app to finish signing in.");
-      } else {
-        setError("Sign-in incomplete. Please try again.");
-      }
-    } catch (err: any) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      const msg = err?.longMessage || err?.message || "Sign-in failed. Check your details.";
-      setError(msg);
+      const r = await signIn(email.trim(), password);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      router.replace(r.needsOnboarding ? "/onboarding" : "/(tabs)");
+    } catch (err) {
+      fail(err, "Sign-in failed. Check your details.");
     } finally {
       setLoading(false);
     }
@@ -80,54 +64,33 @@ export default function SignInScreen() {
 
   const handleSignUp = async () => {
     if (!email.trim() || !password || !fullName.trim()) return;
+    if (password.length < 8) {
+      setError("Use at least 8 characters for your password.");
+      return;
+    }
     setLoading(true);
     setError("");
     try {
-      const [firstName, ...lastName] = fullName.trim().split(/\s+/);
-      const { error: signUpError } = await signUp.password({
-        emailAddress: email.trim(),
-        password,
-        firstName,
-        lastName: lastName.join(" ") || undefined,
-      });
-      if (signUpError) throw signUpError;
-      const { error: verificationError } = await signUp.verifications.sendEmailCode();
-      if (verificationError) throw verificationError;
+      const msg = await signUp(email.trim(), password, fullName.trim());
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      setMode("verify");
-    } catch (err: any) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      const msg = err?.longMessage || err?.message || "Sign-up failed.";
-      setError(msg);
+      setNotice(msg);
+      setPassword("");
+      setMode("confirm");
+    } catch (err) {
+      fail(err, "Sign-up failed.");
     } finally {
       setLoading(false);
     }
   };
 
-  const handleVerify = async () => {
-    if (!verifyCode.trim()) return;
+  const handleForgot = async () => {
+    if (!email.trim()) return;
     setLoading(true);
     setError("");
     try {
-      const { error: verificationError } = await signUp.verifications.verifyEmailCode({
-        code: verifyCode.trim(),
-      });
-      if (verificationError) throw verificationError;
-      if (signUp.status === "complete") {
-        await signUp.finalize({
-          navigate: ({ session }) => {
-            if (session?.currentTask) return;
-            router.replace("/onboarding");
-          },
-        });
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      } else {
-        setError("Verification incomplete. Try again.");
-      }
-    } catch (err: any) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      const msg = err?.longMessage || err?.message || "Wrong code. Try again.";
-      setError(msg);
+      setNotice(await requestPasswordReset(email.trim()));
+    } catch (err) {
+      fail(err, "Could not send reset email.");
     } finally {
       setLoading(false);
     }
@@ -136,20 +99,8 @@ export default function SignInScreen() {
   const switchMode = (next: Mode) => {
     setMode(next);
     setError("");
+    setNotice("");
     setPassword("");
-  };
-
-  const resendCode = async () => {
-    setLoading(true);
-    setError("");
-    try {
-      const { error: verificationError } = await signUp.verifications.sendEmailCode();
-      if (verificationError) throw verificationError;
-    } catch (err: any) {
-      setError(err?.longMessage || err?.message || "Could not resend the code.");
-    } finally {
-      setLoading(false);
-    }
   };
 
   return (
@@ -162,7 +113,6 @@ export default function SignInScreen() {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        {/* Branding */}
         <View style={styles.brand}>
           <View style={[styles.logoCircle, { backgroundColor: colors.primary + "22", borderColor: colors.primary + "50" }]}>
             <Text style={[styles.logoText, { color: colors.primary }]}>CX</Text>
@@ -171,39 +121,60 @@ export default function SignInScreen() {
           <Text style={[styles.tagline, { color: colors.mutedForeground }]}>Your campus community</Text>
         </View>
 
-        {/* Form card */}
         <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          {mode === "verify" ? (
+          {mode === "confirm" ? (
             <>
-              <Text style={[styles.cardTitle, { color: colors.foreground }]}>Check your email 📬</Text>
+              <Text style={[styles.cardTitle, { color: colors.foreground }]}>Check your email</Text>
               <Text style={[styles.cardSub, { color: colors.mutedForeground }]}>
-                We sent a 6-digit code to {email}
+                We sent a confirmation link to {email.trim()}
+              </Text>
+              {notice ? <Text style={[styles.notice, { color: colors.foreground }]}>{notice}</Text> : null}
+              <Text style={[styles.cardSub, { color: colors.mutedForeground, marginTop: 0 }]}>
+                Open the link to confirm your account, then come back and sign in to set up your profile.
+              </Text>
+              <ActionButton label="Back to Sign In" onPress={() => switchMode("signIn")} loading={false} disabled={false} colors={colors} />
+            </>
+          ) : mode === "forgot" ? (
+            <>
+              <Text style={[styles.cardTitle, { color: colors.foreground }]}>Reset password</Text>
+              <Text style={[styles.cardSub, { color: colors.mutedForeground }]}>
+                We will email you a secure link to set a new password.
               </Text>
               <Field
-                label="Verification Code"
-                value={verifyCode}
-                onChangeText={setVerifyCode}
-                placeholder="123456"
-                keyboardType="number-pad"
-                maxLength={6}
+                label="Email Address"
+                value={email}
+                onChangeText={setEmail}
+                placeholder="youremail@example.com"
+                keyboardType="email-address"
+                autoCapitalize="none"
                 colors={colors}
+                testID="input-reset-email"
               />
               {error ? <Text style={[styles.error, { color: colors.destructive }]}>{error}</Text> : null}
-              <ActionButton
-                label="Verify Email"
-                onPress={handleVerify}
-                loading={loading || authLoading}
-                disabled={!verifyCode.trim() || authLoading}
-                colors={colors}
-              />
-              <TouchableOpacity onPress={resendCode} disabled={loading || authLoading} style={styles.link}>
-                <Text style={[styles.linkText, { color: colors.mutedForeground }]}>Resend code</Text>
+              {notice ? <Text style={[styles.notice, { color: colors.foreground }]}>{notice}</Text> : null}
+              <ActionButton label="Send Reset Link" onPress={handleForgot} loading={loading} disabled={!email.trim()} colors={colors} />
+              <TouchableOpacity onPress={() => switchMode("signIn")} style={styles.link}>
+                <Text style={[styles.linkText, { color: colors.mutedForeground }]}>Back to sign in</Text>
               </TouchableOpacity>
             </>
           ) : (
             <>
+              <View style={[styles.tabs, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                {(["signIn", "signUp"] as const).map((m) => (
+                  <TouchableOpacity
+                    key={m}
+                    testID={`tab-${m}`}
+                    onPress={() => switchMode(m)}
+                    style={[styles.tab, mode === m && { backgroundColor: colors.primary }]}
+                  >
+                    <Text style={[styles.tabText, { color: mode === m ? "#fff" : colors.mutedForeground }]}>
+                      {m === "signIn" ? "Sign In" : "Sign Up"}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
               <Text style={[styles.cardTitle, { color: colors.foreground }]}>
-                {mode === "signIn" ? "Welcome back 👋" : "Join CampusX 🎓"}
+                {mode === "signIn" ? "Welcome back" : "Join CampusX"}
               </Text>
               <Text style={[styles.cardSub, { color: colors.mutedForeground }]}>
                 {mode === "signIn" ? "Sign in to your account" : "Create your student account"}
@@ -236,7 +207,7 @@ export default function SignInScreen() {
                     style={[styles.passwordInput, { color: colors.foreground }]}
                     value={password}
                     onChangeText={setPassword}
-                    placeholder="••••••••"
+                    placeholder={mode === "signUp" ? "At least 8 characters" : "Your password"}
                     placeholderTextColor={colors.mutedForeground}
                     secureTextEntry={!showPassword}
                     autoCapitalize="none"
@@ -247,30 +218,30 @@ export default function SignInScreen() {
                 </View>
               </View>
 
+              {mode === "signIn" ? (
+                <TouchableOpacity onPress={() => switchMode("forgot")} style={{ alignSelf: "flex-end", marginTop: -6 }} testID="link-forgot-password">
+                  <Text style={[styles.switchLink, { color: colors.primary, fontSize: 13 }]}>Forgot password?</Text>
+                </TouchableOpacity>
+              ) : null}
+
               {error ? <Text style={[styles.error, { color: colors.destructive }]}>{error}</Text> : null}
 
               <ActionButton
                 label={mode === "signIn" ? "Sign In" : "Create Account"}
                 onPress={mode === "signIn" ? handleSignIn : handleSignUp}
-                loading={loading || authLoading}
+                loading={loading}
                 disabled={!email.trim() || !password || (mode === "signUp" && !fullName.trim())}
                 colors={colors}
               />
 
-              <View style={styles.switchRow}>
-                <Text style={[styles.switchText, { color: colors.mutedForeground }]}>
-                  {mode === "signIn" ? "New student?" : "Already have an account?"}
+              {mode === "signIn" ? (
+                <Text style={[styles.cardSub, { color: colors.mutedForeground, marginTop: 0, fontSize: 12, lineHeight: 17 }]}>
+                  Joined before our sign-in update? Tap Forgot password once to set a new password. Your posts and profile stay the same.
                 </Text>
-                <TouchableOpacity onPress={() => switchMode(mode === "signIn" ? "signUp" : "signIn")}>
-                  <Text style={[styles.switchLink, { color: colors.primary }]}>
-                    {mode === "signIn" ? " Sign up" : " Sign in"}
-                  </Text>
-                </TouchableOpacity>
-              </View>
+              ) : null}
             </>
           )}
         </View>
-        {mode === "signIn" ? null : <View nativeID="clerk-captcha" />}
 
         <Text style={[styles.footer, { color: colors.mutedForeground }]}>
           By continuing, you agree to the CampusX community guidelines for students.
@@ -349,5 +320,9 @@ const styles = StyleSheet.create({
   switchLink: { fontSize: 14, fontWeight: "700" },
   link: { alignItems: "center" },
   linkText: { fontSize: 14, textDecorationLine: "underline" },
+  tabs: { flexDirection: "row", borderWidth: 1, borderRadius: 12, padding: 4 },
+  tab: { flex: 1, paddingVertical: 9, borderRadius: 9, alignItems: "center" },
+  tabText: { fontSize: 14, fontWeight: "700" },
+  notice: { fontSize: 13, lineHeight: 19 },
   footer: { fontSize: 12, textAlign: "center", marginTop: 24, lineHeight: 18 },
 });

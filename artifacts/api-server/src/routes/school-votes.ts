@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { getAuth } from "@clerk/express";
+import { getAuth } from "../lib/auth-identity";
 import { db } from "@workspace/db";
 import { schoolVotes } from "@workspace/db/schema";
 import { eq, sql } from "drizzle-orm";

@@ -44,7 +44,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { Link, useLocation, useSearch } from "wouter";
-import { useUser } from "@clerk/react";
+import { useUser } from "@/lib/auth";
 import { PullToRefresh } from "@/components/pull-to-refresh";
 import { uploadCampusImage } from "@/lib/image-upload";
 

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useUser } from "@clerk/react";
+import { useUser } from "@/lib/auth";
 import { useQueryClient } from "@tanstack/react-query";
 import { useFieldArray, useForm, useWatch } from "react-hook-form";
 import { Form } from "@/components/ui/form";

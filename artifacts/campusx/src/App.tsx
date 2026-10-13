@@ -1,9 +1,7 @@
 import { lazy, Suspense, useEffect, useRef } from "react";
-import { Switch, Route, Redirect, Router as WouterRouter, useLocation } from "wouter";
+import { Switch, Route, Redirect, Router as WouterRouter } from "wouter";
 import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
-import { ClerkProvider, Show, useClerk } from "@clerk/react";
-import { publishableKeyFromHost } from "@clerk/react/internal";
-import { shadcn } from "@clerk/themes";
+import { AuthProvider, Show, useAuth, useClerk } from "@/lib/auth";
 import { ThemeProvider } from "next-themes";
 
 import { Toaster } from "@/components/ui/toaster";
@@ -20,6 +18,7 @@ import Onboarding from "@/pages/onboarding";
 import PostDetailPage from "@/pages/post-detail";
 import UserProfilePage from "@/pages/user-profile";
 import NotFound from "@/pages/not-found";
+import ResetPasswordPage from "@/pages/reset-password";
 
 const FeedPage = lazy(() => import("@/pages/feed"));
 const EarnPage = lazy(() => import("@/pages/earn"));
@@ -30,66 +29,11 @@ const AdminPage = lazy(() => import("@/pages/admin"));
 
 const queryClient = new QueryClient();
 
-const clerkPubKey = publishableKeyFromHost(
-  window.location.hostname,
-  import.meta.env.VITE_CLERK_PUBLISHABLE_KEY,
-);
-const clerkProxyUrl = import.meta.env.VITE_CLERK_PROXY_URL;
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
 
-function stripBase(path: string): string {
-  return basePath && path.startsWith(basePath)
-    ? path.slice(basePath.length) || "/"
-    : path;
+function AuthLoading() {
+  return <div className="min-h-[40vh] flex items-center justify-center" aria-busy="true"><div className="h-8 w-8 rounded-full border-2 border-primary/30 border-t-primary animate-spin" /></div>;
 }
-
-const clerkAppearance = {
-  theme: shadcn,
-  cssLayerName: "clerk",
-  options: {
-    logoPlacement: "inside" as const,
-    logoLinkUrl: basePath || "/",
-  },
-  variables: {
-    colorPrimary: "#f5286e",
-    colorBackground: "hsl(var(--card))",
-    colorForeground: "hsl(var(--foreground))",
-    colorInput: "hsl(var(--input))",
-    colorInputForeground: "hsl(var(--foreground))",
-    colorNeutral: "hsl(var(--border))",
-    colorMutedForeground: "hsl(var(--muted-foreground))",
-    colorDanger: "#ef4444",
-    fontFamily: "'Space Grotesk', sans-serif",
-    borderRadius: "0.5rem",
-  },
-  elements: {
-    rootBox: "w-full flex justify-center",
-    cardBox: "bg-card rounded-2xl w-[440px] max-w-full overflow-hidden border border-border shadow-xl",
-    card: "!shadow-none !border-0 !bg-transparent !rounded-none",
-    footer: "!shadow-none !border-0 !bg-transparent !rounded-none",
-    headerTitle: "text-foreground",
-    headerSubtitle: "text-muted-foreground",
-    socialButtonsBlockButtonText: "text-[#f0f0f5]",
-    formFieldLabel: "text-[#f0f0f5]",
-    footerActionLink: "text-[#f5286e] hover:text-[#f5286e]/80",
-    footerActionText: "text-[#8c8c9e]",
-    dividerText: "text-[#8c8c9e]",
-    identityPreviewEditButton: "text-[#f5286e]",
-    formFieldSuccessText: "text-[#10b981]",
-    alertText: "text-[#f0f0f5]",
-    logoBox: "",
-    logoImage: "",
-    socialButtonsBlockButton: "border-[#333345] hover:bg-[#15151f]",
-    formButtonPrimary: "bg-gradient-to-r from-pink-500 to-orange-500 hover:from-pink-600 hover:to-orange-600 text-white font-semibold",
-    formFieldInput: "bg-[#15151f] border-[#333345] text-[#f0f0f5]",
-    footerAction: "",
-    dividerLine: "bg-[#333345]",
-    alert: "",
-    otpCodeFieldInput: "bg-[#15151f] border-[#333345] text-[#f0f0f5]",
-    formFieldRow: "",
-    main: "",
-  },
-};
 
 function ClerkQueryClientCacheInvalidator() {
   const { addListener } = useClerk();
@@ -113,7 +57,21 @@ function ClerkQueryClientCacheInvalidator() {
   return null;
 }
 
+function AuthBootError() {
+  const { bootError, refresh } = useAuth();
+  return (
+    <div className="min-h-[40vh] flex flex-col items-center justify-center gap-3 p-6 text-center" role="alert">
+      <p className="text-lg font-semibold text-foreground">Session check failed</p>
+      <p className="text-sm text-muted-foreground max-w-sm">{bootError}</p>
+      <button type="button" onClick={() => void refresh()} className="mt-2 h-10 px-5 rounded-lg bg-gradient-to-r from-pink-500 to-orange-500 text-white font-semibold">Try again</button>
+    </div>
+  );
+}
+
 function HomeRedirect() {
+  const { isLoaded, bootError } = useAuth();
+  if (!isLoaded) return <AuthLoading />;
+  if (bootError) return <AuthBootError />;
   return (
     <>
       <Show when="signed-in">
@@ -127,6 +85,9 @@ function HomeRedirect() {
 }
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
+  const { isLoaded, bootError } = useAuth();
+  if (!isLoaded) return <AuthLoading />;
+  if (bootError) return <AuthBootError />;
   return (
     <>
       <Show when="signed-in">
@@ -140,22 +101,8 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
 }
 
 function ClerkProviderWithRoutes() {
-  const [, setLocation] = useLocation();
-
-  if (!clerkPubKey) {
-    return <div className="p-8 text-center text-red-500">Missing Clerk Publishable Key</div>;
-  }
-
   return (
-    <ClerkProvider
-      publishableKey={clerkPubKey}
-      proxyUrl={clerkProxyUrl}
-      appearance={clerkAppearance}
-      signInUrl={`${basePath}/sign-in`}
-      signUpUrl={`${basePath}/sign-up`}
-      routerPush={(to) => setLocation(stripBase(to))}
-      routerReplace={(to) => setLocation(stripBase(to), { replace: true })}
-    >
+    <AuthProvider>
       <QueryClientProvider client={queryClient}>
         <ClerkQueryClientCacheInvalidator />
         <NotificationProvider>
@@ -165,6 +112,7 @@ function ClerkProviderWithRoutes() {
                 <Route path="/" component={HomeRedirect} />
                 <Route path="/sign-in/*?" component={SignInPage} />
                 <Route path="/sign-up/*?" component={SignUpPage} />
+                <Route path="/reset-password" component={ResetPasswordPage} />
                 <Route path="/onboarding" component={() => <ProtectedRoute component={Onboarding} />} />
                 <Route path="/feed" component={() => <ProtectedRoute component={FeedPage} />} />
                 <Route path="/post/:id" component={() => <ProtectedRoute component={PostDetailPage} />} />
@@ -180,7 +128,7 @@ function ClerkProviderWithRoutes() {
           </Layout>
         </NotificationProvider>
       </QueryClientProvider>
-    </ClerkProvider>
+    </AuthProvider>
   );
 }
 

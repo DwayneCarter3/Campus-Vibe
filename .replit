@@ -40,3 +40,9 @@ channel = "stable-25_05"
 
 [objectStorage]
 defaultBucketID = "replit-objstore-18b69ecc-41d3-4e82-aa8f-1de2afed7b6b"
+
+[userenv]
+
+[userenv.shared]
+APP_URL = "https://campus-vibe.replit.app"
+AUTH_PROVIDER = "supabase"

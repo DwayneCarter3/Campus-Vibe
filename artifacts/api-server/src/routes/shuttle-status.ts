@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { getAuth } from "@clerk/express";
+import { getAuth } from "../lib/auth-identity";
 import { desc, eq, gte } from "drizzle-orm";
 import { db, shuttleStatusVotesTable } from "@workspace/db";
 import { VoteShuttleStatusBody, GetShuttleStatusResponse } from "@workspace/api-zod";

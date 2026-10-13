@@ -14,7 +14,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Feather } from "@expo/vector-icons";
-import { useUser } from "@clerk/expo";
+import { useUser } from "@/lib/auth";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useListConversations,

@@ -1,5 +1,5 @@
 import { Router, type IRouter, type Request } from "express";
-import { getAuth } from "@clerk/express";
+import { getAuth } from "../lib/auth-identity";
 import { eq, desc, and, sql, isNull, ne, or } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { db, postsTable, postLikesTable, postNoCapsTable, postCommentsTable, usersTable, pollsTable, pollOptionsTable, savedPostsTable, reportsTable, uploadedMediaTable } from "@workspace/db";

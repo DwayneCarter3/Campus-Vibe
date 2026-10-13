@@ -5,14 +5,13 @@ import {
   Inter_700Bold,
   useFonts,
 } from "@expo-google-fonts/inter";
-import { ClerkProvider, useAuth } from "@clerk/expo";
-import * as SecureStore from "expo-secure-store";
+import { AuthProvider, setAuthBaseUrl, useAuth } from "@/lib/auth";
 import Constants from "expo-constants";
 import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
 import { Redirect, Stack, useRouter, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect, useRef } from "react";
-import { ActivityIndicator, Platform, Pressable, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, Text, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider } from "react-native-safe-area-context";
@@ -28,10 +27,6 @@ import { useColors } from "@/hooks/useColors";
 
 SplashScreen.preventAutoHideAsync();
 
-const publishableKey: string =
-  process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY ||
-  Constants.expoConfig?.extra?.clerkPublishableKey ||
-  "";
 const devDomain: string =
   process.env.EXPO_PUBLIC_DOMAIN ||
   Constants.expoConfig?.extra?.devDomain ||
@@ -39,19 +34,8 @@ const devDomain: string =
 
 if (devDomain) {
   setBaseUrl(`https://${devDomain}`);
+  setAuthBaseUrl(`https://${devDomain}`);
 }
-
-const tokenCache =
-  Platform.OS === "web"
-    ? undefined
-    : {
-        getToken: (key: string) =>
-          SecureStore.getItemAsync(key).catch(() => null),
-        saveToken: (key: string, token: string) =>
-          SecureStore.setItemAsync(key, token).catch(() => {}),
-        clearToken: (key: string) =>
-          SecureStore.deleteItemAsync(key).catch(() => {}),
-      };
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -188,16 +172,16 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <ErrorBoundary>
-        <ClerkProvider publishableKey={publishableKey} tokenCache={tokenCache}>
-          <QueryClientProvider client={queryClient}>
+        <QueryClientProvider client={queryClient}>
+          <AuthProvider>
             <ApiAuthBridge />
             <GestureHandlerRootView style={{ flex: 1 }}>
               <KeyboardProvider>
                 <RootLayoutNav />
               </KeyboardProvider>
             </GestureHandlerRootView>
-          </QueryClientProvider>
-        </ClerkProvider>
+          </AuthProvider>
+        </QueryClientProvider>
       </ErrorBoundary>
     </SafeAreaProvider>
   );

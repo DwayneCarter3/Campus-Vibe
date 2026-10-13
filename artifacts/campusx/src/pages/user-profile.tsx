@@ -8,7 +8,7 @@ import {
   useGetUserServices,
   getGetUserServicesQueryKey,
 } from "@workspace/api-client-react";
-import { useUser } from "@clerk/react";
+import { useUser } from "@/lib/auth";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";

@@ -34,7 +34,7 @@ import {
 } from "@workspace/api-client-react";
 import type { AdminUserItem, PendingVerificationItem, ReportItem } from "@workspace/api-client-react";
 import { useColors } from "@/hooks/useColors";
-import { useUser } from "@clerk/expo";
+import { useUser } from "@/lib/auth";
 
 const CEO_EMAIL = "dwaynecartergabriel@gmail.com";
 

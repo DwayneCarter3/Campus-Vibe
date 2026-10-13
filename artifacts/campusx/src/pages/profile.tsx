@@ -17,7 +17,7 @@ import {
   useSetFounderBadgeTier,
 } from "@workspace/api-client-react";
 import type { PaymentPackage, UpdateProfileBodyLevel } from "@workspace/api-client-react";
-import { useUser, useClerk } from "@clerk/react";
+import { useUser, useClerk } from "@/lib/auth";
 import { useLocation } from "wouter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";

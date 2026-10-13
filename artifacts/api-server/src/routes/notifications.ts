@@ -1,7 +1,7 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import { eq, desc, and, sql } from "drizzle-orm";
 import { db, notificationsTable } from "@workspace/db";
-import { getAuth } from "@clerk/express";
+import { getAuth } from "../lib/auth-identity";
 import { requireAuth } from "../middlewares/auth";
 import { addClient, removeClient } from "../sse-manager";
 

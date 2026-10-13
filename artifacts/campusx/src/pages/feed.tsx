@@ -3,7 +3,7 @@ import { listPosts, useCreatePost, getListPostsQueryKey, useGetMyProfile, getGet
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useWindowVirtualizer } from "@tanstack/react-virtual";
 import { useLocation } from "wouter";
-import { useUser } from "@clerk/react";
+import { useUser } from "@/lib/auth";
 import { PostCard } from "@/components/post-card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";

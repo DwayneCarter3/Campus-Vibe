@@ -1,10 +1,10 @@
 ---
 name: CEO authorization
-description: Verified Clerk primary identity is the source of truth for CEO privileges.
+description: Permanent founder privileges require a verified Supabase identity and protected database binding.
 ---
 
-CEO privilege requires a current verified primary Clerk email that matches the designated CEO address. A stored email or role may be stale after a Clerk identity change; profile reads can remain available during a Clerk outage, but privileged operations must fail closed.
+CEO privilege requires a current verified Supabase identity backed by the protected founder binding. Founder aliases are reserved identifiers, not proofs of identity: an editable matric number must never grant privileges.
 
-**Why:** Existing role-only guards and a stored-email promotion path could retain or grant CEO access after the sign-in identity changed.
+**Why:** The user requires permanent founder access across republishes, while previous stored-email/role-only checks could grant or retain unauthorized access. The full Supabase migration replaces the former Clerk authority.
 
-**How to apply:** Check the current Clerk primary-email verification status on CEO-gated actions, and do not authorize sensitive downloads or moderation from database flags alone.
+**How to apply:** Fail closed when identity verification fails. Once the verified founder is bound, preserve their authority rather than granting it to another account that types or reuses an alias. Never overwrite Supabase's reserved JWT transport role with a CampusX application role.

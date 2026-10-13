@@ -1,4 +1,4 @@
-import { clerkClient } from "@clerk/express";
+import { type IdentityRequest } from "./auth-identity";
 import type { Request } from "express";
 import { eq } from "drizzle-orm";
 import { db, usersTable } from "@workspace/db";
@@ -13,7 +13,7 @@ function requestUserId(req: PrivilegeRequest): string | null {
   return typeof req.userId === "string" && req.userId.length > 0 ? req.userId : null;
 }
 
-/** Fetches Clerk's current user record; the database email is never an authority. */
+/** Requires the current verified Supabase identity and a DB-enforced owner role. */
 export function isVerifiedCEO(req: Request): Promise<boolean> {
   const cached = verifiedCEOEmailCache.get(req);
   if (cached) return cached;
@@ -22,14 +22,13 @@ export function isVerifiedCEO(req: Request): Promise<boolean> {
     const userId = requestUserId(req as PrivilegeRequest);
     if (!userId || !CEO_EMAIL) return false;
     try {
-      const clerkUser = await clerkClient.users.getUser(userId);
-      const primary = clerkUser.emailAddresses.find(
-        (email) => email.id === clerkUser.primaryEmailAddressId,
-      );
-      return primary?.verification?.status === "verified"
-        && primary.emailAddress.trim().toLowerCase() === CEO_EMAIL;
+      const identity = (req as IdentityRequest).supabaseUser;
+      if (!identity?.email_confirmed_at) return false;
+      const [profile] = await db.select({ role: usersTable.role }).from(usersTable)
+        .where(eq(usersTable.supabaseUserId, identity.id)).limit(1);
+      return profile?.role === "ceo";
     } catch {
-      // Clerk failures must never grant CEO privileges.
+      // Identity/database failures must never grant CEO privileges.
       return false;
     }
   })();
@@ -37,7 +36,7 @@ export function isVerifiedCEO(req: Request): Promise<boolean> {
   return check;
 }
 
-/** DB admins are authorized by their current role; CEOs by fresh verified Clerk identity. */
+/** DB admins use their current role; CEO authority also requires a verified session. */
 export async function hasAdminPrivileges(req: Request): Promise<boolean> {
   const userId = requestUserId(req as PrivilegeRequest);
   if (!userId) return false;

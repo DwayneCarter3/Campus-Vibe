@@ -14,3 +14,9 @@ The user requires database-enforced founder privileges that survive republishes,
 **Why:** The user reports founder privileges reverting in the published app and explicitly requires Supabase to be the persistent source of truth.
 
 **How to apply:** Reconcile roles from trusted database identity during authentication, rather than relying on stale client/session roles. Reserve founder identifiers for a verified identity; freely editable signup fields must never grant privileged access.
+
+Include legacy authentication accounts that have no application profile yet; keep their identity links and require verified password recovery rather than copying passwords.
+
+**Why:** A profile-only migration missed existing accounts that had not completed onboarding. Treating those emails as new registrations would change their ownership identity.
+
+**How to apply:** Audit both providers' account lists before cutover. Preserve verification state, keep incomplete profiles private, and use reviewed SQL rather than automatic schema pushes that could remove custom identity guards.

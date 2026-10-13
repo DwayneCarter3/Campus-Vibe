@@ -1,14 +1,22 @@
-import { pgTable, text, serial, timestamp, boolean, uniqueIndex, integer } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, boolean, uniqueIndex, integer, uuid, customType } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
+// SQL stores the requested canonical CEO role; existing application contracts use ceo.
+const roleText = customType<{ data: string; driverData: string }>({
+  dataType: () => "text",
+  fromDriver: (value) => value.toLowerCase(),
+  toDriver: (value) => value.toLowerCase() === "ceo" ? "CEO" : value,
+});
 export const usersTable = pgTable(
   "users",
   {
     id: serial("id").primaryKey(),
     registrationRank: serial("registration_rank").notNull().unique(),
     clerkUserId: text("clerk_user_id").notNull().unique(),
+    supabaseUserId: uuid("supabase_user_id").unique(),
+    onboarded: boolean("onboarded").notNull().default(true),
     fullName: text("full_name").notNull(),
     username: text("username"),
     department: text("department"),
@@ -24,7 +32,7 @@ export const usersTable = pgTable(
     bio: text("bio"),
     avatarUrl: text("avatar_url"),
     isAdmin: boolean("is_admin").notNull().default(false),
-    role: text("role").notNull().default("student"),
+    role: roleText("role").notNull().default("student"),
     verificationStatus: text("verification_status").notNull().default("none"),
     // Public badge entitlement is deliberately separate from internal role/status grants.
     publicBadgeTier: text("public_badge_tier"),

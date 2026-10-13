@@ -36,7 +36,7 @@ import {
 } from "@workspace/api-client-react";
 import type { Post, Comment } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useUser } from "@clerk/react";
+import { useUser } from "@/lib/auth";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { AvatarModal } from "@/components/avatar-modal";

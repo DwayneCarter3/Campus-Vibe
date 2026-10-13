@@ -1,7 +1,8 @@
 import { Router, type IRouter, type Request } from "express";
 import { eq, desc, and, ne, or, isNull, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
-import { clerkClient, getAuth } from "@clerk/express";
+import { getAuth, getVerifiedPrimaryEmail } from "../lib/auth-identity";
+import { expirePaidBadgeEntitlement } from "./payments";
 import {
   db,
   earlyBirdClaimsTable,
@@ -41,7 +42,6 @@ import {
   publicVerificationStatus,
   PENDING_VERIFICATION_STATUSES,
 } from "../lib/verification";
-import { expirePaidBadgeEntitlement } from "./payments";
 import { decodeMatricEntryYear, getEffectiveLevel } from "../lib/academic-level";
 import { ensureWazobiaConversation } from "../lib/wazobia";
 import { getInstitutionByName } from "@workspace/campus-institutions";
@@ -85,16 +85,6 @@ function normalizeMatricNumber(matricNumber: string): string {
   return matricNumber.trim().toUpperCase();
 }
 
-async function getVerifiedPrimaryEmail(clerkUserId: string): Promise<string | null> {
-  const clerkUser = await clerkClient.users.getUser(clerkUserId);
-  const primaryEmail = clerkUser.emailAddresses.find(
-    (email) => email.id === clerkUser.primaryEmailAddressId,
-  );
-  if (primaryEmail?.verification?.status !== "verified") return null;
-  const email = normalizeEmail(primaryEmail.emailAddress);
-  return email || null;
-}
-
 type IdentityReconciliation = {
   user: typeof usersTable.$inferSelect;
   emailConflict: boolean;
@@ -104,100 +94,14 @@ async function reconcileClerkIdentity(
   user: typeof usersTable.$inferSelect,
   verifiedPrimaryEmail: string | null,
 ): Promise<IdentityReconciliation> {
-  const emailConflict = Boolean(
-    verifiedPrimaryEmail &&
-      normalizeEmail(user.email) !== verifiedPrimaryEmail &&
-      (await db
-        .select({ id: usersTable.id })
-        .from(usersTable)
-        .where(and(
-          sql`lower(btrim(${usersTable.email})) = ${verifiedPrimaryEmail}`,
-          ne(usersTable.clerkUserId, user.clerkUserId),
-        ))
-        .limit(1))[0],
-  );
-
-  const changes: Partial<typeof usersTable.$inferInsert> = {};
-  const roleChanges: Partial<typeof usersTable.$inferInsert> = {};
-  if (verifiedPrimaryEmail && !emailConflict && normalizeEmail(user.email) !== verifiedPrimaryEmail) {
-    changes.email = verifiedPrimaryEmail;
-  }
-
-  if (verifiedPrimaryEmail === CEO_EMAIL && !emailConflict) {
-    if (user.role !== "ceo") roleChanges.role = "ceo";
-    if (!user.isAdmin) roleChanges.isAdmin = true;
-    if (
-      user.verificationStatus !== "Premium_Approved" &&
-      !PENDING_VERIFICATION_STATUSES.includes(user.verificationStatus as typeof PENDING_VERIFICATION_STATUSES[number])
-    ) {
-      roleChanges.verificationStatus = "Premium_Approved";
-    }
-  } else if (user.role === "ceo") {
-    roleChanges.role = "student";
-    roleChanges.isAdmin = false;
-    if (user.publicBadgeExpiresAt?.getTime() === FOUNDER_BADGE_EXPIRES_AT.getTime()) {
-      roleChanges.publicBadgeTier = null;
-      roleChanges.publicBadgeExpiresAt = null;
-    }
-  }
-
-  Object.assign(changes, roleChanges);
-  const identityConflict = emailConflict;
-  if (identityConflict && Object.keys(roleChanges).length) {
-    const [updated] = await db
-      .update(usersTable)
-      .set(roleChanges)
-      .where(eq(usersTable.clerkUserId, user.clerkUserId))
-      .returning();
-    if (roleChanges.role === "student") {
-      await expirePaidBadgeEntitlement(user.clerkUserId);
-      const [refreshed] = await db
-        .select()
-        .from(usersTable)
-        .where(eq(usersTable.clerkUserId, user.clerkUserId))
-        .limit(1);
-      return { user: refreshed ?? updated ?? { ...user, ...roleChanges }, emailConflict: true };
-    }
-    return { user: updated ?? { ...user, ...roleChanges }, emailConflict: true };
-  }
-
-  if (!Object.keys(changes).length) return { user, emailConflict: false };
-
   try {
-    const [updated] = await db
-      .update(usersTable)
-      .set(changes)
-      .where(eq(usersTable.clerkUserId, user.clerkUserId))
-      .returning();
-    let reconciled = updated ?? { ...user, ...changes };
-    if (roleChanges.role === "student") {
-      await expirePaidBadgeEntitlement(user.clerkUserId);
-      const [refreshed] = await db
-        .select()
-        .from(usersTable)
-        .where(eq(usersTable.clerkUserId, user.clerkUserId))
-        .limit(1);
-      reconciled = refreshed ?? reconciled;
-    }
-    return { user: reconciled, emailConflict: false };
+    const [updated] = await db.update(usersTable).set({
+      email: verifiedPrimaryEmail ?? user.email, role: user.role,
+    }).where(eq(usersTable.id, user.id)).returning();
+    return { user: updated, emailConflict: false };
   } catch (error: any) {
     if (error?.code === "23505" && error?.constraint?.includes("email")) {
-      let reconciled = user;
-      if (roleChanges.role === "student") {
-        const [updated] = await db
-          .update(usersTable)
-          .set(roleChanges)
-          .where(eq(usersTable.clerkUserId, user.clerkUserId))
-          .returning();
-        await expirePaidBadgeEntitlement(user.clerkUserId);
-        const [refreshed] = await db
-          .select()
-          .from(usersTable)
-          .where(eq(usersTable.clerkUserId, user.clerkUserId))
-          .limit(1);
-        reconciled = refreshed ?? updated ?? { ...user, ...roleChanges };
-      }
-      return { user: reconciled, emailConflict: true };
+      return { user, emailConflict: true };
     }
     throw error;
   }
@@ -308,9 +212,9 @@ router.get("/users/search", requireAuth, async (req, res): Promise<void> => {
     return;
   }
   const userId = (req as any).userId as string;
-  const [currentUser] = await db.select({ school: usersTable.school })
+  const [currentUser] = await db.select({ school: usersTable.school, onboarded: usersTable.onboarded })
     .from(usersTable).where(eq(usersTable.clerkUserId, userId)).limit(1);
-  if (!currentUser) {
+  if (!currentUser || !currentUser.onboarded) {
     res.status(403).json({ error: "Complete your profile before searching students." });
     return;
   }
@@ -330,6 +234,7 @@ router.get("/users/search", requireAuth, async (req, res): Promise<void> => {
     publicBadgeExpiresAt: usersTable.publicBadgeExpiresAt,
     role: usersTable.role,
   }).from(usersTable).where(and(
+    eq(usersTable.onboarded, true),
     eq(usersTable.school, currentUser.school),
     ne(usersTable.clerkUserId, userId),
     ne(usersTable.role, "system"),
@@ -448,12 +353,12 @@ router.get("/users/me", requireAuth, async (req, res): Promise<void> => {
     .from(usersTable)
     .where(eq(usersTable.clerkUserId, userId));
 
-  if (!user) {
+  if (!user || !user.onboarded) {
     res.status(404).json({ error: "Profile not found" });
     return;
   }
 
-  // Reconcile identity on login from Clerk's verified primary address, never the stored email.
+  // Reconcile identity from the provider's verified address, never submitted role flags.
   let clerkIdentityFetched = false;
   let verifiedPrimaryEmail: string | null = null;
   try {
@@ -558,6 +463,11 @@ router.put("/users/me", requireAuth, async (req, res): Promise<void> => {
     .from(usersTable)
     .where(eq(usersTable.clerkUserId, userId));
 
+  if (parsed.data.matricNumber?.trim() === "23110591126" && existing[0]?.role !== "ceo") {
+    res.status(403).json({ error: "This matriculation number is reserved for the verified founder." });
+    return;
+  }
+
   let user;
   let createdNewAccount = false;
   if (existing.length === 0) {
@@ -600,11 +510,11 @@ router.put("/users/me", requireAuth, async (req, res): Promise<void> => {
     try {
       emailVal = await getVerifiedPrimaryEmail(userId);
     } catch {
-      res.status(503).json({ error: "Could not verify your primary email with Clerk. Please try again." });
+      res.status(503).json({ error: "Could not verify your email. Please try again." });
       return;
     }
     if (!emailVal) {
-      res.status(400).json({ error: "A verified primary Clerk email is required to register." });
+      res.status(400).json({ error: "A verified email is required to register." });
       return;
     }
 
@@ -701,23 +611,17 @@ router.put("/users/me", requireAuth, async (req, res): Promise<void> => {
       throw err;
     }
 
-    // ── Early-bird promo: first 100 users get free badge + hustle promo for 30 days ──
-    const isEarlyBird = !!user && user.registrationRank <= EARLY_BIRD_LIMIT;
-    if (isEarlyBird && user) {
-      const promoExpiresAt = new Date(user.createdAt.getTime() + PROMO_DURATION_MS);
-      [user] = await db
-        .update(usersTable)
-        .set({
-          premiumBadgeDiscountPercent: 100,
-          promoExpiresAt,
-          hustlePromoExpiresAt: promoExpiresAt,
-        })
-        .where(eq(usersTable.clerkUserId, userId))
-        .returning();
-    }
   } else {
     // ── Profile update (existing user) ─────────────────────────────
     const current = existing[0];
+    if (!current.onboarded && (
+      !parsed.data.fullName?.trim() || parsed.data.level === undefined ||
+      !parsed.data.faculty?.trim() || !parsed.data.enrollmentStatus?.trim() ||
+      !parsed.data.school?.trim() || !parsed.data.campusLocation?.trim()
+    )) {
+      res.status(400).json({ error: "Missing required profile fields" });
+      return;
+    }
     const nextLevel = parsed.data.level ?? current.level;
     const scopeSupplied =
       parsed.data.school !== undefined ||
@@ -833,9 +737,14 @@ router.put("/users/me", requireAuth, async (req, res): Promise<void> => {
     try {
       [user] = await db
         .update(usersTable)
-        .set(profileData)
+        .set({ ...profileData, onboarded: true,
+          ...(!current.onboarded ? {
+            verificationStatus: current.role === "ceo" ? "Premium_Approved" : "approved",
+          } : {}),
+        })
         .where(eq(usersTable.clerkUserId, userId))
         .returning();
+      createdNewAccount = !current.onboarded;
     } catch (error: any) {
       if (error?.code === "23505") {
         const constraint = error?.constraint ?? "";
@@ -872,6 +781,14 @@ router.put("/users/me", requireAuth, async (req, res): Promise<void> => {
     user = await expirePromoIfNeeded(user);
   }
 
+  // Supabase creates the account row before onboarding. Apply the same existing
+  // registration benefits only once, when that profile is completed.
+  if (createdNewAccount && user && user.registrationRank <= EARLY_BIRD_LIMIT) {
+    const promoExpiresAt = new Date(user.createdAt.getTime() + PROMO_DURATION_MS);
+    [user] = await db.update(usersTable).set({
+      premiumBadgeDiscountPercent: 100, promoExpiresAt, hustlePromoExpiresAt: promoExpiresAt,
+    }).where(eq(usersTable.clerkUserId, userId)).returning();
+  }
   if (createdNewAccount && user?.role === "student") {
     await ensureWazobiaConversation(userId);
   }
@@ -1228,7 +1145,7 @@ router.get("/users/:userId", async (req, res): Promise<void> => {
     .where(eq(usersTable.clerkUserId, params.data.userId))
     .limit(1);
 
-  if (!profile) {
+  if (!profile || !profile.onboarded) {
     res.status(404).json({ error: "User not found" });
     return;
   }

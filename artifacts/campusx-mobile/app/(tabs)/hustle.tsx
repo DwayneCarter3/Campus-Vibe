@@ -24,7 +24,7 @@ import * as Haptics from "expo-haptics";
 import * as ExpoLinking from "expo-linking";
 import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
-import { useAuth, useUser } from "@clerk/expo";
+import { useAuth, useUser } from "@/lib/auth";
 import {
   listServices,
   getListServicesQueryKey,

@@ -5,7 +5,7 @@ import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useGetMyProfile, useUpdateMyProfile, getGetMyProfileQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useUser } from "@clerk/react";
+import { useUser } from "@/lib/auth";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -424,9 +424,10 @@ export default function Onboarding() {
                           options={[...CAMPUS_INSTITUTIONS.map((institution) => institution.name), NOT_LISTED]}
                           testId="select-school"
                           onChange={(value) => {
-                            field.onChange(value);
-                            form.setValue("campusLocation", "", { shouldValidate: true });
-                            form.setValue("faculty", "", { shouldValidate: true });
+                            form.setValue("school", value, { shouldValidate: true, shouldDirty: true, shouldTouch: true });
+                            form.setValue("campusLocation", "", { shouldDirty: true });
+                            form.setValue("faculty", "", { shouldDirty: true });
+                            form.clearErrors(["campusLocation", "faculty"]);
                           }}
                         />
                       </FormControl>
@@ -504,8 +505,9 @@ export default function Onboarding() {
                           disabled={!selectedSchool}
                           testId="select-campus-location"
                           onChange={(value) => {
-                            field.onChange(value);
-                            form.setValue("faculty", "", { shouldValidate: true });
+                            form.setValue("campusLocation", value, { shouldValidate: true, shouldDirty: true, shouldTouch: true });
+                            form.setValue("faculty", "", { shouldDirty: true });
+                            form.clearErrors("faculty");
                           }}
                         />
                       </FormControl>
@@ -578,7 +580,7 @@ export default function Onboarding() {
                           options={facultyOptions}
                           disabled={!form.watch("campusLocation")}
                           testId="select-faculty"
-                          onChange={field.onChange}
+                          onChange={(value) => form.setValue("faculty", value, { shouldValidate: true, shouldDirty: true, shouldTouch: true })}
                         />
                       </FormControl>
                       <FormMessage />

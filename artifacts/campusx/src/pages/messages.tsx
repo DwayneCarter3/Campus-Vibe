@@ -14,7 +14,7 @@ import {
 } from "@workspace/api-client-react";
 import type { ConversationSummary, DirectMessage } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useUser } from "@clerk/react";
+import { useUser } from "@/lib/auth";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";

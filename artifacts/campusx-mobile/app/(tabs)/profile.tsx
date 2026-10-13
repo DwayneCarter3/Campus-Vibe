@@ -1,4 +1,4 @@
-import { useAuth, useUser as useClerkUser } from "@clerk/expo";
+import { useAuth, useUser as useClerkUser } from "@/lib/auth";
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import React, { useState } from "react";

@@ -25,7 +25,7 @@ import * as ExpoLinking from "expo-linking";
 import { formatDistanceToNow } from "date-fns";
 import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
-import { useAuth } from "@clerk/expo";
+import { useAuth } from "@/lib/auth";
 import {
   listPosts,
   getListPostsQueryKey,
