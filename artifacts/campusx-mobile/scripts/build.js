@@ -201,7 +201,17 @@ async function downloadFile(url, outputPath) {
     const response = await fetch(url, { signal: controller.signal });
 
     if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
+      // Metro returns the underlying bundling error in the response body.
+      // Preserve it so publish logs name the missing module or failing file.
+      const errorBody = await response.text();
+      let detail = errorBody;
+      try {
+        const metroError = JSON.parse(errorBody);
+        detail = metroError.message || metroError.error || errorBody;
+      } catch {
+        // Non-JSON errors still contain useful diagnostics.
+      }
+      throw new Error(`HTTP ${response.status}: ${String(detail).slice(0, 4000)}`);
     }
 
     const file = fs.createWriteStream(outputPath);
