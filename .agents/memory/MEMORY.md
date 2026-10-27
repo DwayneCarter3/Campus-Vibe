@@ -1,3 +1,4 @@
+- [Supabase connection diagnostics](supabase-connection-diagnostics.md) — distinguish wrong pooler routing and project DNS failures from bad passwords; never replace persistent data to fix connectivity.
 - [Codegen barrel fix](codegen-barrel-fix.md) — after every `codegen` run, must manually fix both barrels; run `typecheck:libs` after.
 - [Supabase authentication direction](supabase-auth-direction.md) — user chose full auth/data migration; preserve existing account/content links before switching live.
 - [UploadUrlResponse field name](upload-url-fields.md) — generated type uses `uploadURL` (not `signedUrl`) and `objectPath`.
