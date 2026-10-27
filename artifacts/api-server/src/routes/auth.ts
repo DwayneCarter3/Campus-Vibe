@@ -8,7 +8,7 @@ import { adminAuth, authUser, normalizeEmail, publicAuth, reconcileSupabaseProfi
 import { requireAuth } from "../middlewares/auth";
 import type { IdentityRequest } from "../lib/auth-identity";
 import type { Session } from "@supabase/supabase-js";
-import { logger } from "../lib/logger";
+import { authStep, authErrorDetails, isAuthRateLimit } from "../lib/auth-errors";
 
 const router = Router();
 const email = z.string().trim().email().max(254).transform(normalizeEmail);
@@ -39,17 +39,25 @@ function cookies(res: Response, session: Session) {
   res.cookie("campusx_refresh", session.refresh_token, { ...options, maxAge: 30 * 24 * 3600 * 1000 });
 }
 async function sessionResponse(res: Response, session: Session) {
-  const identity = await publicAuth().auth.getUser(session.access_token);
-  if (identity.error || !identity.data.user) throw new Error("Invalid session.");
-  const profile = await reconcileSupabaseProfile(identity.data.user);
+  const identity = await authStep("verify_session", async () => {
+    const result = await publicAuth().auth.getUser(session.access_token);
+    if (result.error) throw result.error;
+    if (!result.data.user) throw { code: "session_user_missing" };
+    return result.data.user;
+  });
+  const profile = await authStep("reconcile_profile", () => reconcileSupabaseProfile(identity));
   // Force a new token after reconciliation so trusted app_metadata reflects DB role.
-  const refreshed = await publicAuth().auth.refreshSession({ refresh_token: session.refresh_token });
-  if (refreshed.error || !refreshed.data.session) throw new Error("Session refresh failed.");
-  cookies(res, refreshed.data.session);
+  const refreshed = await authStep("refresh_session", async () => {
+    const result = await publicAuth().auth.refreshSession({ refresh_token: session.refresh_token });
+    if (result.error) throw result.error;
+    if (!result.data.session) throw { code: "session_missing" };
+    return result.data.session;
+  });
+  cookies(res, refreshed);
   res.set("Cache-Control", "no-store").json({
-    user: authUser(profile, identity.data.user),
-    session: { access_token: refreshed.data.session.access_token, refresh_token: refreshed.data.session.refresh_token,
-      expires_at: refreshed.data.session.expires_at },
+    user: authUser(profile, identity),
+    session: { access_token: refreshed.access_token, refresh_token: refreshed.refresh_token,
+      expires_at: refreshed.expires_at },
     needsOnboarding: !profile.onboarded,
   });
 }
@@ -73,14 +81,19 @@ router.post("/auth/signup", async (req, res) => {
 router.post("/auth/login", async (req, res) => {
   const parsed = loginBody.safeParse(req.body);
   if (!parsed.success) {
-    logger.warn({ bodyType: typeof req.body, fields: Object.keys(req.body ?? {}),
+    req.log.warn({ bodyType: typeof req.body,
       issues: parsed.error.issues.map(issue => ({ path: issue.path, code: issue.code })) }, "Invalid login request");
     res.status(400).json({ error: "Enter your email and password." }); return;
   }
   // GoTrue validates the persistent auth.users password hash; no app-local passwords.
-  const { data, error } = await publicAuth().auth.signInWithPassword(parsed.data);
+  const { data, error } = await authStep("sign_in", () => publicAuth().auth.signInWithPassword(parsed.data));
   if (error || !data.session) {
+    if (isAuthRateLimit(error)) {
+      req.log.warn(authErrorDetails(error, "sign_in"), "Authentication provider rate limited request");
+      res.status(429).json({ error: "Too many login attempts. Please wait before trying again." }); return;
+    }
     if (error && (!error.status || error.status >= 500)) {
+      req.log.error(authErrorDetails(error, "sign_in"), "Authentication provider unavailable");
       res.status(503).json({ error: "Authentication is temporarily unavailable. Please try again." }); return;
     }
     res.status(401).json({ error: error?.code === "email_not_confirmed" ? "Please confirm your email before logging in." : "Invalid email or password." }); return;
@@ -109,9 +122,12 @@ router.post("/auth/logout", async (req, res) => {
 router.post("/auth/reset-password", async (req, res) => {
   const parsed = email.safeParse(req.body?.email);
   if (!parsed.success) { res.status(400).json({ error: "Enter a valid email." }); return; }
-  const reset = await publicAuth().auth.resetPasswordForEmail(parsed.data, { redirectTo: `${process.env.APP_URL}/reset-password` });
+  const reset = await authStep("password_recovery", () => publicAuth().auth.resetPasswordForEmail(parsed.data, { redirectTo: `${process.env.APP_URL}/reset-password` }));
   if (reset.error) {
-    logger.warn({ code: reset.error.code }, "Password recovery provider rejected request");
+    req.log.warn(authErrorDetails(reset.error, "password_recovery"), "Password recovery provider rejected request");
+    if (isAuthRateLimit(reset.error)) {
+      res.status(429).json({ error: "Too many password reset requests. Please wait before requesting another email." }); return;
+    }
     res.status(503).json({ error: "Password recovery is temporarily unavailable. Please try again." }); return;
   }
   res.json({ message: "If an account exists, a password reset email will be sent." });
@@ -134,8 +150,12 @@ router.post("/auth/update-password", async (req, res) => {
   res.clearCookie("campusx_access", { path: "/api" }); res.clearCookie("campusx_refresh", { path: "/api" });
   res.json({ message: "Password updated. Please log in with your new password." });
 });
-router.use((error: any, _req: Request, res: Response, _next: unknown) => {
-  logger.error({ code: error?.code ?? error?.name ?? "unknown" }, "Authentication handler failed");
+router.use((error: unknown, req: Request, res: Response, _next: unknown) => {
+  if (isAuthRateLimit(error)) {
+    req.log.warn(authErrorDetails(error), "Authentication provider rate limited request");
+    res.status(429).json({ error: "Too many authentication requests. Please wait before trying again." }); return;
+  }
+  req.log.error(authErrorDetails(error), "Authentication handler failed");
   res.status(503).json({ error: "Authentication is temporarily unavailable. Please try again." });
 });
 export default router;

@@ -1,6 +1,7 @@
 import { createClient, type User } from "@supabase/supabase-js";
 import { eq } from "drizzle-orm";
 import { db, usersTable } from "@workspace/db";
+import { AuthFlowError } from "./auth-errors";
 
 function client(key: string) {
   if (!process.env.SUPABASE_URL || !key) throw new Error("Supabase authentication is not configured.");
@@ -13,10 +14,12 @@ export const adminAuth = () => client(process.env.SUPABASE_SERVICE_ROLE_KEY ?? "
 export const normalizeEmail = (email: string) => email.trim().toLowerCase();
 
 export async function reconcileSupabaseProfile(identity: User) {
-  if (!identity.email_confirmed_at || !identity.email) throw new Error("Verified email required.");
+  if (!identity.email_confirmed_at || !identity.email) {
+    throw new AuthFlowError("reconcile_profile", { code: "verified_identity_required" });
+  }
   let [profile] = await db.select().from(usersTable)
     .where(eq(usersTable.supabaseUserId, identity.id)).limit(1);
-  if (!profile) throw new Error("Authentication profile is missing; do not create a second identity.");
+  if (!profile) throw new AuthFlowError("reconcile_profile", { code: "profile_missing" });
   // UPDATE always executes the database identity trigger. Neither JWT metadata nor
   // submitted role flags authorize this operation; the trigger reads auth.users.
   [profile] = await db.update(usersTable).set({

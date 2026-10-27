@@ -1,3 +1,4 @@
+- [Auth failure diagnostics](auth-failure-diagnostics.md) — retain safe stage/cause codes, not raw exceptions; distinguish provider quotas from server failures.
 - [Notification transport](notification-transport.md) — avoid process-local SSE on autoscale without shared fanout and streaming-aware metrics; keep durable inbox freshness and alert deduplication.
 - [Supabase connection diagnostics](supabase-connection-diagnostics.md) — distinguish wrong pooler routing and project DNS failures from bad passwords; never replace persistent data to fix connectivity.
 - [Codegen barrel fix](codegen-barrel-fix.md) — after every `codegen` run, must manually fix both barrels; run `typecheck:libs` after.
