@@ -1,6 +1,6 @@
 - [Auth failure diagnostics](auth-failure-diagnostics.md) — retain safe stage/cause codes, not raw exceptions; distinguish provider quotas from server failures.
 - [Notification transport](notification-transport.md) — avoid process-local SSE on autoscale without shared fanout and streaming-aware metrics; keep durable inbox freshness and alert deduplication.
-- [Supabase connection diagnostics](supabase-connection-diagnostics.md) — distinguish wrong pooler routing and project DNS failures from bad passwords; never replace persistent data to fix connectivity.
+- [Supabase connection diagnostics](supabase-connection-diagnostics.md) — distinguish pooler and DNS failures from bad passwords without replacing data.
 - [Codegen barrel fix](codegen-barrel-fix.md) — after every `codegen` run, must manually fix both barrels; run `typecheck:libs` after.
 - [Supabase authentication direction](supabase-auth-direction.md) — user chose full auth/data migration; preserve existing account/content links before switching live.
 - [UploadUrlResponse field name](upload-url-fields.md) — generated type uses `uploadURL` (not `signedUrl`) and `objectPath`.
@@ -30,3 +30,4 @@
 - [Chat delivery vs AI reply](chat-delivery-vs-ai.md) — a WAZOBIA provider outage must not discard or misreport a student's outgoing message.
 - [Responsive management parity](responsive-management-parity.md) — phones and tablets must retain desktop management tools, including Admin, CGPA, and Marketplace.
 - [Expo Worklets in pnpm](expo-worklets-pnpm.md) — preset auto-detection can miss isolated dependencies; stale Metro transforms can hide Babel fixes across restarts.
+- [Authentication regression isolation](auth-regression-isolation.md) — never use shared Supabase accounts for auth fixtures; network reachability requires a separate read-only gate.

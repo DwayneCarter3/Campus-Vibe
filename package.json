@@ -3,6 +3,8 @@
   "version": "0.0.0",
   "license": "MIT",
   "scripts": {
+    "test:auth": "vitest run --config vitest.auth.config.mjs",
+    "test:auth:prepublish": "pnpm test:auth && node scripts/check-auth-connectivity.mjs",
     "preinstall": "sh -c 'rm -f package-lock.json yarn.lock; case \"$npm_config_user_agent\" in pnpm/*) ;; *) echo \"Use pnpm instead\" >&2; exit 1 ;; esac'",
     "build": "pnpm run typecheck && pnpm -r --if-present run build",
     "typecheck:libs": "tsc --build",
@@ -10,7 +12,9 @@
   },
   "private": true,
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.9",
+    "prettier": "^3.8.1",
     "typescript": "~5.9.2",
-    "prettier": "^3.8.1"
+    "vitest": "^5.0.4"
   }
 }
