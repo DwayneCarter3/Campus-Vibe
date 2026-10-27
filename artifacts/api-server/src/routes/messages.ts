@@ -326,7 +326,8 @@ router.post("/messages/conversations/:conversationId/messages", requireAuth, asy
     actorId: userId,
     actorName: senderName,
     type: "message",
-    content: `${senderName} sent you a message.`,
+    message: `${senderName} sent you a message.`,
+    content: content.length > 60 ? content.slice(0, 60) + "…" : content,
     targetType: "conversation",
     targetId: conversationId,
   }).catch((error) => {

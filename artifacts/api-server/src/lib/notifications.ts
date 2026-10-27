@@ -7,6 +7,7 @@ type CreateNotificationInput = {
   actorName?: string | null;
   type: string;
   content: string;
+  message?: string;
   targetType?: string;
   targetId?: string | number;
 };
@@ -21,7 +22,7 @@ export async function createNotification(input: CreateNotificationInput): Promis
       type: input.type,
       actorName: input.actorName ?? null,
       content: input.content,
-      message: input.content,
+      message: input.message ?? input.content,
       targetType: input.targetType ?? null,
       targetId: input.targetId == null ? null : String(input.targetId),
     })

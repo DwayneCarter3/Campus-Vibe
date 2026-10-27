@@ -3,7 +3,6 @@ import {
   useContext,
   useEffect,
   useRef,
-  useState,
   useCallback,
   type ReactNode,
 } from "react";
@@ -18,6 +17,7 @@ import {
   markNotificationsRead,
 } from "@workspace/api-client-react";
 import type { AppNotification } from "@workspace/api-client-react";
+import { NotificationPollTracker } from "./notification-polling";
 
 interface NotificationsCtx {
   notifications: AppNotification[];
@@ -65,7 +65,7 @@ const EMOJI: Record<string, string> = {
 export function NotificationProvider({ children }: { children: ReactNode }) {
   const { user, isSignedIn } = useUser();
   const queryClient = useQueryClient();
-  const eventSourceRef = useRef<EventSource | null>(null);
+  const tracker = useRef(new NotificationPollTracker());
 
   const { data, isLoading, refetch } = useListNotifications(
     { limit: 30 },
@@ -73,6 +73,11 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       query: {
         queryKey: getListNotificationsQueryKey({ limit: 30 }),
         enabled: !!isSignedIn,
+        // Finite requests work across instances; inactive tabs do not poll.
+        refetchInterval: (query) => query.state.status === "error" ? 30_000 : 5_000,
+        refetchIntervalInBackground: false,
+        refetchOnWindowFocus: true,
+        retry: false,
       },
     }
   );
@@ -96,79 +101,33 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     }
   }, [queryClient, refetch, data]);
 
-  // SSE connection
+  // Use persisted notifications, not an instance-local stream. Do not replay
+  // the initial inbox or re-alert on read changes/refetches.
   useEffect(() => {
-    if (!isSignedIn || !user) return;
-
-    const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
-    const url = `${basePath}/api/notifications/stream`;
-
-    const es = new EventSource(url, { withCredentials: true });
-    eventSourceRef.current = es;
-    es.onopen = () => {
-      refetch();
-    };
-
-    es.addEventListener("notification", (e: MessageEvent) => {
-      try {
-        const notif = JSON.parse(e.data) as AppNotification;
-        queryClient.setQueryData(
-          getListNotificationsQueryKey({ limit: 30 }),
-          (current: typeof data) => {
-            const existing = current?.notifications ?? [];
-            if (existing.some((item) => item.id === notif.id)) return current;
-            return {
-              notifications: [notif, ...existing].slice(0, 30),
-              unreadCount: (current?.unreadCount ?? 0) + (notif.isRead ? 0 : 1),
-            };
-          }
-        );
-        // DM notifications share the stream with the richer DM event. Let the DM
-        // event own its toast so both events never produce duplicate alerts.
-        if (!/^(dm|message|direct_message)$/i.test(notif.type)) {
-          playPopSound();
-          const emoji = EMOJI[notif.type] ?? "🔔";
-          toast({
-            title: `${emoji} ${notif.message}`,
-            description: notif.actorName ? `from ${notif.actorName}` : undefined,
-          });
-        }
-      } catch {
-        // malformed event
-      }
-    });
-
-    es.addEventListener("dm", (e: MessageEvent) => {
-      try {
-        const dm = JSON.parse(e.data) as {
-          conversationId: number;
-          senderId: string;
-          senderName: string;
-          content: string;
-        };
-        // Refresh conversation list sidebar immediately
+    const fresh = tracker.current.update<AppNotification>(
+      isSignedIn && user ? user.id : null,
+      data?.notifications,
+    );
+    if (!fresh.length) return;
+    playPopSound();
+    for (const notif of fresh) {
+      const isDm = /^(dm|message|direct_message)$/i.test(notif.type);
+      if (isDm) {
         queryClient.invalidateQueries({ queryKey: getListConversationsQueryKey() });
-        // Refresh messages if this conversation is open
-        queryClient.invalidateQueries({ queryKey: getListMessagesQueryKey(dm.conversationId) });
-        playPopSound();
-        toast({
-          title: `💬 ${dm.senderName}`,
-          description: dm.content.length > 60 ? dm.content.slice(0, 60) + "…" : dm.content,
-        });
-      } catch {
-        // malformed event
+        const conversationId = Number(notif.targetId);
+        if (notif.targetType === "conversation" && Number.isSafeInteger(conversationId) && conversationId > 0) {
+          queryClient.invalidateQueries({ queryKey: getListMessagesQueryKey(conversationId) });
+        }
       }
-    });
-
-    es.onerror = () => {
-      // SSE auto-reconnects; no action needed
-    };
-
-    return () => {
-      es.close();
-      eventSourceRef.current = null;
-    };
-  }, [isSignedIn, user, queryClient, refetch]);
+      const content = notif.content || notif.message;
+      toast({
+        title: isDm ? `💬 ${notif.actorName ?? "New message"}` : `${EMOJI[notif.type] ?? "🔔"} ${notif.message}`,
+        description: isDm
+          ? content.length > 60 ? content.slice(0, 60) + "…" : content
+          : notif.actorName ? `from ${notif.actorName}` : undefined,
+      });
+    }
+  }, [isSignedIn, user?.id, data, queryClient]);
 
   return (
     <NotificationsContext.Provider value={{ notifications, unreadCount, markRead, isLoading }}>

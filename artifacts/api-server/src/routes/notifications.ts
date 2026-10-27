@@ -1,9 +1,7 @@
-import { Router, type IRouter, type Request, type Response } from "express";
+import { Router, type IRouter } from "express";
 import { eq, desc, and, sql } from "drizzle-orm";
 import { db, notificationsTable } from "@workspace/db";
-import { getAuth } from "../lib/auth-identity";
 import { requireAuth } from "../middlewares/auth";
-import { addClient, removeClient } from "../sse-manager";
 
 const router: IRouter = Router();
 
@@ -66,39 +64,6 @@ router.patch("/notifications/:notificationId/read", requireAuth, async (req, res
   }
 
   res.sendStatus(204);
-});
-
-router.get("/notifications/stream", (req: Request, res: Response): void => {
-  const auth = getAuth(req);
-  const userId = auth?.userId;
-
-  if (!userId) {
-    res.status(401).json({ error: "Unauthorized" });
-    return;
-  }
-
-  res.setHeader("Content-Type", "text/event-stream");
-  res.setHeader("Cache-Control", "no-cache, no-transform");
-  res.setHeader("Connection", "keep-alive");
-  res.setHeader("X-Accel-Buffering", "no");
-  res.flushHeaders();
-
-  res.write(`: connected\n\n`);
-
-  addClient(userId, res);
-
-  const heartbeat = setInterval(() => {
-    try {
-      res.write(`: heartbeat\n\n`);
-    } catch {
-      clearInterval(heartbeat);
-    }
-  }, 25000);
-
-  req.on("close", () => {
-    clearInterval(heartbeat);
-    removeClient(userId, res);
-  });
 });
 
 export default router;

@@ -47,6 +47,13 @@ app.use(
 );
 app.use(express.urlencoded({ extended: true }));
 
+// Retire legacy EventSource clients without authentication/database work.
+// HTTP 204 tells EventSource not to reconnect. This endpoint returns no data;
+// notification data and mutations remain behind requireAuth.
+app.get("/api/notifications/stream", (_req, res) => {
+  res.status(204).end();
+});
+
 app.use(supabaseMiddleware);
 
 app.use("/api", router);

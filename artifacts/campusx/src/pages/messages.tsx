@@ -144,7 +144,7 @@ export default function MessagesPage() {
         queryKey: [...getListMessagesQueryKey(activeConvId ?? 0), userId],
         enabled: !!userId && activeConvId !== null,
         gcTime: 0,
-        refetchInterval: 10000, // SSE handles instant updates; this is a safety fallback
+        refetchInterval: 10000, // Notification polling also invalidates this query.
       },
     }
   );
